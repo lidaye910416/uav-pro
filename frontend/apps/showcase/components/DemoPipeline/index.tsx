@@ -288,6 +288,8 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
   const esRef = useRef<EventSource | null>(null)
   const localTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const revealTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  // 使用 ref 追踪每个 stage 的最新状态，避免被旧状态覆盖
+  const stageStatusRef = useRef<Record<string, StageCardData>>(emptyStages())
 
   useEffect(() => {
     return () => {
@@ -306,7 +308,9 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
     revealTimersRef.current = {}
     localTimersRef.current.forEach(clearTimeout)
     localTimersRef.current = []
-    setStages(emptyStages())
+    const empty = emptyStages()
+    setStages(empty)
+    stageStatusRef.current = empty  // 重置 ref
     setAlert(null)
     setCurrentRois([])
     setSceneIdx(0)
@@ -501,63 +505,49 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
       }
       if (!data.stage) return
       console.log("[Pipeline] stage event:", data.stage, "progress:", data.progress, "status:", data.status)
-      const isDone = (data.status === "done") || (data.progress >= 100)
 
-      // Clear any pending reveal timers for this stage
-      if (revealTimersRef.current[data.stage]) {
-        clearTimeout(revealTimersRef.current[data.stage])
-        delete revealTimersRef.current[data.stage]
+      // 使用 ref 中的最新状态，避免被旧状态覆盖
+      const current = stageStatusRef.current[data.stage]
+      if (!current) return
+
+      const isDone = (data.status === "done") || (data.progress >= 100)
+      const newStatus: StageStatus = isDone ? "done"
+        : data.status === "running" ? "running" : current.status
+      const newProgress = isDone ? 100 : data.progress
+      const shouldReveal = isDone && current.status !== "done"
+
+      // Get current URL from frame_data if available
+      const existingUrl = stageStatusRef.current.perception?.combinedImageUrl
+      const newUrlFromStage = data.combined_image_url
+        ? (data.combined_image_url.startsWith('http') ? data.combined_image_url : `http://localhost:8000${data.combined_image_url}`)
+        : null
+      const finalUrl = newUrlFromStage || existingUrl
+
+      // 构建新状态
+      const newStageData: StageCardData = {
+        ...current,
+        status: newStatus,
+        progress: newProgress,
+        summary: data.summary ?? current.summary,
+        detail: data.detail ?? current.detail,
+        snippets: data.snippets ?? current.snippets,
+        query: data.query ?? current.query,
+        errorMsg: data.error ?? current.errorMsg,
+        combinedImageUrl: finalUrl,
+        revealed: shouldReveal ? true : current.revealed,
       }
 
-      setStages((prev) => {
-        const current = prev[data.stage]
-        if (!current) return prev
-        const newStatus: StageStatus = isDone ? "done"
-          : data.status === "running" ? "running" : current.status
-        const newProgress = isDone ? 100 : data.progress
+      // 同步更新 ref（立即生效）
+      stageStatusRef.current = {
+        ...stageStatusRef.current,
+        [data.stage]: newStageData,
+      }
 
-        // Immediately mark as revealed when done (no staggered delay for SSE)
-        const shouldReveal = isDone && current.status !== "done"
-
-        // Get current URL from frame_data if available, otherwise from stage event
-        const existingUrl = prev.perception.combinedImageUrl
-        const newUrlFromStage = data.combined_image_url
-          ? (data.combined_image_url.startsWith('http') ? data.combined_image_url : `http://localhost:8000${data.combined_image_url}`)
-          : null
-
-        // For perception stage, also update from detail if it has combined_image_url
-        let urlFromDetail: string | null = null
-        if (data.stage === "perception" && typeof data.detail === "object" && data.detail) {
-          const detail = data.detail as Record<string, unknown>
-          if (detail.combined_image_url && typeof detail.combined_image_url === "string") {
-            const detailUrl = (detail.combined_image_url as string).startsWith('http')
-              ? detail.combined_image_url as string
-              : `http://localhost:8000${detail.combined_image_url}`
-            urlFromDetail = detailUrl
-          }
-        }
-
-        // Priority: newUrlFromStage (from stage payload) > urlFromDetail (from detail) > existingUrl (from previous frame_data)
-        const finalUrl = newUrlFromStage || urlFromDetail || existingUrl
-
-        return {
-          ...prev,
-          [data.stage]: {
-            ...current,
-            status: newStatus,
-            progress: newProgress,
-            summary: data.summary ?? current.summary,
-            detail: data.detail ?? current.detail,
-            snippets: data.snippets ?? current.snippets,
-            query: data.query ?? current.query,
-            errorMsg: data.error ?? current.errorMsg,
-            // Use the URL from any source
-            combinedImageUrl: finalUrl,
-            // Immediately reveal when done via SSE
-            revealed: shouldReveal ? true : current.revealed,
-          },
-        }
-      })
+      // 更新 React 状态（触发渲染）
+      setStages((prev) => ({
+        ...prev,
+        [data.stage]: newStageData,
+      }))
     })
 
     es.addEventListener("alert", (e: MessageEvent) => {

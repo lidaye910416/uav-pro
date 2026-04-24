@@ -1216,14 +1216,6 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             # 执行 YOLO+SAM 标注，返回图像 URL 和检测结果
             combined_image_url, detection_result = _save_annotated_frame(frame_bgr, frame_idx, prefix="demo")
 
-            # 发送 perception done 事件
-            yield f"event: stage\ndata: {json.dumps({
-                'stage': 'perception',
-                'progress': frame_base + 10,
-                'status': 'done',
-            })}\n\n".encode()
-            await asyncio.sleep(0.02)
-
             # 发送 frame_data 事件，包含检测结果和标注图像 URL
             yield f"event: frame_data\ndata: {json.dumps({
                 'frame_idx': frame_idx,
@@ -1238,12 +1230,20 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'mask_details': detection_result.get('mask_details', []),
                 'combined_image_url': combined_image_url,
             })}\n\n".encode()
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(0.1)
+
+            # 发送 perception done 事件
+            yield f"event: stage\ndata: {json.dumps({
+                'stage': 'perception',
+                'progress': frame_base + 10,
+                'status': 'done',
+            })}\n\n".encode()
+            await asyncio.sleep(0.3)  # 等待前端渲染 perception 完成
 
             # ── Stage 2: RAG retrieval ─────────────────────────────────────────
             # 先进行 RAG 检索，获取相关规范上下文
             yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': frame_base + 15, 'status': 'running'})}\n\n".encode()
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(0.3)  # 等待前端渲染 rag running 状态
 
             # 检查 Ollama 可用性
             ollama_status = await _check_ollama()
@@ -1279,7 +1279,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 if ln.strip() and not ln.strip().startswith("-")
             ]
 
-            # RAG done
+            # RAG done - 等待 rag running 动画显示后再发送
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'rag',
                 'progress': frame_base + 20,
@@ -1287,11 +1287,11 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
                 'query': rag_query[:80],
             })}\n\n".encode()
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(0.3)  # 等待前端渲染 rag 完成
 
             # ── Stage 3: Gemma4 视觉理解 ─────────────────────────────────────
             yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': frame_base + 30, 'status': 'running'})}\n\n".encode()
-            await asyncio.sleep(0.02)
+            await asyncio.sleep(0.3)  # 等待前端渲染 identify running 状态
 
             # 调用 Gemma4 E2B 进行视觉理解和决策
             scene_desc = DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)]
@@ -1343,9 +1343,16 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'detail': scene_desc,
                 'ai_model': gemma_model,
             })}\n\n".encode()
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.3)  # 等待前端渲染 identify 完成
 
             # Decision (uses Gemma result) - Stage 4
+            yield f"event: stage\ndata: {json.dumps({
+                'stage': 'decision',
+                'progress': frame_base + 60,
+                'status': 'running',
+            })}\n\n".encode()
+            await asyncio.sleep(0.3)  # 等待前端渲染 decision running 状态
+
             gemma_confidence = gemma_result.get("confidence", 0.85) if 'gemma_result' in dir() else 0.85
 
             yield f"event: stage\ndata: {json.dumps({
