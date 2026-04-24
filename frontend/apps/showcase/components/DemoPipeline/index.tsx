@@ -75,8 +75,8 @@ const LOCAL_DEMOS = [
       query: "道路正常通行",
       snippets: [
         "持续监控道路通行状态，记录车流密度与车速，发现异常立即上报。",
-        "应急车道严禁违规停车，需持续监控应急车道状态。",
         "道路障碍物处置规范：发现障碍物立即通知指挥中心。",
+        "行人闯入处置规范：立即通知交警，记录行人特征，防止事故发生。",
       ],
     },
     decision: {
@@ -87,35 +87,6 @@ const LOCAL_DEMOS = [
         title: "道路通行正常",
         recommendation: "持续监控，暂无预警处置建议。",
         incident_type: "none",
-      },
-    },
-  },
-  {
-    perception: {
-      detail: { frame_idx: "00024", timestamp: "00:00.8", resolution: "1280×720", fps: "30", detections: "1", roi_count: "1", roi_area: "1250" },
-    },
-    rois: [
-      { x1: 15, y1: 40, x2: 40, y2: 65, confidence: 0.96 },
-    ] as ROIBox[],
-    identify: {
-      detail: "检测到应急车道违规停车事件：1 辆白色轿车（置信度 96%）停靠应急车道，开启双闪灯，后方 1 名人员（置信度 72%）未撤离至护栏外。异常类型: parking",
-    },
-    rag: {
-      query: "异常停车 parking 处置规范",
-      snippets: [
-        "判断停车原因: 故障/事故/违停。如为故障: 开启双闪，在来车方向150米放置警示牌…",
-        "人员撤离至路肩安全地带，通知高速交警(12122)，记录车牌、时间、位置。",
-        "如有人员受伤或事故，按事故处置流程处理。",
-      ],
-    },
-    decision: {
-      detail: {
-        risk_level: "medium",
-        has_incident: true,
-        confidence: 0.91,
-        title: "应急车道异常停车",
-        recommendation: "立即通知高速交警，建议派遣救援力量前往处置，同时发布路况预警信息。",
-        incident_type: "parking",
       },
     },
   },
@@ -437,16 +408,31 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
       clearTimeout(sseTimeout)
       const data = JSON.parse(e.data) as Record<string, unknown>
       console.log("[Pipeline] frame_data received:", JSON.stringify(data))
+
       // Convert to absolute URL for image loading
       const rawUrl = data.combined_image_url as string | undefined
       let imageUrl: string | undefined = undefined
       if (rawUrl) {
         imageUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`
         console.log("[Pipeline] frame_data -> imageUrl:", imageUrl)
-      } else {
-        console.log("[Pipeline] frame_data -> rawUrl is undefined!")
       }
-      // Update sceneIdx to trigger re-render with new frame data
+
+      // Update ref first (immediately)
+      const currentPerception = stageStatusRef.current.perception
+      const updatedPerception: StageCardData = {
+        ...currentPerception,
+        status: "done" as const,
+        progress: 100,
+        detail: data,
+        combinedImageUrl: imageUrl ?? currentPerception.combinedImageUrl,
+        revealed: true,
+      }
+      stageStatusRef.current = {
+        ...stageStatusRef.current,
+        perception: updatedPerception,
+      }
+
+      // Update sceneIdx to trigger re-render
       frameCounter++
       setSceneIdx(frameCounter)
 
@@ -468,30 +454,13 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
         setCurrentRois(rois)
       }
 
-      setStages((prev) => {
-        const newPerception = {
-          ...prev.perception,
-          status: "done" as const,
-          progress: 100,
-          detail: data,  // 设置 detail 供 DetectionOutputSection 使用
-          combinedImageUrl: imageUrl ?? prev.perception.combinedImageUrl,
-        }
-        console.log("[Pipeline] frame_data setStages, newPerception:", {
-          status: newPerception.status,
-          progress: newPerception.progress,
-          hasDetail: !!newPerception.detail,
-          detailKeys: Object.keys(newPerception.detail || {}),
-          combinedImageUrl: newPerception.combinedImageUrl,
-        })
+      // Update React state
+      setStages((prev) => ({
+        ...prev,
+        perception: updatedPerception,
+      }))
 
-        // Force a re-render by using a different approach
-        const newStages = { ...prev, perception: newPerception }
-        console.log("[Pipeline] frame_data returning newStages with perception.status:", newStages.perception.status)
-        return newStages
-      })
-
-      // Force component to re-render by incrementing a counter
-      setSceneIdx(prev => prev + 1)
+      console.log("[Pipeline] frame_data setStages, perception.combinedImageUrl:", updatedPerception.combinedImageUrl)
     })
 
     es.addEventListener("stage", (e: MessageEvent) => {
@@ -1062,14 +1031,13 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
               overflow: "auto",
             }}
           >
-            <div className="mb-2" style={{ color: "var(--accent-amber)" }}>请分析这张航拍图像，判断是否存在以下6类道路异常之一：</div>
+            <div className="mb-2" style={{ color: "var(--accent-amber)" }}>请分析这张航拍图像，判断是否存在以下5类道路异常之一：</div>
             <div className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
               1. collision - 交通事故/碰撞<br/>
               2. pothole - 路面塌陷/坑洞<br/>
               3. obstacle - 道路障碍物<br/>
-              4. parking - 异常停车<br/>
-              5. pedestrian - 行人闯入<br/>
-              6. congestion - 交通拥堵
+              4. pedestrian - 行人闯入<br/>
+              5. congestion - 交通拥堵
             </div>
             <div className="mb-2" style={{ color: "var(--accent-blue)" }}>【颜色图例】</div>
             <div className="mb-2 text-xs px-2 py-1 rounded" style={{ background: "rgba(74,158,255,0.1)" }}>
@@ -1176,7 +1144,7 @@ function AnomalyOutputSection({ detail, sceneKey, running }: { detail?: string |
 // ── RAG Output Section ───────────────────────────────────────────────────────
 
 function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: string[]; query?: string; sceneKey: number; running: boolean }) {
-  const RAG_KWS = ["应急车道", "违规停车", "道路散落物", "交通事故", "行人闯入", "交警", "报警", "护栏", "二次事故", "处置", "规范", "通知", "预警", "路政", "拥堵"]
+  const RAG_KWS = ["应急车道", "道路散落物", "交通事故", "行人闯入", "交警", "报警", "护栏", "二次事故", "处置", "规范", "通知", "预警", "路政", "拥堵"]
 
   function highlight(text: string, kws: string[]): React.ReactNode {
     if (!text) return <>{text}</>
@@ -1343,7 +1311,6 @@ const INCIDENT_TYPE_NAMES: Record<string, string> = {
   collision: "交通事故",
   pothole: "路面塌陷",
   obstacle: "道路障碍物",
-  parking: "异常停车",
   pedestrian: "行人闯入",
   congestion: "交通拥堵",
 }

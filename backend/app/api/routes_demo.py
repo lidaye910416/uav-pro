@@ -56,7 +56,8 @@ def _get_yolo_sam_models():
     if _yolo_model is None:
         try:
             from ultralytics import YOLO
-            yolo_path = backend_dir / "yolov8n.pt"
+            # 使用 yolov8x-world (world model, 自带更多类别检测能力)
+            yolo_path = backend_dir / "yolov8x-world.pt"
             if yolo_path.exists():
                 _yolo_model = YOLO(str(yolo_path))
                 print(f"[YOLO] 模型加载成功: {yolo_path}")
@@ -84,14 +85,14 @@ def _get_yolo_sam_models():
     return _yolo_model, _sam_predictor
 
 
-# 颜色配置（BGR 格式）
+# 颜色配置（BGR 格式）- 与图例保持一致
 MASK_COLORS_BGR = {
     "person": (0, 255, 0),           # 绿色
-    "car": (255, 100, 0),            # 蓝色
-    "truck": (255, 100, 0),          # 蓝色
-    "bus": (255, 100, 0),            # 蓝色
-    "bicycle": (100, 150, 255),      # 浅蓝色
-    "motorcycle": (100, 150, 255),    # 浅蓝色
+    "car": (255, 100, 0),            # 橙色（蓝色框）
+    "truck": (0, 150, 255),          # 浅蓝色
+    "bus": (200, 100, 255),          # 紫色
+    "bicycle": (100, 150, 255),      # 天蓝色
+    "motorcycle": (0, 200, 200),     # 青色
     "default": (200, 200, 100),      # 黄绿色
 }
 
@@ -183,18 +184,11 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
                         (combined[:, :, c] * 0.5 + color[c] * 0.5).astype(np.uint8),
                         combined[:, :, c])
 
-            # 绘制加粗边框
+            # 绘制加粗边框（仅颜色区分，不显示文字）
             cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
 
-            # 绘制标签
-            label_text = f"{det['label']} {det['conf']:.0%}"
-            (tw, th), _ = cv2.getTextSize(label_text, cv2.FONT_HERSHEY_SIMPLEX, 0.6, 2)
-            cv2.rectangle(combined, (x1, y1 - th - 10), (x1 + tw + 10, y1), color, -1)
-            cv2.putText(combined, label_text, (x1 + 5, y1 - 5),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
-
-        # 添加图例
-        combined = _add_legend(combined)
+        # 添加图例（仅显示类别名称和颜色，不显示置信度）
+        combined = _add_legend(combined, detections)
 
         result["segmentations"] = str(len(masks_data))
         result["mask_details"] = [
@@ -218,8 +212,8 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
         return None, {"error": str(e)}
 
 
-def _add_legend(combined) -> np.ndarray:
-    """在图像左上角添加颜色图例"""
+def _add_legend(combined, detections: list = None) -> np.ndarray:
+    """在图像左上角添加颜色图例（基于实际检测到的类别）"""
     try:
         legend_x, legend_y = 15, 30
 
@@ -233,20 +227,47 @@ def _add_legend(combined) -> np.ndarray:
         except:
             font = ImageFont.load_default()
 
-        # 图例项
-        legend_items = [
-            ("绿色", (0, 255, 0), "行人"),
-            ("蓝色", (255, 100, 0), "车辆"),
-            ("浅蓝色", (100, 150, 255), "自行车"),
-        ]
+        # 类别到中文的映射（与边框颜色一致）
+        label_map = {
+            "person": "行人",
+            "car": "小型车辆",
+            "truck": "大型车辆",
+            "bus": "公交车",
+            "bicycle": "自行车",
+            "motorcycle": "摩托车",
+        }
+        # 类别到颜色的映射（RGB格式，用于PIL）
+        color_map = {
+            "person": (0, 255, 0),       # 绿色
+            "car": (0, 100, 255),        # 浅蓝色
+            "truck": (255, 150, 0),      # 橙色
+            "bus": (255, 100, 200),      # 紫色
+            "bicycle": (150, 150, 255), # 天蓝色
+            "motorcycle": (0, 200, 200), # 青色
+        }
 
-        draw.text((legend_x, legend_y), "图例:", fill=(255, 255, 255), font=font)
+        # 根据检测到的类别动态生成图例
+        if detections:
+            detected_labels = set(d["label"].lower() for d in detections)
+        else:
+            detected_labels = set()
+
+        # 默认显示所有可能的类别
+        display_labels = detected_labels if detected_labels else list(label_map.keys())
+
+        # 添加图例标题
+        draw.text((legend_x, legend_y), "检测类别:", fill=(255, 255, 255), font=font)
         legend_y += 25
 
-        for color_name, color_rgb, desc in legend_items:
+        for label in display_labels:
+            if label not in label_map:
+                continue
+            color_rgb = color_map.get(label, (128, 128, 128))  # 灰色作为默认值
+            desc = label_map.get(label, label)
+            # 绘制颜色方块
             draw.rectangle([(legend_x, legend_y - 14), (legend_x + 20, legend_y + 6)], fill=color_rgb, outline=(255, 255, 255))
-            text = f"{color_name} → {desc}"
-            draw.text((legend_x + 25, legend_y - 12), text, fill=(255, 255, 255), font=font)
+            # 绘制类别名称
+            draw.text((legend_x + 25, legend_y - 12), desc, fill=(255, 255, 255), font=font)
             legend_y += 22
 
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
@@ -255,14 +276,14 @@ def _add_legend(combined) -> np.ndarray:
 
 
 def _get_color_display_name(label: str) -> str:
-    """获取颜色的中文名称"""
+    """获取颜色的中文名称（与图例和掩膜颜色一致）"""
     color_map = {
         "person": "绿色",
-        "car": "蓝色",
-        "truck": "蓝色",
-        "bus": "蓝色",
-        "bicycle": "浅蓝色",
-        "motorcycle": "浅蓝色",
+        "car": "浅蓝色",
+        "truck": "橙色",
+        "bus": "紫色",
+        "bicycle": "天蓝色",
+        "motorcycle": "青色",
     }
     return color_map.get(label.lower(), "黄绿色")
 
@@ -1139,11 +1160,11 @@ async def _rag_retrieve(query: str, top_k: int = 3) -> str:
 
 
 _FALLBACK_SOP = """
-- 高速公路应急车道违规停车处置：开启警示灯，记录车牌，通知交警，勿自行处置。
 - 道路遗撒物处置：开启警示灯，开启双闪，摆放三角牌，通知路政清理。
 - 交通事故处置：开启双闪，人员撤离，记录现场，通知交警和救援。
 - 行人闯入处置：立即通知交警，防止事故发生，记录行人特征。
 - 交通拥堵处置：持续监控，更新路况信息，必要时触发交通诱导。
+- 道路障碍物处置：开启警示灯，摆放警示牌，通知路政或养护部门清理。
 """
 
 
@@ -1232,13 +1253,30 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             })}\n\n".encode()
             await asyncio.sleep(0.1)
 
-            # 发送 perception done 事件
+            # 发送 perception done 事件，包含标注图像 URL
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'perception',
                 'progress': frame_base + 10,
                 'status': 'done',
+                'combined_image_url': combined_image_url,
             })}\n\n".encode()
             await asyncio.sleep(0.3)  # 等待前端渲染 perception 完成
+
+            # 发送 frame_data 事件，包含检测结果和标注图像 URL
+            yield f"event: frame_data\ndata: {json.dumps({
+                'frame_idx': frame_idx,
+                'timestamp': f"{frame_idx / fps_v:.1f}s",
+                'resolution': detection_result.get('resolution', f"3840×2160"),
+                'fps': fps_v,
+                'stream_src': str(video_path.name),
+                'total_frames': total,
+                'detections': detection_result.get('detections', '0'),
+                'segmentations': detection_result.get('segmentations', '0'),
+                'detection_details': detection_result.get('detection_details', []),
+                'mask_details': detection_result.get('mask_details', []),
+                'combined_image_url': combined_image_url,
+            })}\n\n".encode()
+            await asyncio.sleep(0.1)
 
             # ── Stage 2: RAG retrieval ─────────────────────────────────────────
             # 先进行 RAG 检索，获取相关规范上下文
@@ -1257,7 +1295,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             if detection_details:
                 labels = [d.get('label', '').lower() for d in detection_details]
                 if 'car' in labels or 'truck' in labels:
-                    rag_query = "高速公路车辆通行异常应急车道停车交通事件处置规范"
+                    rag_query = "高速公路车辆通行异常交通事件处置规范"
                 elif 'person' in labels:
                     rag_query = "高速公路行人闯入道路安全异常处置规范"
                 elif 'boat' in labels:
@@ -1279,7 +1317,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 if ln.strip() and not ln.strip().startswith("-")
             ]
 
-            # RAG done - 等待 rag running 动画显示后再发送
+            # RAG done
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'rag',
                 'progress': frame_base + 20,
