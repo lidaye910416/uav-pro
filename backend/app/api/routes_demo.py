@@ -1170,10 +1170,26 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             })}\n\n".encode()
             await asyncio.sleep(0.05)
 
-            # ── RAG retrieval ──────────────────────────────────────────────
+            # ── Vision: 基于 YOLO+SAM 检测结果调用 Gemma4 E2B ──────────────
+            yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': idx * 33 + 8, 'status': 'running'})}\n\n".encode()
+            yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': idx * 33 + 16, 'status': 'running'})}\n\n".encode()
+            await asyncio.sleep(0.05)
+
+            # 检查 Ollama 可用性
+            ollama_status = await _check_ollama()
+            gemma_model = ollama_status.get("gemma4") or "gemma4:e2b"
+
+            # 构建检测信息用于 RAG 查询
+            detection_details = detection_result.get('detection_details', [])
+            mask_details = detection_result.get('mask_details', [])
+            detection_labels = [d.get('label', 'unknown') for d in detection_details] if detection_details else []
+            detection_summary = "、".join(detection_labels) if detection_labels else "道路场景"
+            rag_query = f"航拍{idx + 1}号帧，检测到：{detection_summary}"
+
+            # RAG retrieval - 使用检测信息作为查询
             rag_context = ""
             try:
-                rag_context = await _rag_retrieve(scene_desc)
+                rag_context = await _rag_retrieve(rag_query)
             except Exception:
                 pass
             rag_snippets = [
@@ -1182,38 +1198,55 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 if ln.strip() and not ln.strip().startswith("-")
             ]
 
-            # ── Vision: 基于 YOLO+SAM 检测结果生成描述 ───────────────────────
-            yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': idx * 33 + 8, 'status': 'running'})}\n\n".encode()
-            yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': idx * 33 + 16, 'status': 'running'})}\n\n".encode()
-            await asyncio.sleep(0.05)
-
-            # 使用 YOLO+SAM 检测结果生成场景描述
-            detection_details = detection_result.get('detection_details', [])
-            mask_details = detection_result.get('mask_details', [])
-
-            # 构建场景描述
-            if detection_details:
-                car_count = sum(1 for d in detection_details if 'car' in d.get('label', '').lower())
-                person_count = sum(1 for d in detection_details if 'person' in d.get('label', '').lower())
-                truck_count = sum(1 for d in detection_details if 'truck' in d.get('label', '').lower())
-
-                scene_desc = f"航拍图像，检测到 {car_count} 辆汽车"
-                if truck_count > 0:
-                    scene_desc += f"，{truck_count} 辆卡车"
-                if person_count > 0:
-                    scene_desc += f"，{person_count} 名行人"
-                scene_desc += "。道路通行正常。"
-            else:
-                scene_desc = DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)]
-
             # RAG done
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'rag',
                 'progress': idx * 33 + 16,
                 'status': 'done',
-                'snippets': rag_snippets,
-                'query': scene_desc[:80],
+                'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
+                'query': rag_query[:80],
             })}\n\n".encode()
+
+            # 调用 Gemma4 E2B 进行视觉理解和决策
+            scene_desc = DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)]
+            has_incident = False
+            risk_level = "low"
+            title = "道路通行正常"
+            description = scene_desc
+            recommendation = "持续监控，暂无预警处置建议。"
+            incident_type = "none"
+
+            try:
+                gemma_result = await _gemma4_analyze(
+                    frame_bgr=frame_bgr,
+                    model=gemma_model,
+                    rag_context=rag_context,
+                    timeout=60.0
+                )
+                # 使用 Gemma 返回的结果
+                scene_desc = gemma_result.get("scene_description", scene_desc)
+                risk_level = gemma_result.get("risk_level", "low")
+                title = gemma_result.get("title", "道路通行正常")
+                description = gemma_result.get("description", scene_desc)
+                recommendation = gemma_result.get("recommendation", "持续监控，暂无预警处置建议。")
+                should_alert = gemma_result.get("should_alert", False)
+                has_incident = should_alert
+                if risk_level in ["high", "critical"]:
+                    incident_type = "safety_alert"
+                elif should_alert:
+                    incident_type = "anomaly"
+            except Exception as e:
+                # Gemma 调用失败时使用备用描述
+                if detection_details:
+                    car_count = sum(1 for d in detection_details if 'car' in d.get('label', '').lower())
+                    person_count = sum(1 for d in detection_details if 'person' in d.get('label', '').lower())
+                    truck_count = sum(1 for d in detection_details if 'truck' in d.get('label', '').lower())
+                    scene_desc = f"航拍图像，检测到 {car_count} 辆汽车"
+                    if truck_count > 0:
+                        scene_desc += f"，{truck_count} 辆卡车"
+                    if person_count > 0:
+                        scene_desc += f"，{person_count} 名行人"
+                    scene_desc += "。道路通行正常。"
 
             # Vision done
             yield f"event: stage\ndata: {json.dumps({
@@ -1222,16 +1255,12 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'status': 'done',
                 'summary': scene_desc[:60],
                 'detail': scene_desc,
+                'ai_model': gemma_model,
             })}\n\n".encode()
             await asyncio.sleep(0.05)
 
-            # Decision
-            has_incident = False
-            risk_level = "low"
-            title = "道路通行正常"
-            description = scene_desc
-            recommendation = "持续监控，暂无预警处置建议。"
-            incident_type = "none"
+            # Decision (uses Gemma result)
+            gemma_confidence = gemma_result.get("confidence", 0.85) if 'gemma_result' in dir() else 0.85
 
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'decision',
@@ -1243,7 +1272,8 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                     'title': title,
                     'description': description,
                     'recommendation': recommendation,
-                    'confidence': 0.85,
+                    'confidence': gemma_confidence,
+                    'ai_model': gemma_model,
                 },
             })}\n\n".encode()
             await asyncio.sleep(0.05)
@@ -1255,11 +1285,12 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'description': description,
                 'risk_level': risk_level,
                 'recommendation': recommendation,
-                'confidence': 0.85,
+                'confidence': gemma_confidence,
                 'scene_description': scene_desc,
                 'source_type': 'demo',
                 'source_path': str(video_path.name),
                 'pipeline_mode': 'yolo_sam',
+                'ai_model': gemma_model,
                 'detection_details': detection_details,
             })}\n\n".encode()
             await asyncio.sleep(0.05)
