@@ -1,0 +1,96 @@
+/* ═══════════════════════════════════════════════════════════
+   Command Center Dark — UAV 低空检测系统
+═══════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+@import "leaflet/dist/leaflet.css";
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── CSS Custom Properties ─────────────────────────────────── */
+:root {
+  --bg-primary: #0A0A0A;
+  --bg-secondary: #111111;
+  --bg-tertiary: #1A1A1A;
+  --bg-card: #141414;
+  --accent-amber: #FFB800;
+  --accent-green: #00E5A0;
+  --accent-red: #FF3B3B;
+  --accent-blue: #00B4FF;
+  --accent-purple: #B47AFF;
+  --text-primary: #E8E8E8;
+  --text-secondary: #6B6B6B;
+  --text-muted: #3D3D3D;
+  --border: #252525;
+  --border-active: #3A3A3A;
+  --font-mono: 'JetBrains Mono', 'Consolas', 'SF Mono', monospace;
+  --font-body: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+@layer base {
+  * { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    line-height: 1.6;
+  }
+}
+
+/* ── 滚动条 ───────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-secondary); }
+::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ── 脉冲呼吸灯动画 ───────────────────────────────────────── */
+@keyframes pulse-amber {
+  0%,100% { box-shadow: 0 0 4px var(--accent-amber), 0 0 8px rgba(255,184,0,0.3); }
+  50% { box-shadow: 0 0 12px var(--accent-amber), 0 0 24px rgba(255,184,0,0.5); }
+}
+@keyframes pulse-green {
+  0%,100% { box-shadow: 0 0 4px var(--accent-green); }
+  50% { box-shadow: 0 0 10px var(--accent-green); }
+}
+@keyframes pulse-red {
+  0%,100% { box-shadow: 0 0 4px var(--accent-red); }
+  50% { box-shadow: 0 0 10px var(--accent-red); }
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Utility Classes ───────────────────────────────────────── */
+@layer utilities {
+  .font-mono { font-family: var(--font-mono); }
+  .animate-pulse-amber { animation: pulse-amber 2s ease-in-out infinite; }
+  .animate-pulse-green { animation: pulse-green 2s ease-in-out infinite; }
+  .animate-pulse-red { animation: pulse-red 2s ease-in-out infinite; }
+  .animate-fade-in-up { animation: fadeInUp 0.4s ease-out; }
+  .animate-fade-in { animation: fadeInUp 0.4s ease-out; }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .glow-text { text-shadow: 0 0 12px currentColor; }
+  .risk-critical { border-left: 3px solid var(--accent-red); }
+  .risk-high { border-left: 3px solid var(--accent-amber); }
+  .risk-medium { border-left: 3px solid var(--accent-blue); }
+  .risk-low { border-left: 3px solid var(--accent-green); }
+}
+
+/* ── Leaflet Map Fixes ──────────────────────────────────────── */
+/* Fix Leaflet default icon paths */
+.leaflet-default-icon-path {
+  background-image: url(https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png);
+}
+
+/* Ensure Leaflet renders correctly */
+.leaflet-container {
+  background: var(--bg-primary);
+  font-family: var(--font-mono);
+}

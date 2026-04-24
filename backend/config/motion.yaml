@@ -1,0 +1,37 @@
+# 帧差法运动检测参数配置
+
+frame_difference:
+  # 帧差阈值: 两帧之间像素差异超过此值视为运动
+  threshold: 25
+
+  # 最小运动区域面积(像素): 小于此值过滤掉(去除噪点)
+  min_area: 500
+
+  # 最大运动区域面积(像素): 超过此值过滤掉(去除全屏变化)
+  max_area: 50000
+
+  # 高斯模糊核大小(必须是奇数): 用于去噪
+  blur_size: 5
+
+  # 形态学核大小(必须是奇数): 用于开闭运算
+  morph_size: 5
+
+  # 形态学操作迭代次数
+  morph_iterations: 1
+
+# ROI 相关配置
+roi:
+  # ROI 扩展 padding(像素)
+  padding: 10
+
+  # 宽高比过滤(宽/高)
+  min_aspect_ratio: 0.2
+  max_aspect_ratio: 5.0
+
+# 视频采样配置
+video:
+  # 跳帧数: 每隔此帧数处理一帧(1=每帧处理, 2=隔帧处理)
+  skip_frames: 2
+
+  # 最大处理帧数: 超过此数量停止处理(用于测试)
+  max_frames: 0  # 0=不限制

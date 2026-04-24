@@ -1,0 +1,11 @@
+perception:
+  frame_interval_sec: 2.0
+  max_image_size: 1024
+
+rag:
+  persist_dir: "./data/knowledge_base"
+  top_k: 3
+
+decision:
+  temperature: 0.3
+  timeout_sec: 30

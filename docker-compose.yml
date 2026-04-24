@@ -1,0 +1,97 @@
+services:
+  # ── Ollama — local LLM runtime (GPU preferred) ─────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: uav-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command: >
+      sh -c "ollama pull gemma4-e2b && ollama pull nomic-embed-text && ollama serve"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── ChromaDB — vector store for SOP RAG ───────────────────────────────────
+  chromadb:
+    image: chromadb/chroma:latest
+    container_name: uav-chroma
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma/.chroma_root
+    environment:
+      IS_PERSISTENT: "TRUE"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/ || curl -sf http://localhost:8000/api/v1/heartbeat"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+
+  # ── Backend API ────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: uav-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: "sqlite+aiosqlite:///./uav.db"
+      OLLAMA_BASE_URL: "http://ollama:11434"
+      CHROMA_URL: "http://chromadb:8000"
+      MODEL_VISION: "gemma4-e2b"
+      MODEL_DECISION: "gemma4-e2b"
+      BACKEND_CORS_ORIGINS: >
+        http://localhost:3000,
+        http://localhost:3001,
+        http://frontend:3000,
+        http://frontend:3001
+      SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
+    depends_on:
+      ollama:
+        condition: service_healthy
+      chromadb:
+        condition: service_healthy
+    volumes:
+      - chroma_data:/chroma/chroma/.chroma_root:ro
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ── Frontend (dev server) ──────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: uav-frontend
+    ports:
+      - "3001:3001"
+    environment:
+      NEXT_PUBLIC_API_BASE: "http://backend:8000"
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  ollama_data:
+  chroma_data:

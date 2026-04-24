@@ -1,0 +1,306 @@
+{
+  "frame_info": {
+    "width": 3840,
+    "height": 2160,
+    "total_detections": 16
+  },
+  "color_legend": {
+    "绿色": "行人 person",
+    "蓝色": "车辆 car/truck/bus",
+    "浅蓝色": "自行车/摩托车",
+    "黄绿色": "其他目标"
+  },
+  "detections": [
+    {
+      "bbox": [
+        1764,
+        624,
+        1818,
+        714
+      ],
+      "conf": 0.26557180285453796,
+      "label": "person",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        1354,
+        976,
+        1448,
+        1026
+      ],
+      "conf": 0.22789090871810913,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        1554,
+        1026,
+        1644,
+        1074
+      ],
+      "conf": 0.215968519449234,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        2688,
+        910,
+        2998,
+        990
+      ],
+      "conf": 0.19788318872451782,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        1330,
+        974,
+        1450,
+        1032
+      ],
+      "conf": 0.18321837484836578,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        912,
+        910,
+        1004,
+        1154
+      ],
+      "conf": 0.1824396401643753,
+      "label": "person",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        2688,
+        912,
+        3000,
+        990
+      ],
+      "conf": 0.16137374937534332,
+      "label": "truck",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        2518,
+        560,
+        2676,
+        630
+      ],
+      "conf": 0.15864552557468414,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        848,
+        842,
+        932,
+        1014
+      ],
+      "conf": 0.15451866388320923,
+      "label": "person",
+      "frame_pos": 0,
+      "scale": 0.5
+    },
+    {
+      "bbox": [
+        2684,
+        908,
+        2996,
+        992
+      ],
+      "conf": 0.36432909965515137,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.25
+    },
+    {
+      "bbox": [
+        848,
+        844,
+        932,
+        1016
+      ],
+      "conf": 0.2199297547340393,
+      "label": "person",
+      "frame_pos": 0,
+      "scale": 0.25
+    },
+    {
+      "bbox": [
+        2684,
+        908,
+        3000,
+        992
+      ],
+      "conf": 0.20887942612171173,
+      "label": "truck",
+      "frame_pos": 0,
+      "scale": 0.25
+    },
+    {
+      "bbox": [
+        1364,
+        976,
+        1456,
+        1016
+      ],
+      "conf": 0.19204579293727875,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.25
+    },
+    {
+      "bbox": [
+        880,
+        900,
+        1000,
+        1048
+      ],
+      "conf": 0.16047771275043488,
+      "label": "person",
+      "frame_pos": 0,
+      "scale": 0.25
+    },
+    {
+      "bbox": [
+        2628,
+        424,
+        2732,
+        492
+      ],
+      "conf": 0.15932396054267883,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.25
+    },
+    {
+      "bbox": [
+        1552,
+        1028,
+        1640,
+        1072
+      ],
+      "conf": 0.15373241901397705,
+      "label": "car",
+      "frame_pos": 0,
+      "scale": 0.25
+    }
+  ],
+  "masks": [
+    {
+      "label": "person",
+      "color_name": "绿色",
+      "pixel_count": 3324,
+      "confidence": 0.9199059009552002
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 3086,
+      "confidence": 0.8512231111526489
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 2466,
+      "confidence": 0.9111306071281433
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 18639,
+      "confidence": 0.9013196229934692
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 3481,
+      "confidence": 0.8520001173019409
+    },
+    {
+      "label": "person",
+      "color_name": "绿色",
+      "pixel_count": 7353,
+      "confidence": 0.760422945022583
+    },
+    {
+      "label": "truck",
+      "color_name": "蓝色",
+      "pixel_count": 18618,
+      "confidence": 0.8996790647506714
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 7730,
+      "confidence": 0.8639073371887207
+    },
+    {
+      "label": "person",
+      "color_name": "绿色",
+      "pixel_count": 6732,
+      "confidence": 0.8855732679367065
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 18682,
+      "confidence": 0.9064086079597473
+    },
+    {
+      "label": "person",
+      "color_name": "绿色",
+      "pixel_count": 6731,
+      "confidence": 0.883715808391571
+    },
+    {
+      "label": "truck",
+      "color_name": "蓝色",
+      "pixel_count": 18678,
+      "confidence": 0.9067426919937134
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 2141,
+      "confidence": 0.8154367804527283
+    },
+    {
+      "label": "person",
+      "color_name": "绿色",
+      "pixel_count": 8499,
+      "confidence": 0.8155381679534912
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 3355,
+      "confidence": 0.7995617389678955
+    },
+    {
+      "label": "car",
+      "color_name": "蓝色",
+      "pixel_count": 2398,
+      "confidence": 0.9118819236755371
+    }
+  ],
+  "gemma_prompt": "请分析这张航拍图像，判断是否存在以下6类道路异常之一：\n\n【异常类型定义】\n1. collision - 交通事故/碰撞（车辆聚集、变形、散落物）\n2. pothole - 路面塌陷/坑洞（路面凹陷、颜色变暗）\n3. obstacle - 道路障碍物（落石、遗撒物）\n4. parking - 异常停车（应急车道停车）\n5. pedestrian - 行人闯入（人形出现在非正常区域）\n6. congestion - 交通拥堵（车辆密集、排队）\n\n【图像中SAM分割掩膜颜色图例】\n- 绿色掩膜 → 行人 person\n- 蓝色掩膜 → 车辆 car/truck/bus\n- 浅蓝色掩膜 → 自行车/摩托车\n- 黄绿色掩膜 → 其他目标\n\n【当前画面检测摘要】\n- 检测到 16 个目标：\n- person（绿色掩膜，置信度 27%）\n- car（蓝色掩膜，置信度 23%）\n- car（蓝色掩膜，置信度 22%）\n- car（蓝色掩膜，置信度 20%）\n- car（蓝色掩膜，置信度 18%）\n- person（绿色掩膜，置信度 18%）\n- truck（蓝色掩膜，置信度 16%）\n- car（蓝色掩膜，置信度 16%）\n- person（绿色掩膜，置信度 15%）\n- car（蓝色掩膜，置信度 36%）\n- person（绿色掩膜，置信度 22%）\n- truck（蓝色掩膜，置信度 21%）\n- car（蓝色掩膜，置信度 19%）\n- person（绿色掩膜，置信度 16%）\n- car（蓝色掩膜，置信度 16%）\n- car（蓝色掩膜，置信度 15%）\n\n【SAM分割详细信息】\n  - person: 绿色掩膜 3,324 像素, SAM置信度 92.0%\n  - car: 蓝色掩膜 3,086 像素, SAM置信度 85.1%\n  - car: 蓝色掩膜 2,466 像素, SAM置信度 91.1%\n  - car: 蓝色掩膜 18,639 像素, SAM置信度 90.1%\n  - car: 蓝色掩膜 3,481 像素, SAM置信度 85.2%\n  - person: 绿色掩膜 7,353 像素, SAM置信度 76.0%\n  - truck: 蓝色掩膜 18,618 像素, SAM置信度 90.0%\n  - car: 蓝色掩膜 7,730 像素, SAM置信度 86.4%\n  - person: 绿色掩膜 6,732 像素, SAM置信度 88.6%\n  - car: 蓝色掩膜 18,682 像素, SAM置信度 90.6%\n  - person: 绿色掩膜 6,731 像素, SAM置信度 88.4%\n  - truck: 蓝色掩膜 18,678 像素, SAM置信度 90.7%\n  - car: 蓝色掩膜 2,141 像素, SAM置信度 81.5%\n  - person: 绿色掩膜 8,499 像素, SAM置信度 81.6%\n  - car: 蓝色掩膜 3,355 像素, SAM置信度 80.0%\n  - car: 蓝色掩膜 2,398 像素, SAM置信度 91.2%\n\n【输出要求】\n请按JSON格式输出（只输出JSON，不要其他内容）：\n{\n    \"has_incident\": true/false,\n    \"incident_type\": \"collision/pothole/obstacle/parking/pedestrian/congestion/none\",\n    \"confidence\": 0.0-1.0,\n    \"description\": \"描述发现的情况（50字内）\",\n    \"recommendation\": \"处置建议（30字内）\"\n}\n\n请用中文回答。"
+}

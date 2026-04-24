@@ -1,0 +1,10 @@
+model_name: yolov8n.pt
+confidence_threshold: 0.5
+max_age: 30
+min_hits: 3
+iou_threshold: 0.3
+device: cpu
+enabled_categories:
+  vehicle: true
+  person: true
+  obstacle: true

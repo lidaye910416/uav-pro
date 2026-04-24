@@ -1,0 +1,604 @@
+{
+  "type": "excalidraw",
+  "version": 2,
+  "source": "https://jasonlee",
+  "elements": [
+    {
+      "id": "title1",
+      "type": "text",
+      "x": 400,
+      "y": 30,
+      "width": 400,
+      "height": 40,
+      "text": "SeeUnsafe 论文技术路线图",
+      "fontSize": 24,
+      "fontFamily": 1,
+      "textAlign": "center"
+    },
+    {
+      "id": "video-input",
+      "type": "rectangle",
+      "x": 50,
+      "y": 100,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#e1f5fe",
+      "strokeColor": "#01579b"
+    },
+    {
+      "id": "video-text",
+      "type": "text",
+      "x": 55,
+      "y": 115,
+      "width": 110,
+      "height": 20,
+      "text": "📹 视频流输入",
+      "fontSize": 14
+    },
+    {
+      "id": "frame-sample",
+      "type": "rectangle",
+      "x": 200,
+      "y": 100,
+      "width": 100,
+      "height": 50,
+      "fillColor": "#b3e5fc"
+    },
+    {
+      "id": "frame-text",
+      "type": "text",
+      "x": 210,
+      "y": 115,
+      "width": 80,
+      "height": 20,
+      "text": "帧采样",
+      "fontSize": 14
+    },
+    {
+      "id": "motion-detect",
+      "type": "rectangle",
+      "x": 330,
+      "y": 100,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#81d4fa"
+    },
+    {
+      "id": "motion-text",
+      "type": "text",
+      "x": 340,
+      "y": 115,
+      "width": 100,
+      "height": 20,
+      "text": "运动检测",
+      "fontSize": 14
+    },
+    {
+      "id": "candidate",
+      "type": "rectangle",
+      "x": 480,
+      "y": 100,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#4fc3f7"
+    },
+    {
+      "id": "candidate-text",
+      "type": "text",
+      "x": 490,
+      "y": 115,
+      "width": 100,
+      "height": 20,
+      "text": "候选目标",
+      "fontSize": 14
+    },
+    {
+      "id": "multi-modal",
+      "type": "rectangle",
+      "x": 630,
+      "y": 80,
+      "width": 180,
+      "height": 100,
+      "fillColor": "#29b6f6",
+      "strokeColor": "#0277bd"
+    },
+    {
+      "id": "multi-text",
+      "type": "text",
+      "x": 640,
+      "y": 85,
+      "width": 160,
+      "height": 20,
+      "text": "多模态验证",
+      "fontSize": 14,
+      "fontWeight": "bold"
+    },
+    {
+      "id": "visual-feature",
+      "type": "text",
+      "x": 640,
+      "y": 110,
+      "width": 50,
+      "height": 15,
+      "text": "视觉",
+      "fontSize": 11
+    },
+    {
+      "id": "motion-feature",
+      "type": "text",
+      "x": 700,
+      "y": 110,
+      "width": 50,
+      "height": 15,
+      "text": "运动",
+      "fontSize": 11
+    },
+    {
+      "id": "traj-feature",
+      "type": "text",
+      "x": 755,
+      "y": 110,
+      "width": 50,
+      "height": 15,
+      "text": "轨迹",
+      "fontSize": 11
+    },
+    {
+      "id": "context-feature",
+      "type": "text",
+      "x": 640,
+      "y": 130,
+      "width": 80,
+      "height": 15,
+      "text": "时空上下文",
+      "fontSize": 11
+    },
+    {
+      "id": "decision",
+      "type": "diamond",
+      "x": 840,
+      "y": 90,
+      "width": 100,
+      "height": 80,
+      "fillColor": "#039be5"
+    },
+    {
+      "id": "decision-text",
+      "type": "text",
+      "x": 850,
+      "y": 120,
+      "width": 80,
+      "height": 20,
+      "text": "阈值判断",
+      "fontSize": 12
+    },
+    {
+      "id": "output-confirm",
+      "type": "rectangle",
+      "x": 970,
+      "y": 60,
+      "width": 100,
+      "height": 40,
+      "fillColor": "#ffcdd2"
+    },
+    {
+      "id": "output-confirm-text",
+      "type": "text",
+      "x": 980,
+      "y": 72,
+      "width": 80,
+      "height": 15,
+      "text": "🚨 确认UAV",
+      "fontSize": 12
+    },
+    {
+      "id": "output-suspect",
+      "type": "rectangle",
+      "x": 970,
+      "y": 110,
+      "width": 100,
+      "height": 40,
+      "fillColor": "#fff9c4"
+    },
+    {
+      "id": "output-suspect-text",
+      "type": "text",
+      "x": 980,
+      "y": 122,
+      "width": 80,
+      "height": 15,
+      "text": "⚠️ 可疑目标",
+      "fontSize": 12
+    },
+    {
+      "id": "output-clear",
+      "type": "rectangle",
+      "x": 970,
+      "y": 160,
+      "width": 100,
+      "height": 40,
+      "fillColor": "#c8e6c9"
+    },
+    {
+      "id": "output-clear-text",
+      "type": "text",
+      "x": 980,
+      "y": 172,
+      "width": 80,
+      "height": 15,
+      "text": "✅ 排除",
+      "fontSize": 12
+    },
+    {
+      "id": "register",
+      "type": "rectangle",
+      "x": 840,
+      "y": 190,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#fff9c4",
+      "strokeColor": "#f57f17"
+    },
+    {
+      "id": "register-text",
+      "type": "text",
+      "x": 850,
+      "y": 207,
+      "width": 100,
+      "height": 20,
+      "text": "Register数据库",
+      "fontSize": 12
+    },
+    {
+      "id": "arrow1",
+      "type": "arrow",
+      "x": 170,
+      "y": 125,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "arrow2",
+      "type": "arrow",
+      "x": 300,
+      "y": 125,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "arrow3",
+      "type": "arrow",
+      "x": 450,
+      "y": 125,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "arrow4",
+      "type": "arrow",
+      "x": 600,
+      "y": 125,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "arrow5",
+      "type": "arrow",
+      "x": 810,
+      "y": 130,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "title2",
+      "type": "text",
+      "x": 400,
+      "y": 300,
+      "width": 400,
+      "height": 40,
+      "text": "当前系统技术路线图",
+      "fontSize": 24,
+      "fontFamily": 1,
+      "textAlign": "center"
+    },
+    {
+      "id": "current-input",
+      "type": "rectangle",
+      "x": 50,
+      "y": 370,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#fff3e0",
+      "strokeColor": "#e65100"
+    },
+    {
+      "id": "current-input-text",
+      "type": "text",
+      "x": 60,
+      "y": 385,
+      "width": 100,
+      "height": 20,
+      "text": "🖼️ 单帧图像",
+      "fontSize": 14
+    },
+    {
+      "id": "current-vision",
+      "type": "rectangle",
+      "x": 200,
+      "y": 370,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#ffccbc"
+    },
+    {
+      "id": "current-vision-text",
+      "type": "text",
+      "x": 210,
+      "y": 385,
+      "width": 100,
+      "height": 20,
+      "text": "Vision Service",
+      "fontSize": 14
+    },
+    {
+      "id": "current-llava",
+      "type": "text",
+      "x": 220,
+      "y": 405,
+      "width": 80,
+      "height": 15,
+      "text": "LLaVA 7B",
+      "fontSize": 11
+    },
+    {
+      "id": "current-rag",
+      "type": "rectangle",
+      "x": 350,
+      "y": 370,
+      "width": 120,
+      "height": 50,
+      "fillColor": "#d1c4e9"
+    },
+    {
+      "id": "current-rag-text",
+      "type": "text",
+      "x": 360,
+      "y": 385,
+      "width": 100,
+      "height": 20,
+      "text": "RAG Service",
+      "fontSize": 14
+    },
+    {
+      "id": "current-decision",
+      "type": "rectangle",
+      "x": 500,
+      "y": 370,
+      "width": 130,
+      "height": 50,
+      "fillColor": "#f8bbd0"
+    },
+    {
+      "id": "current-decision-text",
+      "type": "text",
+      "x": 510,
+      "y": 385,
+      "width": 110,
+      "height": 20,
+      "text": "Decision Service",
+      "fontSize": 14
+    },
+    {
+      "id": "current-deepseek",
+      "type": "text",
+      "x": 520,
+      "y": 405,
+      "width": 80,
+      "height": 15,
+      "text": "DeepSeek R1",
+      "fontSize": 11
+    },
+    {
+      "id": "current-output",
+      "type": "diamond",
+      "x": 660,
+      "y": 360,
+      "width": 100,
+      "height": 80,
+      "fillColor": "#ce93d8"
+    },
+    {
+      "id": "current-output-text",
+      "type": "text",
+      "x": 670,
+      "y": 392,
+      "width": 80,
+      "height": 20,
+      "text": "风险等级",
+      "fontSize": 12
+    },
+    {
+      "id": "current-low",
+      "type": "rectangle",
+      "x": 800,
+      "y": 330,
+      "width": 80,
+      "height": 35,
+      "fillColor": "#c8e6c9"
+    },
+    {
+      "id": "current-low-text",
+      "type": "text",
+      "x": 808,
+      "y": 340,
+      "width": 64,
+      "height": 15,
+      "text": "low",
+      "fontSize": 11
+    },
+    {
+      "id": "current-medium",
+      "type": "rectangle",
+      "x": 800,
+      "y": 375,
+      "width": 80,
+      "height": 35,
+      "fillColor": "#fff9c4"
+    },
+    {
+      "id": "current-medium-text",
+      "type": "text",
+      "x": 808,
+      "y": 385,
+      "width": 64,
+      "height": 15,
+      "text": "medium",
+      "fontSize": 11
+    },
+    {
+      "id": "current-high",
+      "type": "rectangle",
+      "x": 800,
+      "y": 420,
+      "width": 80,
+      "height": 35,
+      "fillColor": "#ffccbc"
+    },
+    {
+      "id": "current-high-text",
+      "type": "text",
+      "x": 808,
+      "y": 430,
+      "width": 64,
+      "height": 15,
+      "text": "high",
+      "fontSize": 11
+    },
+    {
+      "id": "current-critical",
+      "type": "rectangle",
+      "x": 900,
+      "y": 375,
+      "width": 80,
+      "height": 35,
+      "fillColor": "#ffcdd2"
+    },
+    {
+      "id": "current-critical-text",
+      "type": "text",
+      "x": 908,
+      "y": 385,
+      "width": 64,
+      "height": 15,
+      "text": "critical",
+      "fontSize": 11
+    },
+    {
+      "id": "c-arrow1",
+      "type": "arrow",
+      "x": 170,
+      "y": 395,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "c-arrow2",
+      "type": "arrow",
+      "x": 320,
+      "y": 395,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "c-arrow3",
+      "type": "arrow",
+      "x": 470,
+      "y": 395,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "c-arrow4",
+      "type": "arrow",
+      "x": 630,
+      "y": 395,
+      "width": 30,
+      "height": 0,
+      "points": [[0, 0], [30, 0]]
+    },
+    {
+      "id": "gap-box",
+      "type": "rectangle",
+      "x": 50,
+      "y": 480,
+      "width": 930,
+      "height": 180,
+      "fillColor": "#fafafa",
+      "strokeColor": "#90a4ae",
+      "strokeDashArray": 5
+    },
+    {
+      "id": "gap-title",
+      "type": "text",
+      "x": 70,
+      "y": 495,
+      "width": 200,
+      "height": 30,
+      "text": "🔴 关键差距分析",
+      "fontSize": 18,
+      "fontWeight": "bold"
+    },
+    {
+      "id": "gap1",
+      "type": "text",
+      "x": 70,
+      "y": 540,
+      "width": 400,
+      "height": 25,
+      "text": "1. 缺少运动检测前置过滤 → 大量背景误检",
+      "fontSize": 14
+    },
+    {
+      "id": "gap2",
+      "type": "text",
+      "x": 70,
+      "y": 570,
+      "width": 400,
+      "height": 25,
+      "text": "2. 缺少多模态融合 → 纯视觉容易误判",
+      "fontSize": 14
+    },
+    {
+      "id": "gap3",
+      "type": "text",
+      "x": 70,
+      "y": 600,
+      "width": 400,
+      "height": 25,
+      "text": "3. 缺少时序分析 → 单帧无法判断运动状态",
+      "fontSize": 14
+    },
+    {
+      "id": "gap4",
+      "type": "text",
+      "x": 70,
+      "y": 630,
+      "width": 400,
+      "height": 25,
+      "text": "4. 缺少Register机制 → 无法识别已知UAV",
+      "fontSize": 14
+    }
+  ],
+  "appState": {
+    "gridSize": null,
+    "viewBackgroundColor": "#ffffff"
+  }
+}
