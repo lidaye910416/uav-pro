@@ -662,19 +662,31 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             r.raise_for_status()
             raw = r.json().get("message", {}).get("content", "").strip()
 
-        # Extract JSON
-        start = raw.find("{")
-        end = raw.rfind("}") + 1
+        # Extract JSON - handle markdown code blocks with comprehensive cleaning
+        import re as _re
+        # Remove any markdown code block markers
+        clean_raw = raw.replace('```json', '').replace('```', '').strip()
+
+        # Find JSON object
+        start = clean_raw.find("{")
+        end = clean_raw.rfind("}") + 1
         if start != -1 and end > start:
             try:
-                result = json.loads(raw[start:end])
+                result = json.loads(clean_raw[start:end])
                 # Fallback scene_description from raw text if not in JSON
                 if not result.get("scene_description"):
                     # Use first 100 chars of raw as description
                     result["scene_description"] = raw[:100]
                 return result
             except json.JSONDecodeError:
-                pass
+                # Try single-line JSON parsing
+                try:
+                    single_line = _re.sub(r'\s+', ' ', clean_raw)
+                    result = json.loads(single_line)
+                    if result.get("scene_description"):
+                        return result
+                except:
+                    pass
         return {"scene_description": raw[:100] if raw else "分析失败"}
     except Exception:
         return {"scene_description": _pixel_analyze(frame_bgr)[:100]}
