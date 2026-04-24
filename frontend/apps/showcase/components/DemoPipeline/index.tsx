@@ -500,8 +500,14 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
         combined_image_url?: string  // URL to annotated image
       }
       if (!data.stage) return
-      console.log("[Pipeline] stage event:", data.stage, "combined_image_url:", data.combined_image_url)
+      console.log("[Pipeline] stage event:", data.stage, "progress:", data.progress, "status:", data.status)
       const isDone = (data.status === "done") || (data.progress >= 100)
+
+      // Clear any pending reveal timers for this stage
+      if (revealTimersRef.current[data.stage]) {
+        clearTimeout(revealTimersRef.current[data.stage])
+        delete revealTimersRef.current[data.stage]
+      }
 
       setStages((prev) => {
         const current = prev[data.stage]
@@ -510,17 +516,8 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
           : data.status === "running" ? "running" : current.status
         const newProgress = isDone ? 100 : data.progress
 
-        if (isDone && current.status !== "done") {
-          const count = completedCount
-          completedCount++
-          setTimeout(() => {
-            const delay = count * 700
-            const timer = setTimeout(() => {
-              setStages((s) => ({ ...s, [data.stage!]: { ...s[data.stage!], revealed: true } }))
-            }, delay)
-            revealTimersRef.current[data.stage!] = timer
-          }, 0)
-        }
+        // Immediately mark as revealed when done (no staggered delay for SSE)
+        const shouldReveal = isDone && current.status !== "done"
 
         // Get current URL from frame_data if available, otherwise from stage event
         const existingUrl = prev.perception.combinedImageUrl
@@ -542,7 +539,6 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
 
         // Priority: newUrlFromStage (from stage payload) > urlFromDetail (from detail) > existingUrl (from previous frame_data)
         const finalUrl = newUrlFromStage || urlFromDetail || existingUrl
-        console.log("[Pipeline] stage setStages finalUrl:", finalUrl, "newUrlFromStage:", newUrlFromStage, "urlFromDetail:", urlFromDetail)
 
         return {
           ...prev,
@@ -557,6 +553,8 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
             errorMsg: data.error ?? current.errorMsg,
             // Use the URL from any source
             combinedImageUrl: finalUrl,
+            // Immediately reveal when done via SSE
+            revealed: shouldReveal ? true : current.revealed,
           },
         }
       })

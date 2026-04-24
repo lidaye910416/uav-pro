@@ -629,24 +629,39 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
     """Single-model pipeline: Gemma 4 E2B handles vision + decision in one shot.
 
     Returns dict with keys: scene_description, decision (AlertDecision fields).
+    Optimized prompt to ensure structured JSON output.
     """
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(frame_rgb)
     img_b64 = _image_to_base64(pil_img)
 
-    system_prompt = (
-        "你是一个高速公路安全预警专家，同时也是一个航拍视觉分析专家。"
-        "你接收一张航拍图像，必须严格按JSON格式输出，不要添加任何解释或额外文字。"
-    )
-    user_prompt = f"""请分析这张航拍图像，并结合以下处置规范给出预警判断：
+    # 优化提示词：更严格、更简洁
+    system_prompt = """你是一个高速公路安全预警专家。
 
-相关处置规范：
-{rag_context if rag_context else "（无相关规范，请自行判断）"}
+关键要求：
+1. 只输出纯 JSON 对象，不要任何解释、注释或 markdown 代码块
+2. 不要输出 ```json 或 ``` 等标记
+3. 使用标准 JSON 格式
 
-请用JSON格式输出（只输出JSON，不要任何其他内容）：
-{{"scene_description":"中文场景描述（100字内）","should_alert":true或false,"risk_level":"low或medium或high或critical","title":"10字内标题","description":"30字内描述","recommendation":"40字内建议","confidence":0.0-1.0}}
+输出字段：
+- scene_description: 中文场景描述（30-80字）
+- should_alert: true 或 false
+- risk_level: low 或 medium 或 high 或 critical
+- title: 5-10字预警标题
+- description: 20-40字描述
+- recommendation: 20-50字建议
+- confidence: 0.0-1.0 数字"""
 
-请用中文回答。"""
+    rag_section = f"""
+相关处置规范（供参考）：
+{rag_context if rag_context else '（无相关规范）'}"""
+
+    user_prompt = f"""分析这张航拍图像，判断是否存在交通安全异常。
+
+{rag_section}
+
+严格按以下格式输出纯 JSON（不要有任何其他文字）：
+{{"scene_description":"场景描述","should_alert":true/false,"risk_level":"low/medium/high/critical","title":"标题","description":"描述","recommendation":"建议","confidence":0.0-1.0}}"""
 
     payload = {
         "model": model,
@@ -662,34 +677,66 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             r.raise_for_status()
             raw = r.json().get("message", {}).get("content", "").strip()
 
-        # Extract JSON - handle markdown code blocks with comprehensive cleaning
+        # 改进的 JSON 解析：多层清理
         import re as _re
-        # Remove any markdown code block markers
+
+        # 1. 移除 markdown 代码块标记
         clean_raw = raw.replace('```json', '').replace('```', '').strip()
 
-        # Find JSON object
+        # 2. 查找 JSON 对象
         start = clean_raw.find("{")
         end = clean_raw.rfind("}") + 1
+
         if start != -1 and end > start:
+            json_str = clean_raw[start:end]
             try:
-                result = json.loads(clean_raw[start:end])
-                # Fallback scene_description from raw text if not in JSON
-                if not result.get("scene_description"):
-                    # Use first 100 chars of raw as description
-                    result["scene_description"] = raw[:100]
+                result = json.loads(json_str)
+                # 验证必需字段
+                if result.get("scene_description") and result.get("risk_level"):
+                    # 规范化 risk_level
+                    risk = str(result.get("risk_level", "low")).lower()
+                    if risk not in ["low", "medium", "high", "critical"]:
+                        risk = "low"
+                    result["risk_level"] = risk
+                    # 规范化 should_alert
+                    result["should_alert"] = bool(result.get("should_alert", False))
+                    # 规范化 confidence
+                    conf = float(result.get("confidence", 0.5))
+                    result["confidence"] = max(0.0, min(1.0, conf))
+                    return result
+            except (json.JSONDecodeError, ValueError) as e:
+                pass
+
+        # 3. 回退：尝试单行 JSON
+        try:
+            single_line = _re.sub(r'\s+', ' ', clean_raw)
+            result = json.loads(single_line)
+            if result.get("scene_description"):
                 return result
-            except json.JSONDecodeError:
-                # Try single-line JSON parsing
-                try:
-                    single_line = _re.sub(r'\s+', ' ', clean_raw)
-                    result = json.loads(single_line)
-                    if result.get("scene_description"):
-                        return result
-                except:
-                    pass
-        return {"scene_description": raw[:100] if raw else "分析失败"}
+        except:
+            pass
+
+        # 4. 最后回退：使用原始文本前100字符
+        fallback_desc = raw[:100].strip() if raw else "分析失败"
+        return {
+            "scene_description": fallback_desc,
+            "should_alert": False,
+            "risk_level": "low",
+            "title": "道路通行正常",
+            "description": fallback_desc,
+            "recommendation": "持续监控，暂无预警处置建议。",
+            "confidence": 0.5,
+        }
     except Exception:
-        return {"scene_description": _pixel_analyze(frame_bgr)[:100]}
+        return {
+            "scene_description": "分析失败",
+            "should_alert": False,
+            "risk_level": "low",
+            "title": "分析异常",
+            "description": "AI 分析服务暂时不可用",
+            "recommendation": "请检查系统状态",
+            "confidence": 0.0,
+        }
 
 
 async def _decision_decide(scene_desc: str, rag_context: str, model: str, timeout: float) -> dict | None:
@@ -1159,12 +1206,23 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             if frame_bgr is None:
                 continue
 
+            # 计算每帧的基础进度 (0, 30, 60 for 3 frames)
+            frame_base = idx * 30
+
             # Stage 1: 感知层 - YOLO+SAM 检测和标注
-            yield f"event: stage\ndata: {json.dumps({'stage': 'perception', 'progress': idx * 33, 'status': 'running'})}\n\n".encode()
+            yield f"event: stage\ndata: {json.dumps({'stage': 'perception', 'progress': frame_base + 5, 'status': 'running'})}\n\n".encode()
             await asyncio.sleep(0.05)
 
             # 执行 YOLO+SAM 标注，返回图像 URL 和检测结果
             combined_image_url, detection_result = _save_annotated_frame(frame_bgr, frame_idx, prefix="demo")
+
+            # 发送 perception done 事件
+            yield f"event: stage\ndata: {json.dumps({
+                'stage': 'perception',
+                'progress': frame_base + 10,
+                'status': 'done',
+            })}\n\n".encode()
+            await asyncio.sleep(0.02)
 
             # 发送 frame_data 事件，包含检测结果和标注图像 URL
             yield f"event: frame_data\ndata: {json.dumps({
@@ -1180,28 +1238,39 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'mask_details': detection_result.get('mask_details', []),
                 'combined_image_url': combined_image_url,
             })}\n\n".encode()
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(0.02)
 
-            # ── Vision: 基于 YOLO+SAM 检测结果调用 Gemma4 E2B ──────────────
-            yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': idx * 33 + 8, 'status': 'running'})}\n\n".encode()
-            yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': idx * 33 + 16, 'status': 'running'})}\n\n".encode()
-            await asyncio.sleep(0.05)
+            # ── Stage 2: RAG retrieval ─────────────────────────────────────────
+            # 先进行 RAG 检索，获取相关规范上下文
+            yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': frame_base + 15, 'status': 'running'})}\n\n".encode()
+            await asyncio.sleep(0.02)
 
             # 检查 Ollama 可用性
             ollama_status = await _check_ollama()
             gemma_model = ollama_status.get("gemma4") or "gemma4:e2b"
 
-            # 构建检测信息用于 RAG 查询
+            # 构建更语义化的 RAG 查询
             detection_details = detection_result.get('detection_details', [])
             mask_details = detection_result.get('mask_details', [])
-            detection_labels = [d.get('label', 'unknown') for d in detection_details] if detection_details else []
-            detection_summary = "、".join(detection_labels) if detection_labels else "道路场景"
-            rag_query = f"航拍{idx + 1}号帧，检测到：{detection_summary}"
 
-            # RAG retrieval - 使用检测信息作为查询
+            # 根据检测结果构建语义查询
+            if detection_details:
+                labels = [d.get('label', '').lower() for d in detection_details]
+                if 'car' in labels or 'truck' in labels:
+                    rag_query = "高速公路车辆通行异常应急车道停车交通事件处置规范"
+                elif 'person' in labels:
+                    rag_query = "高速公路行人闯入道路安全异常处置规范"
+                elif 'boat' in labels:
+                    rag_query = "道路区域水域安全监控异常处置规范"
+                else:
+                    rag_query = "高速公路交通安全监控异常事件处置规范"
+            else:
+                rag_query = "高速公路道路通行安全监控正常状态处置流程"
+
+            # RAG retrieval
             rag_context = ""
             try:
-                rag_context = await _rag_retrieve(rag_query)
+                rag_context = await _rag_retrieve(rag_query, top_k=3)
             except Exception:
                 pass
             rag_snippets = [
@@ -1213,11 +1282,16 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             # RAG done
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'rag',
-                'progress': idx * 33 + 16,
+                'progress': frame_base + 20,
                 'status': 'done',
                 'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
                 'query': rag_query[:80],
             })}\n\n".encode()
+            await asyncio.sleep(0.02)
+
+            # ── Stage 3: Gemma4 视觉理解 ─────────────────────────────────────
+            yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': frame_base + 30, 'status': 'running'})}\n\n".encode()
+            await asyncio.sleep(0.02)
 
             # 调用 Gemma4 E2B 进行视觉理解和决策
             scene_desc = DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)]
@@ -1260,10 +1334,10 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                         scene_desc += f"，{person_count} 名行人"
                     scene_desc += "。道路通行正常。"
 
-            # Vision done
+            # Vision done - Gemma4 分析完成
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'identify',
-                'progress': idx * 33 + 25,
+                'progress': frame_base + 50,
                 'status': 'done',
                 'summary': scene_desc[:60],
                 'detail': scene_desc,
@@ -1271,12 +1345,12 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             })}\n\n".encode()
             await asyncio.sleep(0.05)
 
-            # Decision (uses Gemma result)
+            # Decision (uses Gemma result) - Stage 4
             gemma_confidence = gemma_result.get("confidence", 0.85) if 'gemma_result' in dir() else 0.85
 
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'decision',
-                'progress': idx * 33 + 33,
+                'progress': frame_base + 80,
                 'status': 'done',
                 'detail': {
                     'has_incident': has_incident,
