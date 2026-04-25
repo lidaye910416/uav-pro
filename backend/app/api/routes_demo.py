@@ -646,43 +646,73 @@ async def _vision_describe(frame_bgr, model: str | None, timeout: float) -> str:
     return _pixel_analyze(frame_bgr)
 
 
-async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: float) -> dict:
+async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: float, yolo_detections: list = None) -> dict:
     """Single-model pipeline: Gemma 4 E2B handles vision + decision in one shot.
 
     Returns dict with keys: scene_description, decision (AlertDecision fields).
-    Optimized prompt to ensure structured JSON output.
+    Optimized prompt to leverage YOLO detection results and scene context.
     """
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(frame_rgb)
     img_b64 = _image_to_base64(pil_img)
 
-    # 优化提示词：更严格、更简洁
-    system_prompt = """你是一个高速公路安全预警专家。
+    # 构建检测结果摘要（用于增强提示词）
+    detection_summary = ""
+    if yolo_detections:
+        categories = {}
+        for det in yolo_detections:
+            label = det.get('label', 'unknown')
+            categories[label] = categories.get(label, 0) + 1
+        if categories:
+            parts = [f"{label} {count}个" for label, count in sorted(categories.items())]
+            detection_summary = f"【YOLO检测摘要】检测到：{', '.join(parts)}。"
 
-关键要求：
-1. 只输出纯 JSON 对象，不要任何解释、注释或 markdown 代码块
-2. 不要输出 ```json 或 ``` 等标记
-3. 使用标准 JSON 格式
+    system_prompt = f"""你是高速公路航拍图像安全分析专家。
 
-输出字段：
-- scene_description: 中文场景描述（30-80字）
-- should_alert: true 或 false
-- risk_level: low 或 medium 或 high 或 critical
-- title: 5-10字预警标题
-- description: 20-40字描述
-- recommendation: 20-50字建议
-- confidence: 0.0-1.0 数字"""
+【重要约束 - 静态帧分析】
+你只能分析当前帧的静态信息，无法判断时序状态（如车辆是否静止、移动方向）。
+因此请基于以下静态可观测要素进行分析：
 
-    rag_section = f"""
-相关处置规范（供参考）：
-{rag_context if rag_context else '（无相关规范）'}"""
+【静态可判断要素】
+1. 空间位置：物体是否出现在异常位置（路肩/应急车道 vs 正常车道）
+2. 外观特征：车辆是否开启双闪（车顶闪烁光斑）、是否有明显变形/损坏
+3. 聚集模式：多车是否异常聚集（可能交通事故）、间距是否异常
+4. 道路状态：路面是否有坑洞、遗撒物、积水、障碍物
+5. 人员活动：是否有行人/人员在非允许区域
 
-    user_prompt = f"""分析这张航拍图像，判断是否存在交通安全异常。
+{detection_summary}
 
-{rag_section}
+【高速公路场景上下文】
+- 车道分布：正常情况下车辆应沿车道行驶
+- 应急车道：位于最外侧，用于紧急停靠，正常应空旷
+- 路肩：灰色硬化区域，正常应无车辆长时间停靠
+- 正常模式：车辆匀速行驶、保持车距、无行人
 
-严格按以下格式输出纯 JSON（不要有任何其他文字）：
-{{"scene_description":"场景描述","should_alert":true/false,"risk_level":"low/medium/high/critical","title":"标题","description":"描述","recommendation":"建议","confidence":0.0-1.0}}"""
+【处置规范】（必须遵循）
+{rag_context if rag_context else '（无相关规范）'}
+
+【输出要求】
+只输出纯JSON，不要任何其他文字：
+{{
+  "scene_description": "场景描述（50字内）",
+  "should_alert": true或false,
+  "risk_level": "low|medium|high|critical",
+  "title": "预警标题（8字内）",
+  "description": "描述（30字内）",
+  "recommendation": "建议（40字内）",
+  "confidence": 0.0-1.0
+}}"""
+
+    user_prompt = f"""请分析这张航拍图像，基于静态视觉特征判断是否存在交通安全异常。
+
+【分析重点】
+1. 观察整体场景类型（直道/弯道/立交/收费站）
+2. 检查车辆位置是否正常（是否压线/骑车道/停在应急车道）
+3. 观察是否有异常聚集、静止不动的车辆
+4. 检查路面是否有坑洞、遗撒物、积水
+5. 是否有行人或非机动车在非允许区域
+
+直接输出JSON结果。"""
 
     payload = {
         "model": model,
@@ -1345,7 +1375,8 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                     frame_bgr=frame_bgr,
                     model=gemma_model,
                     rag_context=rag_context,
-                    timeout=60.0
+                    timeout=60.0,
+                    yolo_detections=detection_details
                 )
                 # 使用 Gemma 返回的结果
                 scene_desc = gemma_result.get("scene_description", scene_desc)

@@ -57,8 +57,26 @@ stop_all() {
     echo -e "${YELLOW}停止所有服务...${NC}"
     pkill -f "uvicorn main:app" 2>/dev/null || true
     pkill -f "next dev" 2>/dev/null || true
+    pkill -f "ollama serve" 2>/dev/null || true
     sleep 2
     echo -e "${GREEN}✓ 所有服务已停止${NC}"
+}
+
+# 启动 Ollama
+start_ollama() {
+    echo -e "${YELLOW}启动 Ollama (端口 11434)...${NC}"
+    if pgrep -f "ollama serve" > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Ollama 已在运行${NC}"
+    else
+        nohup ollama serve > /tmp/ollama.log 2>&1 &
+        sleep 3
+        if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
+            echo -e "${GREEN}✓ Ollama 已启动${NC}"
+        else
+            echo -e "${RED}✗ Ollama 启动失败${NC}"
+            tail -10 /tmp/ollama.log
+        fi
+    fi
 }
 
 # 启动后端
@@ -121,12 +139,13 @@ check_status() {
     echo "=========================================="
     echo -e "              服务状态检查"
     echo "=========================================="
-    
+
+    check_ollama
     check_service "后端 API" "http://localhost:8000/docs"
     check_service "首页 Showcase" "http://localhost:3000"
     check_service "感知中心 Dashboard" "http://localhost:3001"
     check_service "管理后台 Admin" "http://localhost:3002"
-    
+
     echo "=========================================="
 }
 
@@ -140,11 +159,20 @@ check_service() {
     fi
 }
 
+check_ollama() {
+    if curl -s --max-time 3 http://localhost:11434/api/tags > /dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} Ollama (11434)"
+    else
+        echo -e "  ${RED}✗${NC} Ollama (离线)"
+    fi
+}
+
 # 主流程
 case "${1:-start}" in
     start)
         init_database
         stop_all
+        start_ollama
         start_backend
         start_showcase
         start_dashboard
@@ -158,6 +186,7 @@ case "${1:-start}" in
     restart)
         init_database
         stop_all
+        start_ollama
         start_backend
         start_showcase
         start_dashboard
