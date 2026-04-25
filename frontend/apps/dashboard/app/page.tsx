@@ -26,6 +26,161 @@ const SECTIONS = [
   },
 ]
 
+/* ── Pipeline Flowchart ──────────────────────────────────────── */
+const PIPELINE_STAGES = [
+  { name: "视频输入", icon: "🎥", desc: "无人机航拍", color: "#888888" },
+  { name: "YOLO检测", icon: "◉", desc: "目标检测", color: "#FFB800" },
+  { name: "SAM分割", icon: "◈", desc: "语义分割", color: "#00D9A5" },
+  { name: "Gemma分析", icon: "◆", desc: "视觉理解", color: "#7C3AED" },
+  { name: "RAG检索", icon: "◫", desc: "知识检索", color: "#3B82F6" },
+  { name: "风险决策", icon: "◈", desc: "智能决策", color: "#EC4899" },
+  { name: "预警输出", icon: "⚠", desc: "结果展示", color: "#EF4444" },
+]
+
+function PipelineFlowchart() {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
+
+  return (
+    <div
+      className="mt-8 p-6 rounded-2xl"
+      style={{
+        background: "rgba(16,16,16,0.88)",
+        backdropFilter: "blur(10px)",
+        border: "1px solid rgba(255,255,255,0.08)",
+      }}
+    >
+      <h3 className="text-sm font-mono font-bold mb-4 tracking-wider" style={{ color: "var(--text-secondary)" }}>
+        PIPELINE 算法流程
+      </h3>
+
+      <div className="relative">
+        {/* SVG Flowchart */}
+        <svg viewBox="0 0 980 100" className="w-full" style={{ minHeight: "100px" }}>
+          {/* Connection lines */}
+          {PIPELINE_STAGES.map((_, i) => {
+            if (i === PIPELINE_STAGES.length - 1) return null
+            const x1 = 70 + i * 140
+            const x2 = 70 + (i + 1) * 140
+            return (
+              <line
+                key={`line-${i}`}
+                x1={x1 + 50}
+                y1="50"
+                x2={x2 - 10}
+                y2="50"
+                stroke="url(#arrowGradient)"
+                strokeWidth="2"
+                strokeDasharray="4,4"
+              />
+            )
+          })}
+
+          {/* Gradient definition */}
+          <defs>
+            <linearGradient id="arrowGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#FFB800" stopOpacity="0.5" />
+              <stop offset="100%" stopColor="#00D9A5" stopOpacity="0.5" />
+            </linearGradient>
+          </defs>
+
+          {/* Stage nodes */}
+          {PIPELINE_STAGES.map((stage, i) => {
+            const isHovered = hoveredIndex === i
+            const x = 20 + i * 140
+            return (
+              <g key={stage.name} transform={`translate(${x}, 15)`}>
+                {/* Glow effect when hovered */}
+                {isHovered && (
+                  <circle cx="50" cy="35" r="38" fill={stage.color} opacity="0.15" />
+                )}
+
+                {/* Node circle */}
+                <circle
+                  cx="50"
+                  cy="35"
+                  r="30"
+                  fill={isHovered ? stage.color + "30" : "rgba(20,20,20,0.9)"}
+                  stroke={stage.color}
+                  strokeWidth="2"
+                  style={{ cursor: "pointer", transition: "all 0.3s ease" }}
+                />
+
+                {/* Icon */}
+                <text
+                  x="50"
+                  y="42"
+                  textAnchor="middle"
+                  fontSize="20"
+                  style={{ pointerEvents: "none" }}
+                >
+                  {stage.icon}
+                </text>
+
+                {/* Stage name */}
+                <text
+                  x="50"
+                  y="82"
+                  textAnchor="middle"
+                  fontSize="11"
+                  fontFamily="'JetBrains Mono', monospace"
+                  fill={isHovered ? stage.color : "var(--text-secondary)"}
+                  style={{ transition: "fill 0.3s ease" }}
+                >
+                  {stage.name}
+                </text>
+
+                {/* Description */}
+                <text
+                  x="50"
+                  y="95"
+                  textAnchor="middle"
+                  fontSize="9"
+                  fontFamily="'JetBrains Mono', monospace"
+                  fill="var(--text-muted)"
+                >
+                  {stage.desc}
+                </text>
+
+                {/* Invisible larger hit area */}
+                <circle
+                  cx="50"
+                  cy="35"
+                  r="35"
+                  fill="transparent"
+                  onMouseEnter={() => setHoveredIndex(i)}
+                  onMouseLeave={() => setHoveredIndex(null)}
+                  style={{ cursor: "pointer" }}
+                />
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+
+      {/* Legend */}
+      <div className="mt-4 pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="flex flex-wrap gap-4 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+          <span className="flex items-center gap-1">
+            <span style={{ color: "#FFB800" }}>◉</span> YOLOv8 实时检测
+          </span>
+          <span className="flex items-center gap-1">
+            <span style={{ color: "#00D9A5" }}>◈</span> SAM 语义分割
+          </span>
+          <span className="flex items-center gap-1">
+            <span style={{ color: "#7C3AED" }}>◆</span> Gemma4 多模态理解
+          </span>
+          <span className="flex items-center gap-1">
+            <span style={{ color: "#3B82F6" }}>◫</span> ChromaDB RAG
+          </span>
+          <span className="flex items-center gap-1">
+            <span style={{ color: "#EC4899" }}>◈</span> 风险等级判定
+          </span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Mouse glow background ─────────────────────────────────── */
 function GlowBackground() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -260,6 +415,9 @@ export default function DashboardHome() {
               </Link>
             ))}
           </div>
+
+          {/* Pipeline Flowchart */}
+          <PipelineFlowchart />
         </div>
 
         {/* External links */}

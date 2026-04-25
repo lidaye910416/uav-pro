@@ -958,6 +958,42 @@ async def seed_demo_data() -> dict:
         }
 
 
+# ── 预警入库辅助函数 ────────────────────────────────────────────────────────────
+
+async def _save_alert_to_db(alert_data: dict) -> int | None:
+    """将预警数据保存到数据库，返回 Alert ID"""
+    try:
+        async with AsyncSessionLocal() as session:
+            # 转换 risk_level 字符串到枚举
+            risk_str = str(alert_data.get("risk_level", "low")).lower()
+            if risk_str not in ["low", "medium", "high", "critical"]:
+                risk_str = "low"
+            risk = RiskLevel(risk_str)
+
+            alert = Alert(
+                title=alert_data.get("title", "未知预警"),
+                description=alert_data.get("description", ""),
+                risk_level=risk,
+                status=AlertStatus.PENDING,
+                scene_description=alert_data.get("scene_description"),
+                recommendation=alert_data.get("recommendation"),
+                confidence=alert_data.get("confidence"),
+                source_type=alert_data.get("source_type", "video"),
+                source_path=alert_data.get("source_path"),
+                pipeline_mode=alert_data.get("pipeline_mode", "single"),
+            )
+            session.add(alert)
+            await session.commit()
+            await session.refresh(alert)
+            print(f"[_save_alert_to_db] 预警已保存: ID={alert.id}, title={alert.title}")
+            return alert.id
+    except Exception as e:
+        print(f"[_save_alert_to_db] 保存预警失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 # ── SSE 演示流 ────────────────────────────────────────────────────────────────
 
 async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
@@ -1129,6 +1165,8 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 }
 
                 events.append(f"event: alert\ndata: {json.dumps(alert_payload)}\n\n".encode())
+                # 保存预警到数据库
+                await _save_alert_to_db(alert_payload)
                 await asyncio.sleep(0.8)
 
     # Fallback: use seed data if video unavailable
@@ -1441,7 +1479,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             await asyncio.sleep(0.05)
 
             # Alert event
-            yield f"event: alert\ndata: {json.dumps({
+            alert_payload = {
                 'id': int(time.time() * 1000),
                 'title': title,
                 'description': description,
@@ -1454,7 +1492,10 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'pipeline_mode': 'yolo_sam',
                 'ai_model': gemma_model,
                 'detection_details': detection_details,
-            })}\n\n".encode()
+            }
+            yield f"event: alert\ndata: {json.dumps(alert_payload)}\n\n".encode()
+            # 保存预警到数据库
+            await _save_alert_to_db(alert_payload)
             await asyncio.sleep(0.05)
 
     return StreamingResponse(
