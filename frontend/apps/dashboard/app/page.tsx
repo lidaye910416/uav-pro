@@ -420,20 +420,17 @@ export default function DashboardHome() {
           <PipelineFlowchart />
         </div>
 
-        const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
-
         {/* External links */}
         <div className="mt-14 flex gap-4 flex-wrap">
           <a
-            href={SHOWCASE_URL}
+            href={process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"}
             className="px-5 py-2.5 rounded-xl text-sm font-mono transition-all hover:brightness-110"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-secondary)" }}
           >
             ← 展示首页
           </a>
           <a
-            href={ADMIN_URL}
+            href={process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"}
             className="px-5 py-2.5 rounded-xl text-sm font-mono transition-all hover:brightness-110"
             style={{ background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.28)", color: "var(--accent-amber)" }}
           >

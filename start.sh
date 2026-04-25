@@ -1,13 +1,17 @@
 #!/bin/bash
-# UAV-PRO 服务管理脚本
+# UAV-PRO 服务管理脚本 (使用 PM2 守护进程)
 # 设置颜色
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
+
+# PM2 配置目录
+PM2_HOME="$PROJECT_ROOT/.pm2"
 
 # 检查并创建数据库表
 init_database() {
@@ -21,7 +25,6 @@ db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 'u
 engine = create_engine(f'sqlite:///{db_path}')
 
 with engine.connect() as conn:
-    # 检查 alerts 表
     try:
         conn.execute(text('SELECT 1 FROM alerts LIMIT 1'))
         print('✓ alerts 表存在')
@@ -52,9 +55,14 @@ except Exception as e:
     cd "$PROJECT_ROOT"
 }
 
-# 停止所有服务
+# 使用 PM2 停止所有服务
 stop_all() {
-    echo -e "${YELLOW}停止所有服务...${NC}"
+    echo -e "${YELLOW}停止所有服务 (PM2)...${NC}"
+    cd "$PM2_HOME" 2>/dev/null || true
+    pm2 delete all 2>/dev/null || true
+    pm2 kill 2>/dev/null || true
+
+    # 也杀掉残留进程
     pkill -f "uvicorn main:app" 2>/dev/null || true
     pkill -f "next dev" 2>/dev/null || true
     pkill -f "ollama serve" 2>/dev/null || true
@@ -67,69 +75,77 @@ start_ollama() {
     echo -e "${YELLOW}启动 Ollama (端口 11434)...${NC}"
     if pgrep -f "ollama serve" > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Ollama 已在运行${NC}"
+        return 0
+    fi
+
+    # 使用 PM2 启动
+    pm2 start --name "uav-ollama" --no-autorestart -- \
+        ollama serve > /tmp/ollama.log 2>&1 &
+    sleep 3
+
+    if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ Ollama 已启动${NC}"
     else
-        nohup ollama serve > /tmp/ollama.log 2>&1 &
-        sleep 3
-        if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
-            echo -e "${GREEN}✓ Ollama 已启动${NC}"
-        else
-            echo -e "${RED}✗ Ollama 启动失败${NC}"
-            tail -10 /tmp/ollama.log
-        fi
+        echo -e "${RED}✗ Ollama 启动失败${NC}"
+        tail -5 /tmp/ollama.log
     fi
 }
 
-# 启动后端
+# 启动后端 (PM2 守护)
 start_backend() {
-    echo -e "${YELLOW}启动后端 (端口 8000)...${NC}"
+    echo -e "${YELLOW}启动后端 (端口 8000, PM2 守护)...${NC}"
+
     cd "$PROJECT_ROOT/backend"
-    nohup env PYTHONPATH="$PROJECT_ROOT/backend" python3 -m uvicorn main:app --host 127.0.0.1 --port 8000 > /tmp/backend.log 2>&1 &
-    sleep 3
+    export PYTHONPATH="$PROJECT_ROOT/backend"
+
+    pm2 start \
+        --name "uav-backend" \
+        --no-autorestart \
+        -- \
+        python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+    cd "$PROJECT_ROOT"
+    sleep 4
+
     if curl -s http://localhost:8000/docs > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ 后端已启动${NC}"
+        echo -e "${GREEN}✓ 后端已启动 (PM2 守护中)${NC}"
     else
         echo -e "${RED}✗ 后端启动失败${NC}"
-        tail -20 /tmp/backend.log
+        pm2 logs uav-backend --lines 10 --nostream
     fi
 }
 
-# 启动前端 Showcase
-start_showcase() {
-    echo -e "${YELLOW}启动前端 Showcase (端口 3000)...${NC}"
-    cd "$PROJECT_ROOT/frontend/apps/showcase"
-    nohup npm run dev > /tmp/showcase.log 2>&1 &
-    sleep 8
-    if curl -s http://localhost:3000 > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Showcase 已启动${NC}"
-    else
-        echo -e "${RED}✗ Showcase 启动失败${NC}"
-        tail -10 /tmp/showcase.log
-    fi
-}
+# 启动前端 (使用 Turbo 通过 PM2)
+start_frontend() {
+    echo -e "${YELLOW}启动前端服务 (PM2 守护)...${NC}"
 
-# 启动前端 Dashboard
-start_dashboard() {
-    echo -e "${YELLOW}启动前端 Dashboard (端口 3001)...${NC}"
-    cd "$PROJECT_ROOT/frontend/apps/dashboard"
-    nohup npm run dev -- -p 3001 > /tmp/dashboard.log 2>&1 &
-    sleep 6
-    if curl -s http://localhost:3001 > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Dashboard 已启动${NC}"
-    else
-        echo -e "${RED}✗ Dashboard 启动失败${NC}"
-    fi
-}
+    cd "$PROJECT_ROOT/frontend"
 
-# 启动前端 Admin
-start_admin() {
-    echo -e "${YELLOW}启动前端 Admin (端口 3002)...${NC}"
-    cd "$PROJECT_ROOT/frontend/apps/admin"
-    nohup npm run dev -- -p 3002 > /tmp/admin.log 2>&1 &
-    sleep 6
-    if curl -s http://localhost:3002 > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Admin 已启动${NC}"
+    # 使用 Turbo 启动前端应用
+    # Turbo 会同时启动 showcase, dashboard, admin
+    pm2 start \
+        --name "uav-frontend" \
+        --no-autorestart \
+        -- \
+        pnpm dev
+
+    sleep 10
+
+    # 检查所有前端服务
+    local all_ok=true
+    for port in 3000 3001 3002; do
+        if curl -s --max-time 3 http://localhost:$port > /dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} 端口 $port"
+        else
+            echo -e "  ${RED}✗${NC} 端口 $port (等待中...)"
+            all_ok=false
+        fi
+    done
+
+    if [ "$all_ok" = true ]; then
+        echo -e "${GREEN}✓ 前端服务已启动 (PM2 守护中)${NC}"
     else
-        echo -e "${RED}✗ Admin 启动失败${NC}"
+        echo -e "${YELLOW}部分前端服务正在启动，请稍后...${NC}"
     fi
 }
 
@@ -137,34 +153,51 @@ start_admin() {
 check_status() {
     echo ""
     echo "=========================================="
-    echo -e "              服务状态检查"
+    echo -e "         ${BLUE}服务状态检查 (PM2)${NC}"
     echo "=========================================="
 
-    check_ollama
-    check_service "后端 API" "http://localhost:8000/docs"
-    check_service "首页 Showcase" "http://localhost:3000"
-    check_service "感知中心 Dashboard" "http://localhost:3001"
-    check_service "管理后台 Admin" "http://localhost:3002"
+    echo -e "\n${YELLOW}PM2 进程列表:${NC}"
+    pm2 list
 
+    echo ""
+    echo -e "${YELLOW}HTTP 服务检测:${NC}"
+
+    local all_ok=true
+    for name in "Ollama:11434" "Backend:8000" "Showcase:3000" "Dashboard:3001" "Admin:3002"; do
+        service="${name%%:*}"
+        port="${name##*:}"
+
+        if curl -s --max-time 2 http://localhost:$port > /dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} $service (端口 $port)"
+        else
+            echo -e "  ${RED}✗${NC} $service (端口 $port - 离线)"
+            all_ok=false
+        fi
+    done
+
+    echo ""
+    if [ "$all_ok" = true ]; then
+        echo -e "${GREEN}所有服务运行正常!${NC}"
+    else
+        echo -e "${YELLOW}部分服务离线，可使用 '$0 restart' 重启${NC}"
+    fi
     echo "=========================================="
 }
 
-check_service() {
-    local name=$1
-    local url=$2
-    if curl -s --max-time 3 "$url" > /dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} $name"
-    else
-        echo -e "  ${RED}✗${NC} $name (离线)"
-    fi
-}
-
-check_ollama() {
-    if curl -s --max-time 3 http://localhost:11434/api/tags > /dev/null 2>&1; then
-        echo -e "  ${GREEN}✓${NC} Ollama (11434)"
-    else
-        echo -e "  ${RED}✗${NC} Ollama (离线)"
-    fi
+# 清理并重启 (处理端口占用问题)
+clean_restart() {
+    echo -e "${YELLOW}清理残留进程...${NC}"
+    pkill -9 -f "next" 2>/dev/null || true
+    pkill -9 -f "node.*showcase" 2>/dev/null || true
+    pkill -9 -f "node.*dashboard" 2>/dev/null || true
+    pkill -9 -f "node.*admin" 2>/dev/null || true
+    pkill -9 -f "uvicorn" 2>/dev/null || true
+    lsof -ti:3000 | xargs kill -9 2>/dev/null || true
+    lsof -ti:3001 | xargs kill -9 2>/dev/null || true
+    lsof -ti:3002 | xargs kill -9 2>/dev/null || true
+    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    sleep 3
+    echo -e "${GREEN}清理完成${NC}"
 }
 
 # 主流程
@@ -174,10 +207,8 @@ case "${1:-start}" in
         stop_all
         start_ollama
         start_backend
-        start_showcase
-        start_dashboard
-        start_admin
-        sleep 2
+        start_frontend
+        sleep 3
         check_status
         ;;
     stop)
@@ -185,19 +216,33 @@ case "${1:-start}" in
         ;;
     restart)
         init_database
+        clean_restart
         stop_all
         start_ollama
         start_backend
-        start_showcase
-        start_dashboard
-        start_admin
+        start_frontend
+        sleep 3
         check_status
         ;;
     status)
         check_status
         ;;
+    logs)
+        echo -e "${YELLOW}查看后端日志:${NC}"
+        pm2 logs uav-backend --lines 50 --nostream
+        ;;
+    clean)
+        clean_restart
+        ;;
     *)
-        echo "用法: $0 {start|stop|restart|status}"
+        echo "用法: $0 {start|stop|restart|status|logs|clean}"
+        echo ""
+        echo "  start   - 启动所有服务 (PM2 守护)"
+        echo "  stop    - 停止所有服务"
+        echo "  restart - 重启所有服务"
+        echo "  status  - 检查服务状态"
+        echo "  logs    - 查看后端日志"
+        echo "  clean   - 清理残留进程"
         exit 1
         ;;
 esac

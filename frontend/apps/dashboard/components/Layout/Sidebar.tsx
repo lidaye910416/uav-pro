@@ -1,6 +1,9 @@
 "use client"
 import Link from "next/link"
 
+const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+
 const navItems = [
   { href: "/", label: "◉ 控制台", icon: "◉" },
   { href: "/monitor", label: "感知中心", icon: "◉" },
@@ -54,9 +57,6 @@ export default function Sidebar() {
           <div>ver 1.0.0</div>
           <div className="mt-1" style={{ color: "var(--accent-green)" }}>● ALL SYSTEMS OK</div>
         </div>
-        const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
-
         <a href={SHOWCASE_URL} target="_blank" rel="noopener noreferrer" className="block text-center mt-3 text-xs py-2 transition-colors" style={{ color: "var(--text-muted)" }}>
           ← 展示首页
         </a>
