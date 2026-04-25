@@ -27,9 +27,10 @@ const VIDEOS: VideoConfig[] = [
 ]
 
 function buildVideoUrls() {
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
   return VIDEOS.map((v) => ({
     ...v,
-    videoUrl: `http://localhost:8000/api/v1/demo/video?video_id=${v.id}`,
+    videoUrl: `${API_BASE}/api/v1/demo/video?video_id=${v.id}`,
   }))
 }
 
@@ -486,7 +487,8 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
   const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/admin/stats")
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+    fetch(`${API_BASE}/api/v1/admin/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d.alerts_by_risk || {}))
       .catch(() => {})
@@ -653,7 +655,8 @@ export default function MonitorPage() {
 
   // Load YOLO params from backend
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/analyze/yolo-params")
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+    fetch(`${API_BASE}/api/v1/analyze/yolo-params`)
       .then(r => r.json())
       .then((p: any) => setYoloParams({
         confidence_threshold: Math.round((p.confidence_threshold ?? 0.35) * 100),
@@ -665,7 +668,8 @@ export default function MonitorPage() {
 
   const handleYoloParamsChange = useCallback((newParams: YOLOParams) => {
     setYoloParams(newParams)
-    fetch("http://localhost:8000/api/v1/analyze/yolo-params", {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+    fetch(`${API_BASE}/api/v1/analyze/yolo-params`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

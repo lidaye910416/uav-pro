@@ -100,8 +100,10 @@ function Sidebar() {
           <div className="text-sm font-mono" style={{ color: "var(--text-muted)" }}>v1.0.0</div>
           <div className="text-sm font-mono mt-0.5" style={{ color: "var(--accent-green)" }}>● ALL SYSTEMS OK</div>
         </div>
+        const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
+
         <a
-          href="http://localhost:3000"
+          href={SHOWCASE_URL}
           target="_blank"
           rel="noopener noreferrer"
           className="block text-center mt-2 text-sm py-2 rounded-lg transition-all hover:brightness-110"

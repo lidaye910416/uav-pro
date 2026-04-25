@@ -17,9 +17,11 @@ const fetcher = (url: string) => fetch(url).then((r) => {
   return r.json()
 })
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+
 export function useOllamaModels() {
   const { data, error, isLoading } = useSWR<ModelsData>(
-    "http://localhost:8000/api/v1/ollama/models",
+    `${API_BASE}/api/v1/ollama/models`,
     fetcher,
     { refreshInterval: 30000 }
   )

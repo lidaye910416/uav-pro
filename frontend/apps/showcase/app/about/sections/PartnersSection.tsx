@@ -45,7 +45,9 @@ export default function PartnersSection({ inView }: PartnersSectionProps) {
       </div>
       <div className="about-cta">
         <a href="/" className="about-btn-primary">← 返回首页演示</a>
-        <a href="http://localhost:3002" target="_blank" rel="noopener noreferrer" className="about-btn-secondary">⚙ 管理后台 →</a>
+        const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+
+        <a href={ADMIN_URL} target="_blank" rel="noopener noreferrer" className="about-btn-secondary">⚙ 管理后台 →</a>
       </div>
     </section>
   )

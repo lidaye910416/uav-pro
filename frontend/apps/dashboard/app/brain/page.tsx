@@ -19,6 +19,8 @@ interface PipelineResult {
   decision: { risk: "low" | "medium" | "high" | "critical"; title: string; recommendation: string; confidence: number }
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+
 // ── Demo data ────────────────────────────────────────────────────────────────
 
 const DEMO_SCENES: PipelineResult[] = [
@@ -589,7 +591,7 @@ export default function BrainPage() {
       {/* Hidden video element for frame extraction */}
       <video
         ref={videoRef}
-        src="http://localhost:8000/api/v1/demo/video?video_id=d1"
+        src={`${API_BASE}/api/v1/demo/video?video_id=d1`}
         style={{ display: "none" }}
         muted
         loop={false}
@@ -788,7 +790,7 @@ export default function BrainPage() {
                   {v.active ? (
                     <>
                       <video
-                        src={`http://localhost:8000/api/v1/demo/video?video_id=${v.id}`}
+                        src={`${API_BASE}/api/v1/demo/video?video_id=${v.id}`}
                         autoPlay
                         muted
                         loop

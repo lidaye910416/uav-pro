@@ -22,8 +22,8 @@ export function useAlertStream(onAlert: (alert: StreamAlert) => void) {
       esRef.current.close()
     }
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8001"
-    const es = new EventSource(`${API_BASE}/api/v1/analyze/stream`)
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+    const es = new EventSource(`${API_BASE}/api/v1/demo/stream`)
     esRef.current = es
 
     es.addEventListener("open", () => {
