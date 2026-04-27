@@ -2,6 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react"
 
+// 从环境变量读取 API 地址
+const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+
 export interface Alert {
   id: number
   title: string
@@ -32,7 +35,7 @@ export function useAlerts(options: UseAlertsOptions = {}) {
 
   const fetchAlerts = useCallback(async () => {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+      const API_BASE = getApiBase()
       const res = await fetch(`${API_BASE}/api/v1/alerts?limit=${limit}`)
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`)

@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState, useCallback } from "react"
 
+// 从环境变量读取 API 地址
+const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+
 export interface StreamAlert {
   id: number
   title: string
@@ -36,7 +39,7 @@ export function useAlertStream(onAlert: (alert: StreamAlert) => void) {
       esRef.current.close()
     }
 
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+    const API_BASE = getApiBase()
     // 连接到 demo/stream 获取实时分析结果
     const es = new EventSource(`${API_BASE}/api/v1/demo/stream`)
     esRef.current = es

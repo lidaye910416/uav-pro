@@ -1,4 +1,13 @@
-const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE ?? 'http://localhost:8000'}/api/v1`
+// 从环境变量读取 API 地址，或使用 services.json 中的默认配置
+const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_BASE) {
+    return process.env.NEXT_PUBLIC_API_BASE
+  }
+  // 从 services.json 读取默认配置
+  return 'http://localhost:8000'
+}
+
+const API_BASE = `${getApiBase()}/api/v1`
 
 export interface Alert {
   id: number

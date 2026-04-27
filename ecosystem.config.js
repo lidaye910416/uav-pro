@@ -3,10 +3,12 @@ module.exports = {
     {
       name: 'uav-backend',
       script: 'python3',
-      args: '-m uvicorn main:app --host 127.0.0.1 --port 8000 --reload',
+      args: '-m uvicorn main:app --host ${BACKEND_HOST:-127.0.0.1} --port ${BACKEND_PORT:-8000} --reload',
       cwd: './backend',
       env: {
         PYTHONPATH: './backend',
+        BACKEND_HOST: '127.0.0.1',
+        BACKEND_PORT: 8000,
       },
       autorestart: true,
       max_restarts: 10,
@@ -19,6 +21,7 @@ module.exports = {
       cwd: './frontend/apps/showcase',
       env: {
         NODE_ENV: 'development',
+        PORT: 3000,
       },
       autorestart: true,
       max_restarts: 5,
@@ -31,6 +34,7 @@ module.exports = {
       cwd: './frontend/apps/dashboard',
       env: {
         NODE_ENV: 'development',
+        PORT: 3001,
       },
       autorestart: true,
       max_restarts: 5,
@@ -43,6 +47,7 @@ module.exports = {
       cwd: './frontend/apps/admin',
       env: {
         NODE_ENV: 'development',
+        PORT: 3002,
       },
       autorestart: true,
       max_restarts: 5,

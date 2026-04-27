@@ -13,6 +13,27 @@ cd "$PROJECT_ROOT"
 # PM2 配置目录
 PM2_HOME="$PROJECT_ROOT/.pm2"
 
+# ==================== 加载服务配置 ====================
+# 从 config/services.json 读取端口配置
+load_service_config() {
+    # 默认值
+    export BACKEND_PORT=${BACKEND_PORT:-8000}
+    export BACKEND_HOST=${BACKEND_HOST:-127.0.0.1}
+    export OLLAMA_PORT=${OLLAMA_PORT:-11434}
+    export SHOWCASE_PORT=${SHOWCASE_PORT:-3000}
+    export DASHBOARD_PORT=${DASHBOARD_PORT:-3001}
+    export ADMIN_PORT=${ADMIN_PORT:-3002}
+
+    # 如果存在 .env 文件，加载它
+    if [ -f "$PROJECT_ROOT/.env" ]; then
+        set -a  # 自动导出
+        source "$PROJECT_ROOT/.env"
+        set +a
+    fi
+}
+
+load_service_config
+
 # 检查并创建数据库表
 init_database() {
     echo -e "${YELLOW}检查数据库...${NC}"
@@ -72,7 +93,7 @@ stop_all() {
 
 # 启动 Ollama
 start_ollama() {
-    echo -e "${YELLOW}启动 Ollama (端口 11434)...${NC}"
+    echo -e "${YELLOW}启动 Ollama (端口 $OLLAMA_PORT)...${NC}"
     if pgrep -f "ollama serve" > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Ollama 已在运行${NC}"
         return 0
@@ -83,7 +104,7 @@ start_ollama() {
         ollama serve > /tmp/ollama.log 2>&1 &
     sleep 3
 
-    if curl -s --max-time 5 http://localhost:11434/api/tags > /dev/null 2>&1; then
+    if curl -s --max-time 5 http://localhost:$OLLAMA_PORT/api/tags > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Ollama 已启动${NC}"
     else
         echo -e "${RED}✗ Ollama 启动失败${NC}"
@@ -93,7 +114,7 @@ start_ollama() {
 
 # 启动后端 (PM2 守护)
 start_backend() {
-    echo -e "${YELLOW}启动后端 (端口 8000, PM2 守护)...${NC}"
+    echo -e "${YELLOW}启动后端 (端口 $BACKEND_PORT, PM2 守护)...${NC}"
 
     cd "$PROJECT_ROOT/backend"
     export PYTHONPATH="$PROJECT_ROOT/backend"
@@ -102,12 +123,12 @@ start_backend() {
         --name "uav-backend" \
         --no-autorestart \
         -- \
-        python3 -m uvicorn main:app --host 127.0.0.1 --port 8000
+        python3 -m uvicorn main:app --host $BACKEND_HOST --port $BACKEND_PORT
 
     cd "$PROJECT_ROOT"
     sleep 4
 
-    if curl -s http://localhost:8000/docs > /dev/null 2>&1; then
+    if curl -s http://localhost:$BACKEND_PORT/docs > /dev/null 2>&1; then
         echo -e "${GREEN}✓ 后端已启动 (PM2 守护中)${NC}"
     else
         echo -e "${RED}✗ 后端启动失败${NC}"
@@ -133,7 +154,7 @@ start_frontend() {
 
     # 检查所有前端服务
     local all_ok=true
-    for port in 3000 3001 3002; do
+    for port in $SHOWCASE_PORT $DASHBOARD_PORT $ADMIN_PORT; do
         if curl -s --max-time 3 http://localhost:$port > /dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} 端口 $port"
         else
@@ -163,7 +184,7 @@ check_status() {
     echo -e "${YELLOW}HTTP 服务检测:${NC}"
 
     local all_ok=true
-    for name in "Ollama:11434" "Backend:8000" "Showcase:3000" "Dashboard:3001" "Admin:3002"; do
+    for name in "Ollama:$OLLAMA_PORT" "Backend:$BACKEND_PORT" "Showcase:$SHOWCASE_PORT" "Dashboard:$DASHBOARD_PORT" "Admin:$ADMIN_PORT"; do
         service="${name%%:*}"
         port="${name##*:}"
 
@@ -192,10 +213,10 @@ clean_restart() {
     pkill -9 -f "node.*dashboard" 2>/dev/null || true
     pkill -9 -f "node.*admin" 2>/dev/null || true
     pkill -9 -f "uvicorn" 2>/dev/null || true
-    lsof -ti:3000 | xargs kill -9 2>/dev/null || true
-    lsof -ti:3001 | xargs kill -9 2>/dev/null || true
-    lsof -ti:3002 | xargs kill -9 2>/dev/null || true
-    lsof -ti:8000 | xargs kill -9 2>/dev/null || true
+    lsof -ti:$SHOWCASE_PORT | xargs kill -9 2>/dev/null || true
+    lsof -ti:$DASHBOARD_PORT | xargs kill -9 2>/dev/null || true
+    lsof -ti:$ADMIN_PORT | xargs kill -9 2>/dev/null || true
+    lsof -ti:$BACKEND_PORT | xargs kill -9 2>/dev/null || true
     sleep 3
     echo -e "${GREEN}清理完成${NC}"
 }
