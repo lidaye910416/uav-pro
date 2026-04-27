@@ -27,9 +27,13 @@ const VIDEOS: VideoConfig[] = [
 ]
 
 function buildVideoUrls() {
-  return VIDEOS.map((v) => ({
+  // 本地演示视频 - 使用 public/videos 目录下的视频
+  // 映射: d1->gal_1, d2->gal_2, d3->gal_3, d4-d6 循环使用
+  const localVideos = ["/videos/gal_1.mp4", "/videos/gal_2.mp4", "/videos/gal_3.mp4"]
+  return VIDEOS.map((v, idx) => ({
     ...v,
-    videoUrl: `http://localhost:8000/api/v1/demo/video?video_id=${v.id}`,
+    // 循环使用本地视频
+    videoUrl: localVideos[idx % localVideos.length],
   }))
 }
 
@@ -486,7 +490,8 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
   const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/admin/stats")
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
+    fetch(`${API_BASE}/api/v1/admin/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d.alerts_by_risk || {}))
       .catch(() => {})
@@ -653,7 +658,8 @@ export default function MonitorPage() {
 
   // Load YOLO params from backend
   useEffect(() => {
-    fetch("http://localhost:8000/api/v1/analyze/yolo-params")
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
+    fetch(`${API_BASE}/api/v1/analyze/yolo-params`)
       .then(r => r.json())
       .then((p: any) => setYoloParams({
         confidence_threshold: Math.round((p.confidence_threshold ?? 0.35) * 100),
@@ -665,7 +671,8 @@ export default function MonitorPage() {
 
   const handleYoloParamsChange = useCallback((newParams: YOLOParams) => {
     setYoloParams(newParams)
-    fetch("http://localhost:8000/api/v1/analyze/yolo-params", {
+    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
+    fetch(`${API_BASE}/api/v1/analyze/yolo-params`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({

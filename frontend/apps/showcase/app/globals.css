@@ -420,10 +420,13 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: 56px 100px 24px;
+  padding: 24px 100px 24px;
   position: relative;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   box-sizing: border-box;
+  /* 滚动对齐时留出 header 空间 */
+  scroll-margin-top: 80px;
 }
 
 /* ── Home two-scroll ─────────────────────────────────────────── */
@@ -526,34 +529,448 @@
   line-height: 1.85;
   color: var(--text-secondary);
   max-width: 800px;
-  margin-bottom: 32px;
+  margin-bottom: 20px;
 }
 
 /* Metric row (overview + results) */
 .about-metrics {
   display: flex;
   gap: 0;
-  margin-bottom: 32px;
+  margin-bottom: 16px;
 }
 
 .about-metric {
   flex: 1;
-  padding: 16px 20px;
+  padding: 12px 16px;
   border-right: 1px solid var(--border);
 }
 .about-metric:last-child { border-right: none; }
 
 .about-metric-value {
   font-family: var(--font-mono);
-  font-size: 36px;
+  font-size: 28px;
   font-weight: 700;
   line-height: 1;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .about-metric-label {
   font-size: 15px;
   color: var(--text-muted);
+}
+
+/* ── Overview Pipeline Trigger Button ─────────────────────────── */
+.overview-pipeline-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 24px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, rgba(0, 200, 150, 0.15), rgba(168, 85, 247, 0.15));
+  border: 1px solid rgba(0, 200, 150, 0.4);
+  border-radius: 12px;
+  color: var(--accent-green);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  width: fit-content;
+}
+
+.overview-pipeline-trigger:hover {
+  background: linear-gradient(135deg, rgba(0, 200, 150, 0.25), rgba(168, 85, 247, 0.25));
+  border-color: rgba(0, 200, 150, 0.6);
+  transform: translateX(4px);
+  box-shadow: 0 4px 20px rgba(0, 200, 150, 0.2);
+}
+
+.overview-pipeline-trigger-icon {
+  font-size: 18px;
+}
+
+.overview-pipeline-trigger-arrow {
+  margin-left: auto;
+  transition: transform 0.3s ease;
+}
+
+.overview-pipeline-trigger:hover .overview-pipeline-trigger-arrow {
+  transform: translateX(4px);
+}
+
+/* ── Pipeline Overlay ─────────────────────────────────────────── */
+.overview-pipeline-overlay {
+  position: fixed;
+  top: 71px; /* header(68) + progressBar(3) */
+  left: 0;
+  right: 0;
+  bottom: 40px; /* footer */
+  background: rgba(6, 6, 8, 0.98);
+  z-index: 50;
+  transform: translateY(100%);
+  opacity: 0;
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.4s ease;
+  overflow-y: auto;
+}
+
+.overview-pipeline-overlay.active {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.overview-pipeline-overlay-inner {
+  min-height: 100%;
+  padding: 32px 100px 48px;
+  position: relative;
+}
+
+/* Back Button */
+.overview-pipeline-back {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  margin-bottom: 32px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.overview-pipeline-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  transform: translateX(-4px);
+}
+
+/* ── Pipeline Full Container ───────────────────────────────────── */
+.pipeline-full-container {
+  padding: 32px;
+  background: linear-gradient(135deg, rgba(20, 20, 20, 0.9), rgba(10, 10, 10, 0.95));
+  border: 1px solid var(--border);
+  border-radius: 20px;
+}
+
+.pipeline-full-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.pipeline-full-title {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+
+.pipeline-full-subtitle {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* ── Overview Features ─────────────────────────────────────────── */
+.about-overview-features {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.about-overview-feature-card {
+  padding: 20px 16px;
+  border: 1px solid;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  text-align: center;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.about-overview-feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.about-overview-feature-icon {
+  font-size: 28px;
+  margin-bottom: 12px;
+}
+
+.about-overview-feature-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.about-overview-feature-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ── Detailed Pipeline Diagram ────────────────────────────────── */
+.pipeline-detail-container {
+  margin: 16px 0 20px;
+  padding: 24px;
+  background: linear-gradient(135deg, rgba(20, 20, 20, 0.9), rgba(15, 15, 15, 0.95));
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.pipeline-detail-header {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.pipeline-detail-title {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+
+.pipeline-detail-subtitle {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+/* Stages Row */
+.pipeline-stages-row {
+  display: flex;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.pipeline-stage-card {
+  flex: 1;
+  padding: 16px;
+  border: 1px solid;
+  border-radius: 12px;
+  position: relative;
+}
+
+.pipeline-stage-header {
+  text-align: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.pipeline-stage-number {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  margin-bottom: 4px;
+}
+
+.pipeline-stage-icon {
+  display: block;
+  font-size: 24px;
+  margin-bottom: 4px;
+}
+
+.pipeline-stage-name {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.pipeline-stage-name-en {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+}
+
+/* Stage Steps */
+.pipeline-stage-steps {
+  padding-left: 8px;
+}
+
+.pipeline-step {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.pipeline-step:last-child {
+  margin-bottom: 0;
+}
+
+.pipeline-step-line {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.pipeline-step-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  box-shadow: 0 0 8px currentColor;
+}
+
+.pipeline-step-connector {
+  width: 2px;
+  flex: 1;
+  min-height: 20px;
+  border-left: 2px dashed;
+  opacity: 0.5;
+  margin-top: 4px;
+}
+
+.pipeline-step-content {
+  flex: 1;
+}
+
+.pipeline-step-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+.pipeline-step-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* Arrow between stages */
+.pipeline-arrow {
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 20px;
+  font-weight: bold;
+  z-index: 10;
+}
+
+/* Data Flow */
+.pipeline-data-flow {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.pipeline-data-flow-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+.pipeline-data-flow-items {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pipeline-data-item {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.pipeline-data-arrow {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+/* ── Pipeline Diagram ──────────────────────────────────────────── */
+.about-pipeline-diagram {
+  margin: 12px 0 16px;
+  padding: 16px;
+  background: linear-gradient(135deg, rgba(20, 20, 20, 0.8), rgba(10, 10, 10, 0.9));
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.pipeline-svg {
+  width: 100%;
+  height: auto;
+  max-height: 280px;
+}
+
+/* Pipeline Legend */
+.pipeline-legend {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+.pipeline-legend-title {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+
+.pipeline-legend-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+}
+
+.pipeline-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.pipeline-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-shadow: 0 0 6px currentColor;
+}
+
+.pipeline-legend-name {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.pipeline-legend-tech {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 6px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
 }
 
 /* Sub-section title */

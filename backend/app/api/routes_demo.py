@@ -29,8 +29,9 @@ router = APIRouter(prefix="/demo", tags=["演示"])
 
 # ── Demo video path ──────────────────────────────────────────────────────────
 
-DEMO_VIDEO = Path(__file__).resolve().parents[2] / "data" / "streams" / "MiTra" / "T1_D2.mp4"
-DEMO_THUMBNAIL_CACHE = DEMO_VIDEO.parent / ".thumbnail_cache_t1_d2.jpg"
+# 默认使用 gal_1.mp4 (2.5MB) 作为演示视频，加载更快
+DEMO_VIDEO = Path(__file__).resolve().parents[2] / "data" / "streams" / "gal_1.mp4"
+DEMO_THUMBNAIL_CACHE = Path(__file__).resolve().parents[2] / "data" / "streams" / ".thumbnail_cache_gal_1.jpg"
 
 # ── MiTra 多路视频（T1_D1.mp4 ~ T1_D6.mp4）─────────────────────────────────
 
@@ -47,39 +48,70 @@ _sam_predictor = None
 
 
 def _get_yolo_sam_models():
-    """懒加载 YOLO 和 SAM 模型"""
+    """懒加载 YOLO 和 SAM 模型 - 使用 ultralytics 集成"""
     global _yolo_model, _sam_predictor
 
     # 获取 backend 目录路径 (__file__ 是 app/api/routes_demo.py)
     backend_dir = Path(__file__).resolve().parents[2]  # backend/
+    # 模型文件实际在 backend/models/sam/ 目录下
+    models_dir = backend_dir / "models" / "sam"
 
     if _yolo_model is None:
         try:
             from ultralytics import YOLO
-            # 使用 yolov8x-world (world model, 自带更多类别检测能力)
-            yolo_path = backend_dir / "yolov8x-world.pt"
-            if yolo_path.exists():
+            # 查找可用的 YOLO 模型
+            yolo_paths = [
+                models_dir / "yolov8n.pt",     # 轻量级
+                backend_dir / "yolov8n.pt",    # 根目录轻量级
+                backend_dir / "yolov8x-world.pt",  # world模型
+            ]
+            yolo_path = None
+            for p in yolo_paths:
+                if p.exists():
+                    yolo_path = p
+                    break
+            if yolo_path:
                 _yolo_model = YOLO(str(yolo_path))
                 print(f"[YOLO] 模型加载成功: {yolo_path}")
             else:
-                print(f"[YOLO] 模型文件不存在: {yolo_path}")
+                print(f"[YOLO] 模型文件不存在，尝试使用 ultralytics 默认模型")
+                _yolo_model = YOLO("yolov8n.pt")
+                print(f"[YOLO] 使用默认模型: yolov8n.pt")
         except Exception as e:
             print(f"[YOLO] 模型加载失败: {e}")
             _yolo_model = None
 
+    # 使用 ultralytics 的 SAM 模型
     if _sam_predictor is None:
         try:
-            from segment_anything import SamPredictor, sam_model_registry
-            sam_path = backend_dir / "models" / "sam" / "sam_vit_b.pth"
+            from ultralytics import YOLO
+
+            # 检查本地 SAM 模型（只接受 .pt 格式）
+            sam_path = models_dir / "sam_b.pt"
+
             if sam_path.exists():
-                sam = sam_model_registry["vit_b"](checkpoint=str(sam_path))
-                _sam_predictor = SamPredictor(sam)
-                print(f"[SAM] 模型加载成功: {sam_path}")
+                try:
+                    _sam_predictor = YOLO(str(sam_path), task="segment")
+                    print(f"[SAM] 本地模型加载成功: {sam_path}")
+                except Exception as sam_err:
+                    print(f"[SAM] 本地模型加载失败，使用自动下载: {sam_err}")
+                    _sam_predictor = None
+                    try:
+                        _sam_predictor = YOLO("mobile_sam.pt", task="segment")
+                        print(f"[SAM] 自动下载 mobile_sam.pt 成功")
+                    except Exception as dl_err:
+                        print(f"[SAM] 自动下载失败 (跳过 SAM): {dl_err}")
+                        _sam_predictor = None
             else:
-                print(f"[SAM] 模型文件不存在: {sam_path}")
-                _sam_predictor = None
+                print(f"[SAM] SAM 模型文件不存在，尝试自动下载")
+                try:
+                    _sam_predictor = YOLO("mobile_sam.pt", task="segment")
+                    print(f"[SAM] 自动下载 mobile_sam.pt 成功")
+                except Exception as dl_err:
+                    print(f"[SAM] 自动下载失败 (跳过 SAM): {dl_err}")
+                    _sam_predictor = None
         except Exception as e:
-            print(f"[SAM] 模型加载失败: {e}")
+            print(f"[SAM] 模型初始化失败 (跳过 SAM): {e}")
             _sam_predictor = None
 
     return _yolo_model, _sam_predictor
@@ -125,12 +157,12 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
         }
 
         # 如果没有模型，返回原始帧
-        if yolo is None or sam_predictor is None:
+        if yolo is None and sam_predictor is None:
             combined_image_url = _save_raw_frame(processed_frame, frame_idx, prefix)
             return combined_image_url, result
 
         # Step 1: YOLO 检测
-        results = yolo(processed_frame, conf=0.35, verbose=False)
+        results = yolo(processed_frame, conf=0.25, verbose=False)
         r = results[0]
 
         detections = []
@@ -155,37 +187,54 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
             combined_image_url = _save_raw_frame(processed_frame, frame_idx, prefix)
             return combined_image_url, result
 
-        # Step 2: SAM 分割
-        image_rgb = cv2.cvtColor(processed_frame, cv2.COLOR_BGR2RGB)
-        sam_predictor.set_image(image_rgb)
-
+        # Step 2: SAM 分割 (使用 ultralytics)
         combined = processed_frame.copy()
         masks_data = []
 
-        for det in detections:
-            x1, y1, x2, y2 = det["bbox"]
-            input_box = np.array([[x1, y1], [x2, y2]])
+        if sam_predictor is not None:
+            # 使用 ultralytics SAM 进行分割
+            try:
+                # SAM 分割：对整个图像进行分割，使用检测框引导
+                sam_results = sam_predictor.predict(
+                    processed_frame,
+                    verbose=False,
+                    conf=0.5,
+                    show_boxes=False,
+                )
+                if sam_results and len(sam_results) > 0 and sam_results[0].masks is not None:
+                    sam_masks = sam_results[0].masks.data.cpu().numpy()
+                    # 将每个检测框内的掩膜提取出来
+                    for idx, det in enumerate(detections):
+                        x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
+                        # 裁剪掩膜到检测框区域
+                        if idx < len(sam_masks):
+                            mask = sam_masks[idx]
+                            color = _get_mask_color(det["label"])
+                            masks_data.append({"det": det, "mask": mask, "score": det["conf"]})
 
-            masks, scores, _ = sam_predictor.predict(
-                point_coords=None,
-                point_labels=None,
-                box=input_box,
-                multimask_output=False,
-            )
-
-            mask = masks[0]
-            color = _get_mask_color(det["label"])
-            masks_data.append({"det": det, "mask": mask, "score": scores[0] if len(scores) > 0 else 0.5})
-
-            # 叠加半透明掩膜
-            if mask.sum() > 50:
-                for c in range(3):
-                    combined[:, :, c] = np.where(mask,
-                        (combined[:, :, c] * 0.5 + color[c] * 0.5).astype(np.uint8),
-                        combined[:, :, c])
-
-            # 绘制加粗边框（仅颜色区分，不显示文字）
-            cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
+                            # 叠加半透明掩膜
+                            if mask.sum() > 50:
+                                for c in range(3):
+                                    combined[:, :, c] = np.where(
+                                        mask.astype(bool),
+                                        (combined[:, :, c] * 0.5 + color[c] * 0.5).astype(np.uint8),
+                                        combined[:, :, c]
+                                    )
+                        # 绘制加粗边框
+                        cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
+            except Exception as sam_err:
+                print(f"[SAM] 分割失败: {sam_err}")
+                # 回退：只画边框不画掩膜
+                for det in detections:
+                    color = _get_mask_color(det["label"])
+                    x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
+                    cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
+        else:
+            # 无 SAM 模型，只画边框
+            for det in detections:
+                color = _get_mask_color(det["label"])
+                x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
+                cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
 
         # 添加图例（仅显示类别名称和颜色，不显示置信度）
         combined = _add_legend(combined, detections)
@@ -304,6 +353,7 @@ def _save_raw_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> Optional
 
 
 MITRA_VIDEOS: list[dict] = [
+    {"id": "gal_1", "label": "gal_1 · 测试视频", "filename": "gal_1.mp4", "device": "TEST-01"},
     {"id": "d1", "label": "T1-D1 · 1号机", "filename": "T1_D1.mp4", "device": "UAV-01"},
     {"id": "d2", "label": "T1-D2 · 2号机", "filename": "T1_D2.mp4", "device": "UAV-02"},
     {"id": "d3", "label": "T1-D3 · 3号机", "filename": "T1_D3.mp4", "device": "UAV-03"},
@@ -314,9 +364,13 @@ MITRA_VIDEOS: list[dict] = [
 
 
 def _resolve_video_path(video_id: str) -> Path | None:
-    """Resolve video_id → Path, supporting 'default' and 'd1'-'d6'."""
+    """Resolve video_id → Path, supporting 'default', 'gal_1' and 'd1'-'d6'."""
     if video_id == "default":
         return DEMO_VIDEO if DEMO_VIDEO.exists() else None
+    # Handle gal_1 separately (it's in the root streams directory)
+    if video_id == "gal_1":
+        p = Path(__file__).resolve().parents[2] / "data" / "streams" / "gal_1.mp4"
+        return p if p.exists() else None
     for v in MITRA_VIDEOS:
         if v["id"] == video_id:
             p = MITRA_VIDEO_DIR / v["filename"]
@@ -958,6 +1012,41 @@ async def seed_demo_data() -> dict:
         }
 
 
+# ── 预警入库辅助函数 ────────────────────────────────────────────────────────────
+
+async def _save_alert_to_db(alert_data: dict) -> int | None:
+    """将预警数据保存到数据库，返回 Alert ID"""
+    try:
+        async with AsyncSessionLocal() as session:
+            # 转换 risk_level 字符串到枚举
+            risk_str = str(alert_data.get("risk_level", "low")).lower()
+            if risk_str not in ["low", "medium", "high", "critical"]:
+                risk_str = "low"
+            risk = RiskLevel(risk_str)
+
+            alert = Alert(
+                title=alert_data.get("title", "未知预警"),
+                description=alert_data.get("description", ""),
+                risk_level=risk,
+                status=AlertStatus.PENDING,
+                scene_description=alert_data.get("scene_description"),
+                recommendation=alert_data.get("recommendation"),
+                confidence=alert_data.get("confidence"),
+                source_type=alert_data.get("source_type", "video"),
+                source_path=alert_data.get("source_path"),
+            )
+            session.add(alert)
+            await session.commit()
+            await session.refresh(alert)
+            print(f"[_save_alert_to_db] 预警已保存: ID={alert.id}, title={alert.title}")
+            return alert.id
+    except Exception as e:
+        print(f"[_save_alert_to_db] 保存预警失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 # ── SSE 演示流 ────────────────────────────────────────────────────────────────
 
 async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
@@ -1123,12 +1212,13 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     "scene_description": scene_desc,
                     "source_type": "demo",
                     "source_path": str(video_path.name),
-                    "pipeline_mode": "yolo_sam",
                     "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                     "detection_details": detection_details,
                 }
 
                 events.append(f"event: alert\ndata: {json.dumps(alert_payload)}\n\n".encode())
+                # 保存预警到数据库
+                await _save_alert_to_db(alert_payload)
                 await asyncio.sleep(0.8)
 
     # Fallback: use seed data if video unavailable
@@ -1143,7 +1233,6 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 **alert_data,
                 "source_type": "demo",
                 "source_path": str(video_path.name) if video_path.exists() else "seed",
-                "pipeline_mode": mode,
                 "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
             }
             events.append(f"event: alert\ndata: {json.dumps(payload)}\n\n".encode())
@@ -1441,7 +1530,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             await asyncio.sleep(0.05)
 
             # Alert event
-            yield f"event: alert\ndata: {json.dumps({
+            alert_payload = {
                 'id': int(time.time() * 1000),
                 'title': title,
                 'description': description,
@@ -1451,10 +1540,11 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'scene_description': scene_desc,
                 'source_type': 'demo',
                 'source_path': str(video_path.name),
-                'pipeline_mode': 'yolo_sam',
-                'ai_model': gemma_model,
                 'detection_details': detection_details,
-            })}\n\n".encode()
+            }
+            yield f"event: alert\ndata: {json.dumps(alert_payload)}\n\n".encode()
+            # 保存预警到数据库
+            await _save_alert_to_db(alert_payload)
             await asyncio.sleep(0.05)
 
     return StreamingResponse(

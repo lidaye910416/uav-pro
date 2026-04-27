@@ -21,6 +21,10 @@ interface StageCardData {
   combinedImageUrl?: string  // URL to annotated image from Stage 1
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
+const DEMO_STREAM_URL = `${API_BASE}/api/v1/demo/stream`
+const DEMO_SEED_URL = `${API_BASE}/api/v1/demo/seed`
+
 // ── ROI types ─────────────────────────────────────────────────────────────────
 
 export interface ROIBox {
@@ -381,7 +385,7 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
     }, 10000)
 
     console.log("[Pipeline] Connecting to SSE...")
-    const es = new EventSource("http://localhost:8000/api/v1/demo/stream")
+    const es = new EventSource(DEMO_STREAM_URL)
     esRef.current = es
 
     es.onerror = (err) => {
@@ -394,7 +398,7 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
       console.log("[Pipeline] SSE open event received")
       sseConnected = true
       clearTimeout(sseTimeout)
-      fetch("http://localhost:8000/api/v1/demo/seed").catch(() => {})
+      fetch(DEMO_SEED_URL).catch(() => {})
     })
 
     es.addEventListener("error", (e) => {
@@ -413,7 +417,7 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
       const rawUrl = data.combined_image_url as string | undefined
       let imageUrl: string | undefined = undefined
       if (rawUrl) {
-        imageUrl = rawUrl.startsWith('http') ? rawUrl : `http://localhost:8000${rawUrl}`
+        imageUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`
         console.log("[Pipeline] frame_data -> imageUrl:", imageUrl)
       }
 
@@ -488,7 +492,7 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
       // Get current URL from frame_data if available
       const existingUrl = stageStatusRef.current.perception?.combinedImageUrl
       const newUrlFromStage = data.combined_image_url
-        ? (data.combined_image_url.startsWith('http') ? data.combined_image_url : `http://localhost:8000${data.combined_image_url}`)
+        ? (data.combined_image_url.startsWith('http') ? data.combined_image_url : `${API_BASE}${data.combined_image_url}`)
         : null
       const finalUrl = newUrlFromStage || existingUrl
 
@@ -861,13 +865,17 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
   // Build effective URL - check multiple sources
   let effectiveUrl: string | undefined = undefined
   if (combinedImageUrl) {
-    effectiveUrl = combinedImageUrl.startsWith('http') ? combinedImageUrl : `http://localhost:8000${combinedImageUrl}`
+    effectiveUrl = combinedImageUrl.startsWith('http') ? combinedImageUrl : `${API_BASE}${combinedImageUrl}`
   } else if (detailImageUrl) {
-    effectiveUrl = detailImageUrl.startsWith('http') ? detailImageUrl : `http://localhost:8000${detailImageUrl}`
+    effectiveUrl = detailImageUrl.startsWith('http') ? detailImageUrl : `${API_BASE}${detailImageUrl}`
   }
 
   console.log("[DetectionOutput] render:", {
+    API_BASE,
     detailKeys: Object.keys(d),
+    combinedImageUrl: combinedImageUrl,
+    detailImageUrl: detailImageUrl,
+    effectiveUrl: effectiveUrl,
     combinedImageUrl,
     detailImageUrl,
     effectiveUrl,

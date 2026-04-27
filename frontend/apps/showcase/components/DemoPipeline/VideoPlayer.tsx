@@ -12,6 +12,9 @@ interface VideoPlayerProps {
   showROIBadge?: boolean
 }
 
+// 本地演示视频路径 - 使用 public/videos/ 目录下的视频
+const LOCAL_DEMO_VIDEO = "/videos/gal_1.mp4"
+
 export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge = false }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -43,7 +46,7 @@ export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge =
     >
       <video
         ref={videoRef}
-        src="http://localhost:8000/api/v1/demo/video"
+        src={LOCAL_DEMO_VIDEO}
         autoPlay
         muted
         loop
@@ -77,7 +80,7 @@ export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge =
         style={{ background: "rgba(0,0,0,0.75)", color: "var(--accent-amber)", border: "1px solid var(--accent-amber)" }}
       >
         <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--accent-amber)" }} />
-        T1-D2 · MiTra航拍
+        gal_1 · 测试视频
       </div>
 
       {/* Scan line effect overlay */}

@@ -1,16 +1,16 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system deps for opencv
+# Install system deps for opencv and git for segment-anything
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 \
+    libgl1 libglib2.0-0 libsm6 libxext6 libxrender-dev libgomp1 git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt .
+RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt
 
-COPY . .
+COPY backend/ ./
 
 EXPOSE 8000
 

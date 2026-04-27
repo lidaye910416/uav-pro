@@ -5,13 +5,15 @@ interface DemoThumbnailProps {
   src?: string
 }
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
+
 export default function DemoThumbnail({ src }: DemoThumbnailProps) {
   const [imgSrc, setImgSrc] = useState<string>("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    const url = src || "http://localhost:8000/api/v1/demo/thumbnail"
+    const url = src || `${API_BASE}/api/v1/demo/thumbnail`
     setLoading(true)
     setError(false)
     setImgSrc(url + "?t=" + Date.now())

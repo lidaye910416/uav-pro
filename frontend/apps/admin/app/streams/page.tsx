@@ -4,9 +4,9 @@ import { useAuth } from "@/components/AuthContext"
 import { fetchStreams, addStream, removeStream, startStream, stopStream } from "@/lib/api"
 
 const DEMO_STREAMS = [
-  { name: "高速公路航拍", path: "/app/data/streams/highway_simulated.mp4", type: "file" },
-  { name: "停车场监控", path: "/app/data/streams/parking_simulated.mp4", type: "file" },
-  { name: "道路测试流", path: "/app/data/streams/highway_aerial.mp4", type: "file" },
+  { name: "gal_1 测试视频", path: "/videos/gal_1.mp4", type: "file" },
+  { name: "gal_2 测试视频", path: "/videos/gal_2.mp4", type: "file" },
+  { name: "gal_3 测试视频", path: "/videos/gal_3.mp4", type: "file" },
 ]
 
 export default function StreamsPage() {

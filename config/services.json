@@ -1,0 +1,34 @@
+{
+  "$schema": "./services.schema.json",
+  "services": {
+    "backend": {
+      "name": "Backend API",
+      "host": "127.0.0.1",
+      "port": 8000,
+      "protocol": "http",
+      "basePath": "/api/v1"
+    },
+    "ollama": {
+      "name": "Ollama AI",
+      "host": "127.0.0.1",
+      "port": 11434,
+      "protocol": "http"
+    },
+    "apps": {
+      "showcase": {
+        "name": "Showcase",
+        "port": 3000
+      },
+      "dashboard": {
+        "name": "Dashboard",
+        "port": 3001
+      },
+      "admin": {
+        "name": "Admin",
+        "port": 3002
+      }
+    }
+  },
+  "version": "1.0.0",
+  "description": "UAV-PRO 服务配置中心"
+}

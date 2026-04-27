@@ -4,20 +4,12 @@ services:
     image: ollama/ollama:latest
     container_name: uav-ollama
     ports:
-      - "11434:11434"
+      - "11000:11434"
     volumes:
       - ollama_data:/root/.ollama
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    command: >
-      sh -c "ollama pull gemma4-e2b && ollama pull nomic-embed-text && ollama serve"
+    # command is already set via CMD in the ollama image
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
@@ -30,7 +22,7 @@ services:
     image: chromadb/chroma:latest
     container_name: uav-chroma
     ports:
-      - "8001:8000"
+      - "9001:8000"
     volumes:
       - chroma_data:/chroma/chroma/.chroma_root
     environment:
@@ -48,24 +40,21 @@ services:
       dockerfile: backend/Dockerfile
     container_name: uav-backend
     ports:
-      - "8000:8000"
+      - "9000:8000"
     environment:
       DATABASE_URL: "sqlite+aiosqlite:///./uav.db"
       OLLAMA_BASE_URL: "http://ollama:11434"
       CHROMA_URL: "http://chromadb:8000"
       MODEL_VISION: "gemma4-e2b"
       MODEL_DECISION: "gemma4-e2b"
-      BACKEND_CORS_ORIGINS: >
-        http://localhost:3000,
-        http://localhost:3001,
-        http://frontend:3000,
-        http://frontend:3001
       SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
+      # Allow all origins for development
+      BACKEND_CORS_ORIGINS: "http://localhost:4000,http://localhost:4001,http://localhost:4002,http://localhost:9000,http://frontend:3000,http://frontend:3001,http://frontend:3002"
     depends_on:
       ollama:
-        condition: service_healthy
+        condition: service_started
       chromadb:
-        condition: service_healthy
+        condition: service_started
     volumes:
       - chroma_data:/chroma/chroma/.chroma_root:ro
       - ./backend:/app
@@ -82,15 +71,26 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: uav-frontend
     ports:
-      - "3001:3001"
+      - "4000:3000"
+      - "4001:3001"
+      - "4002:3002"
     environment:
-      NEXT_PUBLIC_API_BASE: "http://backend:8000"
+      # Backend API - use localhost with external port for browser access
+      NEXT_PUBLIC_API_BASE: "http://localhost:9000"
+      # Dashboard URL for showcase (external ports)
+      NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:4001"
+      # Showcase URL for admin/dashboard (external ports)
+      NEXT_PUBLIC_SHOWCASE_URL: "http://localhost:4000"
     depends_on:
       - backend
+    # Mount source for development, but keep node_modules inside container
     volumes:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+      - /app/apps/dashboard/node_modules
+      - /app/apps/showcase/node_modules
+      - /app/apps/admin/node_modules
 
 volumes:
   ollama_data:
