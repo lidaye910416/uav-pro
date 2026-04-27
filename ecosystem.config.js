@@ -22,6 +22,9 @@ loadEnv();
 
 const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
 const backendPort = process.env.BACKEND_PORT || '8000';
+const showcasePort = process.env.SHOWCASE_PORT || '3000';
+const dashboardPort = process.env.DASHBOARD_PORT || '3001';
+const adminPort = process.env.ADMIN_PORT || '3002';
 
 module.exports = {
   apps: [
@@ -42,11 +45,10 @@ module.exports = {
     {
       name: 'uav-showcase',
       script: 'npm',
-      args: 'run dev',
+      args: `run dev -- -p ${showcasePort}`,
       cwd: './frontend/apps/showcase',
       env: {
         NODE_ENV: 'development',
-        PORT: process.env.SHOWCASE_PORT || '3000',
       },
       autorestart: true,
       max_restarts: 5,
@@ -55,11 +57,10 @@ module.exports = {
     {
       name: 'uav-dashboard',
       script: 'npm',
-      args: 'run dev',
+      args: `run dev -- -p ${dashboardPort}`,
       cwd: './frontend/apps/dashboard',
       env: {
         NODE_ENV: 'development',
-        PORT: process.env.DASHBOARD_PORT || '3001',
       },
       autorestart: true,
       max_restarts: 5,
@@ -68,11 +69,10 @@ module.exports = {
     {
       name: 'uav-admin',
       script: 'npm',
-      args: 'run dev',
+      args: `run dev -- -p ${adminPort}`,
       cwd: './frontend/apps/admin',
       env: {
         NODE_ENV: 'development',
-        PORT: process.env.ADMIN_PORT || '3002',
       },
       autorestart: true,
       max_restarts: 5,
