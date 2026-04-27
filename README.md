@@ -88,15 +88,18 @@ cd ..
 bash start.sh start
 ```
 
-### 服务端口
+### 服务端口（可通过 .env 配置）
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| 前端 Showcase | 3000 | 项目展示首页 |
-| 前端 Dashboard | 3001 | 感知中心监控 |
-| 前端 Admin | 3002 | 管理后台 |
-| 后端 API | 8000 | API 服务 |
-| Ollama | 11434 | LLM 服务 |
+| 服务 | 默认端口 | 环境变量 | 说明 |
+|------|----------|----------|------|
+| 后端 API | 8888 | `BACKEND_PORT` | API 服务 |
+| 前端 Showcase | 4000 | `SHOWCASE_PORT` | 项目展示首页 |
+| 前端 Dashboard | 4001 | `DASHBOARD_PORT` | 感知中心监控 |
+| 前端 Admin | 4002 | `ADMIN_PORT` | 管理后台 |
+| Ollama | 11434 | `OLLAMA_PORT` | LLM 服务 |
+| ChromaDB | 8001 | `CHROMADB_PORT` | RAG 向量库 |
+
+> ⚠️ **重要**: 所有端口都可通过 `.env` 文件配置，无需修改代码。项目启动脚本会自动从环境变量读取端口配置。
 
 ---
 

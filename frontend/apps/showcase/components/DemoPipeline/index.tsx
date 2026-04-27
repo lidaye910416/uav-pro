@@ -871,7 +871,11 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
   }
 
   console.log("[DetectionOutput] render:", {
+    API_BASE,
     detailKeys: Object.keys(d),
+    combinedImageUrl: combinedImageUrl,
+    detailImageUrl: detailImageUrl,
+    effectiveUrl: effectiveUrl,
     combinedImageUrl,
     detailImageUrl,
     effectiveUrl,
