@@ -48,7 +48,7 @@ _sam_predictor = None
 
 
 def _get_yolo_sam_models():
-    """懒加载 YOLO 和 SAM 模型 - 使用 ultralytics 集成"""
+    """懒加载 YOLO 和 SAM 模型"""
     global _yolo_model, _sam_predictor
 
     # 获取 backend 目录路径 (__file__ 是 app/api/routes_demo.py)
@@ -81,38 +81,41 @@ def _get_yolo_sam_models():
             print(f"[YOLO] 模型加载失败: {e}")
             _yolo_model = None
 
-    # 使用 ultralytics 的 SAM 模型
+    # 加载 SAM 模型 - 尝试 segment-anything 库
     if _sam_predictor is None:
-        try:
-            from ultralytics import YOLO
+        sam_path = models_dir / "mobile_sam.pt"
+        sam_vit_path = models_dir / "sam_vit_b.pth"
 
-            # 检查本地 SAM 模型（只接受 .pt 格式）
-            sam_path = models_dir / "sam_b.pt"
+        # 方法1: 尝试使用 segment-anything 库 + mobile_sam.pt (state dict 格式)
+        if sam_path.exists():
+            try:
+                from segment_anything import sam_model_registry, SamPredictor
+                print(f"[SAM] 尝试用 segment-anything 加载: {sam_path}")
+                sam = sam_model_registry["mobile_sam"](checkpoint=str(sam_path))
+                sam.to("cpu")
+                _sam_predictor = SamPredictor(sam)
+                print(f"[SAM] segment-anything 加载成功 (mobile_sam)")
+            except Exception as sam_err:
+                print(f"[SAM] segment-anything mobile_sam 失败: {sam_err}")
+                _sam_predictor = None
+        else:
+            print(f"[SAM] mobile_sam.pt 不存在: {sam_path}")
 
-            if sam_path.exists():
-                try:
-                    _sam_predictor = YOLO(str(sam_path), task="segment")
-                    print(f"[SAM] 本地模型加载成功: {sam_path}")
-                except Exception as sam_err:
-                    print(f"[SAM] 本地模型加载失败，使用自动下载: {sam_err}")
-                    _sam_predictor = None
-                    try:
-                        _sam_predictor = YOLO("mobile_sam.pt", task="segment")
-                        print(f"[SAM] 自动下载 mobile_sam.pt 成功")
-                    except Exception as dl_err:
-                        print(f"[SAM] 自动下载失败 (跳过 SAM): {dl_err}")
-                        _sam_predictor = None
-            else:
-                print(f"[SAM] SAM 模型文件不存在，尝试自动下载")
-                try:
-                    _sam_predictor = YOLO("mobile_sam.pt", task="segment")
-                    print(f"[SAM] 自动下载 mobile_sam.pt 成功")
-                except Exception as dl_err:
-                    print(f"[SAM] 自动下载失败 (跳过 SAM): {dl_err}")
-                    _sam_predictor = None
-        except Exception as e:
-            print(f"[SAM] 模型初始化失败 (跳过 SAM): {e}")
-            _sam_predictor = None
+        # 方法2: 尝试使用 segment-anything 库 + sam_vit_b.pth (原始格式)
+        if _sam_predictor is None and sam_vit_path.exists():
+            try:
+                from segment_anything import sam_model_registry, SamPredictor
+                print(f"[SAM] 尝试用 segment-anything 加载: {sam_vit_path}")
+                sam = sam_model_registry["vit_b"](checkpoint=str(sam_vit_path))
+                sam.to("cpu")
+                _sam_predictor = SamPredictor(sam)
+                print(f"[SAM] segment-anything 加载成功 (vit_b)")
+            except Exception as sam_err:
+                print(f"[SAM] segment-anything vit_b 失败: {sam_err}")
+                _sam_predictor = None
+
+        if _sam_predictor is None:
+            print(f"[SAM] 所有 SAM 模型加载失败，跳过分割")
 
     return _yolo_model, _sam_predictor
 
@@ -187,43 +190,78 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
             combined_image_url = _save_raw_frame(processed_frame, frame_idx, prefix)
             return combined_image_url, result
 
-        # Step 2: SAM 分割 (使用 ultralytics)
+        # Step 2: SAM 分割
         combined = processed_frame.copy()
         masks_data = []
 
         if sam_predictor is not None:
-            # 使用 ultralytics SAM 进行分割
+            # 使用 segment-anything 进行分割
             try:
-                # SAM 分割：对整个图像进行分割，使用检测框引导
-                sam_results = sam_predictor.predict(
-                    processed_frame,
-                    verbose=False,
-                    conf=0.5,
-                    show_boxes=False,
-                )
-                if sam_results and len(sam_results) > 0 and sam_results[0].masks is not None:
-                    sam_masks = sam_results[0].masks.data.cpu().numpy()
-                    # 将每个检测框内的掩膜提取出来
-                    for idx, det in enumerate(detections):
-                        x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
-                        # 裁剪掩膜到检测框区域
-                        if idx < len(sam_masks):
-                            mask = sam_masks[idx]
-                            color = _get_mask_color(det["label"])
-                            masks_data.append({"det": det, "mask": mask, "score": det["conf"]})
+                from segment_anything import SamPredictor
+                if isinstance(sam_predictor, SamPredictor):
+                    # segment-anything SamPredictor
+                    sam_predictor.set_image(processed_frame)
 
-                            # 叠加半透明掩膜
+                    # 对每个检测框进行分割
+                    for det in detections:
+                        x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
+                        # 使用检测框作为 prompt
+                        box = np.array([x1, y1, x2, y2])
+
+                        masks, scores, logits = sam_predictor.predict(
+                            box=box,
+                            multimask_output=False
+                        )
+
+                        if len(masks) > 0:
+                            mask = masks[0]
+                            color = _get_mask_color(det["label"])
+                            masks_data.append({"det": det, "mask": mask, "score": scores[0] if len(scores) > 0 else det["conf"]})
+
+                            # 叠加半透明掩膜（透明度提高：0.8 = 80%透明度，显示更多原图）
                             if mask.sum() > 50:
                                 for c in range(3):
                                     combined[:, :, c] = np.where(
                                         mask.astype(bool),
-                                        (combined[:, :, c] * 0.5 + color[c] * 0.5).astype(np.uint8),
+                                        (combined[:, :, c] * 0.7 + color[c] * 0.3).astype(np.uint8),
                                         combined[:, :, c]
                                     )
+
                         # 绘制加粗边框
                         cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
+
+                    # 清除 SAM 状态
+                    sam_predictor.reset_image()
+                else:
+                    # ultralytics YOLO 模型（回退）
+                    sam_results = sam_predictor.predict(
+                        processed_frame,
+                        verbose=False,
+                        conf=0.5,
+                        show_boxes=False,
+                    )
+                    if sam_results and len(sam_results) > 0 and sam_results[0].masks is not None:
+                        sam_masks = sam_results[0].masks.data.cpu().numpy()
+                        for idx, det in enumerate(detections):
+                            x1, y1, x2, y2 = [int(v) for v in det["bbox"]]
+                            if idx < len(sam_masks):
+                                mask = sam_masks[idx]
+                                color = _get_mask_color(det["label"])
+                                masks_data.append({"det": det, "mask": mask, "score": det["conf"]})
+
+                                # 叠加半透明掩膜（透明度提高：0.8 = 80%透明度，显示更多原图）
+                                if mask.sum() > 50:
+                                    for c in range(3):
+                                        combined[:, :, c] = np.where(
+                                            mask.astype(bool),
+                                            (combined[:, :, c] * 0.7 + color[c] * 0.3).astype(np.uint8),
+                                            combined[:, :, c]
+                                        )
+                            cv2.rectangle(combined, (x1, y1), (x2, y2), color, 3)
             except Exception as sam_err:
                 print(f"[SAM] 分割失败: {sam_err}")
+                import traceback
+                traceback.print_exc()
                 # 回退：只画边框不画掩膜
                 for det in detections:
                     color = _get_mask_color(det["label"])
@@ -270,20 +308,32 @@ def _add_legend(combined, detections: list = None) -> np.ndarray:
         pil_image = Image.fromarray(cv2.cvtColor(combined, cv2.COLOR_BGR2RGB))
         draw = ImageDraw.Draw(pil_image)
 
-        # 获取中文字体
-        try:
-            font = ImageFont.truetype("/Users/jasonlee/Library/Fonts/HarmonyOS_Sans_SC_Regular.ttf", 16)
-        except:
-            font = ImageFont.load_default()
+        # 获取中文字体 - 尝试多个路径
+        font = None
+        font_paths = [
+            "/usr/share/fonts/opentype/noto/NotoSansCJKsc-Regular.otf",  # fonts-noto-cjk
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+            "/app/fonts/HiraginoSansGB.ttc",  # 容器内
+            "/app/fonts/Hiragino Sans GB.ttc",
+            "/System/Library/Fonts/Hiragino Sans GB.ttc",  # Mac宿主机
+            "/Users/jasonlee/Library/Fonts/HarmonyOS_Sans_SC_Regular.ttf",
+        ]
+        for fp in font_paths:
+            try:
+                font = ImageFont.truetype(fp, 18)
+                print(f"[_add_legend] 字体加载成功: {fp}")
+                break
+            except Exception:
+                continue
 
-        # 类别到中文的映射（与边框颜色一致）
+        # 类别到标签的映射（优先中文，回退英文）
         label_map = {
-            "person": "行人",
-            "car": "小型车辆",
-            "truck": "大型车辆",
-            "bus": "公交车",
-            "bicycle": "自行车",
-            "motorcycle": "摩托车",
+            "person": "Person",
+            "car": "Car",
+            "truck": "Truck",
+            "bus": "Bus",
+            "bicycle": "Bicycle",
+            "motorcycle": "Motorcycle",
         }
         # 类别到颜色的映射（RGB格式，用于PIL）
         color_map = {
@@ -305,7 +355,12 @@ def _add_legend(combined, detections: list = None) -> np.ndarray:
         display_labels = detected_labels if detected_labels else list(label_map.keys())
 
         # 添加图例标题
-        draw.text((legend_x, legend_y), "检测类别:", fill=(255, 255, 255), font=font)
+        title = "Detection:"
+        if font is None:
+            # 使用默认字体时避免绘制文字，改用边框颜色标注
+            pass
+        else:
+            draw.text((legend_x, legend_y), title, fill=(255, 255, 255), font=font)
         legend_y += 25
 
         for label in display_labels:
@@ -315,12 +370,14 @@ def _add_legend(combined, detections: list = None) -> np.ndarray:
             desc = label_map.get(label, label)
             # 绘制颜色方块
             draw.rectangle([(legend_x, legend_y - 14), (legend_x + 20, legend_y + 6)], fill=color_rgb, outline=(255, 255, 255))
-            # 绘制类别名称
-            draw.text((legend_x + 25, legend_y - 12), desc, fill=(255, 255, 255), font=font)
+            # 绘制类别名称（使用默认字体，仅支持ASCII）
+            if font is not None:
+                draw.text((legend_x + 25, legend_y - 12), desc, fill=(255, 255, 255), font=font)
             legend_y += 22
 
         return cv2.cvtColor(np.array(pil_image), cv2.COLOR_RGB2BGR)
-    except:
+    except Exception as e:
+        print(f"[_add_legend] 绘制失败: {e}")
         return combined
 
 

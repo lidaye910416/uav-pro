@@ -1,10 +1,10 @@
-// 从环境变量读取 API 地址，或使用 services.json 中的默认配置
+// 从环境变量读取 API 地址，或使用默认值
 const getApiBase = () => {
   if (process.env.NEXT_PUBLIC_API_BASE) {
     return process.env.NEXT_PUBLIC_API_BASE
   }
-  // 从 services.json 读取默认配置
-  return 'http://localhost:8000'
+  // 默认使用 localhost:9000 (Docker 外部端口映射)
+  return 'http://localhost:9000'
 }
 
 const API_BASE = `${getApiBase()}/api/v1`

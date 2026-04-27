@@ -1,0 +1,22 @@
+# Video files (very large - excluded)
+data/streams/MiTra/*.mp4
+data/streams/*.mp4
+
+# Large data directories (excluded)
+backend/data
+**/data/
+
+# Model files - KEEP these for YOLO/SAM
+# backend/models/sam/
+
+# IDE and OS files
+.git
+.idea
+.vscode
+.DS_Store
+*.log
+
+# Dependencies (rebuilt in container)
+node_modules
+__pycache__
+*.pyc

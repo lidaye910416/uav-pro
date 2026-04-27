@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react"
 
 // 从环境变量读取 API 地址
-const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
 
 export interface Alert {
   id: number

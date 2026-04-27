@@ -81,6 +81,8 @@ services:
       NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:4001"
       # Showcase URL for admin/dashboard (external ports)
       NEXT_PUBLIC_SHOWCASE_URL: "http://localhost:4000"
+      # Admin URL for navigation links
+      NEXT_PUBLIC_ADMIN_URL: "http://localhost:4002"
     depends_on:
       - backend
     # Mount source for development, but keep node_modules inside container

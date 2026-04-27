@@ -1,5 +1,5 @@
 // 从环境变量读取 API 地址
-const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
+const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:9000"
 const API_BASE = `${getApiBase()}/api/v1`
 
 export interface StreamInfo {
