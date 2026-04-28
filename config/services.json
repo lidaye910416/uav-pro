@@ -4,7 +4,7 @@
     "backend": {
       "name": "Backend API",
       "host": "127.0.0.1",
-      "port": 8000,
+      "port": 8888,
       "protocol": "http",
       "basePath": "/api/v1"
     },
@@ -17,15 +17,15 @@
     "apps": {
       "showcase": {
         "name": "Showcase",
-        "port": 3000
+        "port": 4000
       },
       "dashboard": {
         "name": "Dashboard",
-        "port": 3001
+        "port": 4001
       },
       "admin": {
         "name": "Admin",
-        "port": 3002
+        "port": 4002
       }
     }
   },

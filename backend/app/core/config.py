@@ -1,9 +1,15 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 import os
 
 
 class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore"  # Ignore extra env vars
+    )
+
     PROJECT_NAME: str = "UAV低空检测系统"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
@@ -16,26 +22,38 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24小时
 
-    # CORS - 从环境变量读取，允许所有 localhost 端口
-    BACKEND_CORS_ORIGINS: list[str] = []
+    # CORS - 从环境变量读取，可以是逗号分隔的字符串或 JSON 数组
+    # 默认端口: 8888(后端), 4000(showcase), 4001(dashboard), 4002(admin)
+    BACKEND_CORS_ORIGINS: str = "http://localhost:8888,http://localhost:4000,http://localhost:4001,http://localhost:4002"
 
     @property
-    def cors_origins_dynamic(self) -> list[str]:
-        """动态生成 CORS origins，基于环境变量中的前端端口配置"""
-        origins = set(self.BACKEND_CORS_ORIGINS)
-        # 添加默认端口
-        default_ports = ["3000", "3001", "3002", "4000", "4001", "4002"]
-        # 从环境变量添加自定义端口
+    def cors_origins_list(self) -> list[str]:
+        """解析 CORS origins，可以是逗号分隔的字符串或 JSON 数组"""
+        if not self.BACKEND_CORS_ORIGINS:
+            origins = []
+        elif self.BACKEND_CORS_ORIGINS.startswith("[") or self.BACKEND_CORS_ORIGINS.startswith("'"):
+            # JSON 数组格式
+            try:
+                import json
+                origins = json.loads(self.BACKEND_CORS_ORIGINS)
+            except:
+                origins = [o.strip() for o in self.BACKEND_CORS_ORIGINS.strip("[]'\"").split(",") if o.strip()]
+        else:
+            # 逗号分隔的字符串
+            origins = [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
+
+        # 添加默认端口（后端 + 三个前端）
+        default_ports = ["8888", "4000", "4001", "4002"]
         for port in default_ports:
-            origins.add(f"http://localhost:{port}")
-        # 添加任何以 localhost: 开头的端口
-        import re
+            origins.append(f"http://localhost:{port}")
+
+        # 添加 EXTRA_CORS_ORIGINS 中的额外来源
         extra = os.environ.get("EXTRA_CORS_ORIGINS", "")
         if extra:
             for o in extra.split(","):
                 if o.strip():
-                    origins.add(o.strip())
-        return list(origins)
+                    origins.append(o.strip())
+        return list(set(origins))
 
     # Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
@@ -53,10 +71,6 @@ class Settings(BaseSettings):
     # ── 双模型模式 ─────────────────────────────
     MODEL_VISION: str = "llava:7b"
     MODEL_DECISION: str = "deepseek-r1:1.5b"
-
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
 
 @lru_cache()

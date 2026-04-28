@@ -21,10 +21,10 @@ function loadEnv() {
 loadEnv();
 
 const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
-const backendPort = process.env.BACKEND_PORT || '8000';
-const showcasePort = process.env.SHOWCASE_PORT || '3000';
-const dashboardPort = process.env.DASHBOARD_PORT || '3001';
-const adminPort = process.env.ADMIN_PORT || '3002';
+const backendPort = process.env.BACKEND_PORT || '8888';
+const showcasePort = process.env.SHOWCASE_PORT || '4000';
+const dashboardPort = process.env.DASHBOARD_PORT || '4001';
+const adminPort = process.env.ADMIN_PORT || '4002';
 
 module.exports = {
   apps: [

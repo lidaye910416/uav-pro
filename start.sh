@@ -16,13 +16,13 @@ PM2_HOME="$PROJECT_ROOT/.pm2"
 # ==================== 加载服务配置 ====================
 # 从 config/services.json 读取端口配置
 load_service_config() {
-    # 默认值
-    export BACKEND_PORT=${BACKEND_PORT:-8000}
+    # 默认端口: 8888(后端), 4000(showcase), 4001(dashboard), 4002(admin)
+    export BACKEND_PORT=${BACKEND_PORT:-8888}
     export BACKEND_HOST=${BACKEND_HOST:-127.0.0.1}
     export OLLAMA_PORT=${OLLAMA_PORT:-11434}
-    export SHOWCASE_PORT=${SHOWCASE_PORT:-3000}
-    export DASHBOARD_PORT=${DASHBOARD_PORT:-3001}
-    export ADMIN_PORT=${ADMIN_PORT:-3002}
+    export SHOWCASE_PORT=${SHOWCASE_PORT:-4000}
+    export DASHBOARD_PORT=${DASHBOARD_PORT:-4001}
+    export ADMIN_PORT=${ADMIN_PORT:-4002}
 
     # 如果存在 .env 文件，加载它
     if [ -f "$PROJECT_ROOT/.env" ]; then
