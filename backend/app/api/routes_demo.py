@@ -62,11 +62,11 @@ def _get_yolo_sam_models():
     if _yolo_model is None:
         try:
             from ultralytics import YOLO
-            # 查找可用的 YOLO 模型
+            # 查找可用的 YOLO 模型（World 模型优先）
             yolo_paths = [
-                models_dir / "yolov8n.pt",     # 轻量级
-                backend_dir / "yolov8n.pt",    # 根目录轻量级
-                backend_dir / "yolov8x-world.pt",  # world模型
+                backend_dir / "yolov8x-world.pt",  # World模型（优先）
+                models_dir / "yolov8n.pt",          # 轻量级
+                backend_dir / "yolov8n.pt",          # 根目录轻量级
             ]
             yolo_path = None
             for p in yolo_paths:
@@ -168,7 +168,7 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
             return combined_image_url, result
 
         # Step 1: YOLO 检测
-        results = yolo(processed_frame, conf=0.25, verbose=False)
+        results = yolo(processed_frame, conf=0.35, verbose=False)
         r = results[0]
 
         detections = []
