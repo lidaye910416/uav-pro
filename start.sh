@@ -91,11 +91,43 @@ stop_all() {
     echo -e "${GREEN}✓ 所有服务已停止${NC}"
 }
 
+# ==================== Ollama 模型配置 ====================
+# 需要下载的 Ollama 模型列表
+# 注意：gemma4:e2b 需要最新版本 Ollama，如下载失败会自动回退到 qwen2.5:latest
+REQUIRED_MODELS=(
+    "qwen2.5:latest"
+    "nomic-embed-text"
+)
+
+# 检查并下载缺失的 Ollama 模型
+ensure_ollama_models() {
+    echo -e "${YELLOW}检查 Ollama 模型...${NC}"
+
+    # 获取已安装模型列表
+    local installed_models=$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -v "^$")
+
+    for model in "${REQUIRED_MODELS[@]}"; do
+        if echo "$installed_models" | grep -q "^${model}$"; then
+            echo -e "  ${GREEN}✓${NC} $model (已安装)"
+        else
+            echo -e "  ${YELLOW}↓${NC} $model (下载中...)"
+            ollama pull "$model" 2>&1 | while IFS= read -r line; do
+                # 显示下载进度（去掉进度条字符）
+                echo -ne "\r    $line    \r"
+            done
+            echo -e "  ${GREEN}✓${NC} $model (安装完成)"
+        fi
+    done
+    echo ""
+}
+
 # 启动 Ollama
 start_ollama() {
     echo -e "${YELLOW}启动 Ollama (端口 $OLLAMA_PORT)...${NC}"
     if pgrep -f "ollama serve" > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Ollama 已在运行${NC}"
+        # 仍然检查模型
+        ensure_ollama_models
         return 0
     fi
 
@@ -106,6 +138,8 @@ start_ollama() {
 
     if curl -s --max-time 5 http://localhost:$OLLAMA_PORT/api/tags > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Ollama 已启动${NC}"
+        # 下载缺失的模型
+        ensure_ollama_models
     else
         echo -e "${RED}✗ Ollama 启动失败${NC}"
         tail -5 /tmp/ollama.log

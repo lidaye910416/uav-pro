@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
 import { useAlertStream, StreamAlert } from "../../hooks/useAlertStream"
 import { PipelineStageCard } from "../../components/PipelineStageCard"
+import { SOPPanel } from "../../components/SOPPanel"
 
 type VideoId = "d1" | "d2" | "d3" | "d4" | "d5" | "d6" | "default"
 type PipelineMode = "single" | "dual"
@@ -257,97 +258,226 @@ function VideoCard({ config, pipelineState, alerts, yoloParams }: {
   )
 }
 
-// ── Pipeline Progress Panel ──────────────────────────────────────────────────
+// ── Collapsible Right Panel (Tab-based) ──────────────────────────────────────
 
-function PipelineProgressPanel({ pipelineState, onStageClick }: {
+type RightTab = "pipeline" | "params" | "sop" | "alerts"
+
+function CollapsibleRightPanel({ pipelineState, yoloParams, onYoloChange, alerts }: {
   pipelineState: PipelineState
-  onStageClick: (key: string) => void
+  yoloParams: YOLOParams
+  onYoloChange: (p: YOLOParams) => void
+  alerts: StreamAlert[]
 }) {
+  const [activeTab, setActiveTab] = useState<RightTab>("pipeline")
+
+  const tabs: { key: RightTab; label: string; icon: string; count?: number }[] = [
+    { key: "pipeline", label: "Pipeline", icon: "◉" },
+    { key: "params", label: "参数", icon: "⚙" },
+    { key: "sop", label: "SOP", icon: "📋" },
+    { key: "alerts", label: "预警", icon: "🔔", count: alerts.length },
+  ]
+
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-      <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
-        <span style={{ color: "var(--accent-amber)" }}>◉</span>
-        <span className="text-xs font-bold" style={{ color: "var(--accent-amber)" }}>Pipeline 4阶段</span>
-        <span className="ml-auto text-xs font-mono" style={{ color: "var(--text-muted)" }}>YOLO+SAM+Gemma</span>
+      {/* Tab bar */}
+      <div className="flex" style={{ borderBottom: "1px solid var(--border)" }}>
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className="flex-1 flex items-center justify-center gap-1.5 py-2.5 text-xs font-mono font-bold transition-all"
+            style={{
+              background: activeTab === tab.key ? "var(--bg-card)" : "transparent",
+              color: activeTab === tab.key ? "var(--accent-amber)" : "var(--text-muted)",
+              borderBottom: activeTab === tab.key ? "2px solid var(--accent-amber)" : "2px solid transparent",
+            }}
+          >
+            <span>{tab.icon}</span>
+            <span>{tab.label}</span>
+            {tab.count !== undefined && tab.count > 0 && (
+              <span className="px-1.5 py-0.5 rounded text-xs" style={{ background: "var(--accent-red)", color: "#fff", fontSize: "10px" }}>
+                {tab.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
-      
-      <div className="p-3 space-y-2">
-        {PIPELINE_STAGES.map((stage, i) => {
-          const state = pipelineState[stage.key as keyof PipelineState]
-          const isActive = state.status === "running"
-          const isDone = state.status === "done"
-          const isError = state.status === "error"
-          
-          return (
-            <div
-              key={stage.key}
-              className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all hover:bg-white/5"
-              onClick={() => onStageClick(stage.key)}
-              style={{
-                border: `1px solid ${isActive ? stage.color : isDone ? "var(--accent-green)" : "var(--border)"}40`,
-                opacity: state.status === "idle" ? 0.5 : 1,
-              }}
-            >
-              {/* Icon */}
-              <div
-                className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 font-mono text-sm font-bold"
-                style={{
-                  background: isDone ? "var(--accent-green)" : isActive ? stage.color : "var(--bg-primary)",
-                  color: isDone || isActive ? "#000" : "var(--text-muted)",
-                  boxShadow: isActive ? `0 0 8px ${stage.color}` : isDone ? "0 0 8px var(--accent-green)" : "none",
-                }}
-              >
-                {isDone ? "✓" : stage.icon}
-              </div>
-              
-              {/* Content */}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold" style={{ color: isDone ? "var(--accent-green)" : isActive ? stage.color : "var(--text-muted)" }}>
-                    {stage.label}
-                  </span>
-                  <span className="text-xs font-mono" style={{ color: isDone ? "var(--accent-green)" : isActive ? stage.color : "var(--text-muted)" }}>
-                    {isDone ? "✓" : isActive ? `${state.progress}%` : "○"}
-                  </span>
-                </div>
-                <div className="text-xs" style={{ color: "var(--text-muted)" }}>{stage.desc}</div>
-                
-                {/* Progress bar */}
-                <div className="h-1 rounded-full overflow-hidden mt-1" style={{ background: "rgba(255,255,255,0.1)" }}>
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${state.progress}%`,
-                      background: isDone ? "var(--accent-green)" : stage.color,
-                      boxShadow: isActive ? `0 0 4px ${stage.color}` : "none",
-                    }}
-                  />
-                </div>
-                
-                {/* Summary */}
-                {state.summary && (
-                  <div className="text-xs mt-1 truncate" style={{ color: "var(--text-secondary)" }}>
-                    {state.summary}
-                  </div>
-                )}
-              </div>
-            </div>
-          )
-        })}
+
+      {/* Tab content */}
+      <div className="p-3">
+        {activeTab === "pipeline" && (
+          <PipelineProgressPanelInternal pipelineState={pipelineState} />
+        )}
+        {activeTab === "params" && (
+          <YOLOParamsPanel params={yoloParams} onChange={onYoloChange} compact />
+        )}
+        {activeTab === "sop" && (
+          <SOPPanel compact />
+        )}
+        {activeTab === "alerts" && (
+          <AlertStreamPanelInternal alerts={alerts} />
+        )}
       </div>
     </div>
   )
 }
 
-// ── YOLO Params Panel ────────────────────────────────────────────────────────
+// ── Pipeline Progress Panel (Internal) ──────────────────────────────────────
 
-function YOLOParamsPanel({ params, onChange }: { params: YOLOParams; onChange: (p: YOLOParams) => void }) {
+function PipelineProgressPanelInternal({ pipelineState }: { pipelineState: PipelineState }) {
+  return (
+    <div className="space-y-2">
+      {PIPELINE_STAGES.map((stage) => {
+        const state = pipelineState[stage.key as keyof PipelineState]
+        const isActive = state.status === "running"
+        const isDone = state.status === "done"
+
+        return (
+          <div
+            key={stage.key}
+            className="flex items-center gap-3 p-2 rounded-lg"
+            style={{
+              border: `1px solid ${isActive ? stage.color : isDone ? "var(--accent-green)" : "var(--border)"}40`,
+              opacity: state.status === "idle" ? 0.5 : 1,
+            }}
+          >
+            <div
+              className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-mono text-xs font-bold"
+              style={{
+                background: isDone ? "var(--accent-green)" : isActive ? stage.color : "var(--bg-primary)",
+                color: isDone || isActive ? "#000" : "var(--text-muted)",
+              }}
+            >
+              {isDone ? "✓" : stage.icon}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold" style={{ color: isDone ? "var(--accent-green)" : isActive ? stage.color : "var(--text-muted)" }}>
+                  {stage.label}
+                </span>
+                <span className="text-xs font-mono" style={{ color: isDone ? "var(--accent-green)" : isActive ? stage.color : "var(--text-muted)" }}>
+                  {isDone ? "✓" : isActive ? `${state.progress}%` : "○"}
+                </span>
+              </div>
+              <div className="h-1 rounded-full overflow-hidden mt-1" style={{ background: "rgba(255,255,255,0.1)" }}>
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${state.progress}%`,
+                    background: isDone ? "var(--accent-green)" : stage.color,
+                  }}
+                />
+              </div>
+              {state.summary && (
+                <div className="text-xs mt-1 truncate" style={{ color: "var(--text-secondary)" }}>
+                  {state.summary}
+                </div>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── Alert Stream Panel (Internal) ───────────────────────────────────────────
+
+function AlertStreamPanelInternal({ alerts }: { alerts: StreamAlert[] }) {
+  return (
+    <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 480px)" }}>
+      {alerts.length === 0 ? (
+        <div className="text-xs text-center py-6" style={{ color: "var(--text-muted)" }}>暂无实时预警</div>
+      ) : alerts.map((a, i) => {
+        const color = RISK_COLORS[String(a.risk_level)] || "var(--border)"
+        return (
+          <div key={a.id ?? i} className="py-2.5 transition-all"
+            style={{ borderBottom: "1px solid var(--border)", background: i === 0 ? `${color}08` : "transparent", borderLeft: `3px solid ${color}` }}>
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-xs font-mono font-bold" style={{ color }}>{String(a.risk_level).toUpperCase()}</span>
+              {a.confidence != null && (
+                <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>{(a.confidence * 100).toFixed(0)}%</span>
+              )}
+            </div>
+            <div className="text-xs font-bold mb-0.5 truncate" style={{ color: "var(--text-primary)" }}>{String(a.title)}</div>
+            {a.description && <div className="text-xs truncate" style={{ color: "var(--text-secondary)" }}>{String(a.description).slice(0, 60)}</div>}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ── YOLO Params Panel (Compact) ──────────────────────────────────────────────
+
+function YOLOParamsPanel({ params, onChange, compact = false }: { params: YOLOParams; onChange: (p: YOLOParams) => void; compact?: boolean }) {
   function update(key: keyof YOLOParams, value: number | string | boolean) {
     onChange({ ...params, [key]: value })
   }
 
   const activeCount = VIDEOS_WITH_URLS.filter(v => v.active).length
 
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        {/* 置信度 + SAM 开关 */}
+        <div className="flex items-center gap-3">
+          <div className="flex-1">
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>置信度</span>
+              <span className="text-xs font-mono font-bold" style={{ color: "var(--accent-amber)" }}>{params.confidence_threshold}%</span>
+            </div>
+            <input
+              type="range" min={10} max={100} step={1}
+              value={params.confidence_threshold}
+              onChange={(e) => update("confidence_threshold", Number(e.target.value))}
+              className="w-full"
+              style={{ accentColor: "var(--accent-amber)" }}
+            />
+          </div>
+          <div
+            className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold cursor-pointer"
+            style={{
+              background: params.sam_enabled ? "var(--accent-green)" : "var(--bg-primary)",
+              color: params.sam_enabled ? "#000" : "var(--text-muted)",
+              border: `1px solid ${params.sam_enabled ? "var(--accent-green)" : "var(--border)"}`,
+            }}
+            onClick={() => update("sam_enabled", !params.sam_enabled)}
+          >
+            SAM {params.sam_enabled ? "●" : "○"}
+          </div>
+        </div>
+
+        {/* 模型选择 */}
+        <div>
+          <select
+            value={params.model_name}
+            onChange={(e) => update("model_name", e.target.value)}
+            className="w-full px-3 py-2 rounded-lg text-xs font-mono"
+            style={{ background: "var(--bg-primary)", color: "var(--text-primary)", border: "1px solid var(--border)" }}
+          >
+            <option value="yolov8n.pt">yolov8n (轻量)</option>
+            <option value="yolov8s.pt">yolov8s (标准)</option>
+            <option value="yolov8m.pt">yolov8m (精度)</option>
+          </select>
+        </div>
+
+        {/* 快速统计 */}
+        <div className="grid grid-cols-2 gap-2 pt-2" style={{ borderTop: "1px solid var(--border)" }}>
+          <div className="rounded-lg p-2 text-center" style={{ background: "var(--bg-primary)" }}>
+            <div className="text-lg font-bold font-mono" style={{ color: "var(--accent-amber)" }}>{activeCount}</div>
+            <div className="text-xs" style={{ color: "var(--text-muted)" }}>活跃通道</div>
+          </div>
+          <div className="rounded-lg p-2 text-center" style={{ background: "var(--bg-primary)" }}>
+            <div className="text-lg font-bold font-mono" style={{ color: "var(--accent-green)" }}>24</div>
+            <div className="text-xs" style={{ color: "var(--text-muted)" }}>ROI数</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // Full version
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
       <div className="flex items-center gap-2 px-4 py-3" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -446,7 +576,7 @@ function YOLOParamsPanel({ params, onChange }: { params: YOLOParams; onChange: (
   )
 }
 
-// ── Alert Stream Panel ───────────────────────────────────────────────────────
+// ── Alert Stream Panel (External) ───────────────────────────────────────────
 
 function AlertStreamPanel({ alerts }: { alerts: StreamAlert[] }) {
   return (
@@ -741,11 +871,14 @@ export default function MonitorPage() {
             </div>
           </div>
 
-          {/* Right: pipeline progress + params + alert panel */}
+          {/* Right: collapsible tabbed panel */}
           <div className="space-y-4">
-            <PipelineProgressPanel pipelineState={pipelineState} onStageClick={handleStageClick} />
-            <YOLOParamsPanel params={yoloParams} onChange={handleYoloParamsChange} />
-            <AlertStreamPanel alerts={alerts} />
+            <CollapsibleRightPanel
+              pipelineState={pipelineState}
+              yoloParams={yoloParams}
+              onYoloChange={handleYoloParamsChange}
+              alerts={alerts}
+            />
           </div>
         </div>
       </div>

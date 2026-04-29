@@ -1,7 +1,7 @@
 "use client"
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useAuth } from "@/components/AuthContext"
-import { ragSearch, ragAddDoc } from "@/lib/api"
+import { ragSearch } from "@/lib/api"
 
 export default function RAGPage() {
   const { user } = useAuth()
@@ -11,8 +11,62 @@ export default function RAGPage() {
   const [docText, setDocText] = useState("")
   const [addMsg, setAddMsg] = useState("")
   const [error, setError] = useState("")
+  const [uploading, setUploading] = useState(false)
+  const [uploadMsg, setUploadMsg] = useState("")
+  const [generating, setGenerating] = useState(false)
+  const [genMsg, setGenMsg] = useState("")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   if (!user) return null
+
+  // AI 加工 SOP
+  async function handleGenerateFromRaw() {
+    if (!docText.trim() || !user) return
+    setGenerating(true); setGenMsg(""); setError("")
+
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const res = await fetch(`${API_BASE}/api/v1/admin/sop/generate`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ raw_text: docText }),
+      })
+      const data = await res.json()
+      if (data.ok && data.standard_sop) {
+        setDocText(data.standard_sop)
+        setGenMsg("✓ AI 加工完成，已生成标准 SOP")
+        // 自动导入到知识库
+        await importSOP(data.standard_sop)
+      } else {
+        setError(data.error || "AI 加工失败")
+      }
+    } catch (err: any) {
+      setError(err.message)
+    }
+    setGenerating(false)
+  }
+
+  // 导入 SOP 到知识库
+  async function importSOP(text: string) {
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      await fetch(`${API_BASE}/api/v1/admin/rag/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+        body: JSON.stringify({ text }),
+      })
+      setAddMsg("✓ 已导入知识库")
+      setTimeout(() => setAddMsg(""), 3000)
+    } catch {
+      setAddMsg("导入失败")
+    }
+  }
 
   async function handleSearch() {
     if (!query) return
@@ -27,26 +81,52 @@ export default function RAGPage() {
 
   async function handleAdd() {
     if (!docText || !user) return
+    setError("")
     try {
-      await ragAddDoc(user.token, docText)
-      setAddMsg("添加成功 ✓")
-      setDocText("")
-      setTimeout(() => setAddMsg(""), 3000)
-    } catch { setAddMsg("添加失败 ✗") }
+      await importSOP(docText)
+    } catch { setError("添加失败") }
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file || !user) return
+    setUploading(true); setUploadMsg(""); setError("")
+
+    const formData = new FormData()
+    formData.append("file", file)
+
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const res = await fetch(`${API_BASE}/api/v1/admin/sop/upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${user.token}` },
+        body: formData,
+      })
+      const data = await res.json()
+      if (data.ok) {
+        setUploadMsg(`✓ 上传成功: ${data.message}`)
+      } else {
+        setError(data.detail || data.error || "上传失败")
+      }
+    } catch (err: any) {
+      setError(err.message)
+    }
+    setUploading(false)
+    if (fileInputRef.current) fileInputRef.current.value = ""
   }
 
   return (
     <div>
       <div className="mb-6">
-        <h1 className="text-xl font-bold font-mono tracking-wider">RAG 知识库</h1>
-        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>SOP 规范文档检索 · 知识库管理</p>
+        <h1 className="text-xl font-bold font-mono tracking-wider">SOP 知识库管理</h1>
+        <p className="text-sm mt-1" style={{ color: "var(--text-secondary)" }}>智能 SOP 导入 · AI 加工标准化 · 知识检索</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left: Search */}
         <div className="space-y-4">
           <div className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>SOP 知识检索</div>
+            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>🔍 SOP 知识检索</div>
             <div className="flex gap-2">
               <input value={query} onChange={e => setQuery(e.target.value)} onKeyDown={e => e.key === "Enter" && handleSearch()}
                 placeholder="例如: 应急车道停车如何处理"
@@ -78,30 +158,60 @@ export default function RAGPage() {
           )}
         </div>
 
-        {/* Right: Add knowledge */}
+        {/* Right: SOP Editor + Upload */}
         <div className="space-y-4">
+          {/* SOP 编辑器 - 统一入口 */}
           <div className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>添加 SOP 文档</div>
+            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>📝 SOP 编辑器</div>
             <textarea
               value={docText}
               onChange={e => setDocText(e.target.value)}
-              rows={6}
-              placeholder="输入 SOP 文档内容，例如:\n根据道路交通安全法，应急车道行驶或停车的处理规定如下..."
+              rows={8}
+              placeholder="输入或粘贴原始内容...\n支持以下格式导入:\n- 原始文档文本\n- 未格式化的规范描述\n系统会自动识别并 AI 加工成标准 SOP"
               className="w-full px-3 py-2 rounded-lg text-sm font-mono resize-none"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
             />
-            <div className="flex items-center justify-between mt-3">
-              <span className="text-sm" style={{ color: addMsg.includes("成功") ? "var(--accent-green)" : "var(--accent-red)" }}>{addMsg}</span>
-              <button onClick={handleAdd} disabled={!docText}
-                className="px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all hover:brightness-110 disabled:opacity-50"
-                style={{ background: "var(--accent-amber)", color: "#000" }}>
-                添加文档
+            <div className="flex items-center gap-2 mt-3">
+              <button onClick={handleGenerateFromRaw} disabled={!docText.trim() || generating}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--accent-purple)", color: "#fff" }}>
+                {generating ? "✨ AI 加工中..." : "✨ AI 加工标准化"}
+              </button>
+              <button onClick={handleAdd} disabled={!docText.trim()}
+                className="flex-1 px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all hover:brightness-110 disabled:opacity-50"
+                style={{ background: "var(--accent-green)", color: "#000" }}>
+                导入知识库
               </button>
             </div>
+            {genMsg && <p className="text-sm mt-2" style={{ color: "var(--accent-purple)" }}>{genMsg}</p>}
+            {addMsg && <p className="text-sm mt-2" style={{ color: "var(--accent-green)" }}>{addMsg}</p>}
           </div>
 
+          {/* SOP 文件导入 */}
           <div className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
-            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>内置 SOP 示例</div>
+            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>📁 批量导入 SOP 文件</div>
+            <div className="border-2 border-dashed rounded-lg p-6 text-center transition-all"
+              style={{ borderColor: "var(--border)" }}>
+              <input ref={fileInputRef} type="file" accept=".json,.txt,.md" onChange={handleFileUpload}
+                className="hidden" id="sop-file-upload" />
+              <label htmlFor="sop-file-upload" className="cursor-pointer">
+                <div className="text-2xl mb-2">📤</div>
+                <div className="text-sm" style={{ color: "var(--text-secondary)" }}>
+                  点击选择文件 · 支持拖拽
+                </div>
+                <div className="text-xs mt-2" style={{ color: "var(--text-muted)" }}>
+                  .json / .txt / .md 格式
+                </div>
+              </label>
+            </div>
+            {uploading && <p className="text-sm mt-3 text-center" style={{ color: "var(--accent-amber)" }}>上传中...</p>}
+            {uploadMsg && <p className="text-sm mt-3 text-center" style={{ color: "var(--accent-green)" }}>{uploadMsg}</p>}
+            {error && <p className="text-sm mt-3 text-center" style={{ color: "var(--accent-red)" }}>{error}</p>}
+          </div>
+
+          {/* 快速示例 */}
+          <div className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+            <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>💡 快速示例</div>
             <div className="space-y-2">
               {[
                 "根据道路交通安全法，应急车道仅供故障车辆临时停靠使用，违者罚款200元扣6分。",

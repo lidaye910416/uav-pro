@@ -65,12 +65,31 @@ class Settings(BaseSettings):
     # Pipeline 运行模式: "single" | "dual"
     PIPELINE_MODE: str = "single"
 
-    # ── 单模型模式（Gemma 4 E2B）───────────────
-    MODEL_GEMMA4: str = "gemma4-e2b"
+    # ── 单模型模式（Gemma 4 E2B，如不可用则回退到 qwen2.5）───────────────
+    MODEL_GEMMA4: str = "gemma4:e2b"
 
     # ── 双模型模式 ─────────────────────────────
     MODEL_VISION: str = "llava:7b"
     MODEL_DECISION: str = "deepseek-r1:1.5b"
+
+    # ── 模型自动检测 ─────────────────────────────
+    # 这些会在运行时自动检测可用的模型
+    _available_gemma: str | None = None
+    _available_qwen: str | None = None
+
+    def get_vision_model(self) -> str:
+        """获取可用的视觉模型"""
+        # 优先使用 Gemma4
+        if self._available_gemma:
+            return self._available_gemma
+        # 回退到 Qwen
+        if self._available_qwen:
+            return self._available_qwen
+        return "qwen2.5:latest"
+
+    def get_embed_model(self) -> str:
+        """获取可用的嵌入模型"""
+        return "nomic-embed-text"
 
 
 @lru_cache()

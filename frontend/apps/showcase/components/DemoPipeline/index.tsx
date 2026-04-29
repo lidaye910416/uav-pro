@@ -291,6 +291,39 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
     setSceneIdx(0)
   }
 
+  // ── Stop / Reset ─────────────────────────────────────────────────────────────────
+
+  async function handleStop() {
+    console.log("[Pipeline] handleStop called")
+    // Close SSE
+    if (esRef.current) {
+      esRef.current.close()
+      esRef.current = null
+    }
+    // Clear all timers
+    Object.values(revealTimersRef.current).forEach(clearTimeout)
+    revealTimersRef.current = {}
+    localTimersRef.current.forEach(clearTimeout)
+    localTimersRef.current = []
+    // Reset state
+    reset()
+    setRunning(false)
+    setDone(false)
+    playVideo()
+
+    // 调用后端停止 Ollama
+    try {
+      await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      })
+    } catch (e) {
+      console.warn("[Pipeline] Failed to stop Ollama via API:", e)
+    }
+
+    console.log("[Pipeline] Stopped - Ollama model should be unloaded")
+  }
+
   // ── Local demo orchestrator (no backend required) ────────────────────────
   function runLocalDemo(sceneIndex: number) {
     const scene = LOCAL_DEMOS[sceneIndex]
@@ -591,21 +624,37 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
             </div>
           </div>
 
-          {/* Launch button */}
-          <button
-            onClick={handleDemo}
-            disabled={running}
-            className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0"
-            style={{
-              background: running ? "var(--bg-primary)" : "var(--accent-amber)",
-              color: running ? "var(--text-muted)" : "#000",
-              border: running ? "1px solid var(--border)" : "none",
-              boxShadow: running ? "none" : "0 0 12px rgba(255,184,0,0.25)",
-              cursor: running ? "not-allowed" : "pointer",
-            }}
-          >
-            {running ? "◈ 运行中..." : "▶ 启动演示"}
-          </button>
+          {/* Launch / Stop button */}
+          <div className="flex gap-2">
+            {running && (
+              <button
+                onClick={handleStop}
+                className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0"
+                style={{
+                  background: "var(--accent-red)",
+                  color: "#fff",
+                  border: "none",
+                  boxShadow: "0 0 12px rgba(255,59,59,0.3)",
+                }}
+              >
+                ⏹ 停止演示
+              </button>
+            )}
+            <button
+              onClick={running ? undefined : handleDemo}
+              disabled={running}
+              className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0"
+              style={{
+                background: running ? "var(--bg-primary)" : "var(--accent-amber)",
+                color: running ? "var(--text-muted)" : "#000",
+                border: running ? "1px solid var(--border)" : "none",
+                boxShadow: running ? "none" : "0 0 12px rgba(255,184,0,0.25)",
+                cursor: running ? "not-allowed" : "pointer",
+              }}
+            >
+              {running ? "◈ 运行中..." : "▶ 启动演示"}
+            </button>
+          </div>
           <div className="text-xs font-mono px-2 py-1 rounded flex-shrink-0" style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>
             Gemma4:e2b
           </div>

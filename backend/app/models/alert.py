@@ -36,6 +36,9 @@ class Alert(Base):
     confidence = Column(Float, nullable=True)         # LLM 置信度
     source_type = Column(String(20), nullable=True)   # "image" / "video"
     source_path = Column(String(500), nullable=True)  # 原始文件路径
+    pipeline_mode = Column(String(20), nullable=True)  # "single" / "dual"
+    ai_model = Column(String(100), nullable=True)     # 使用的 AI 模型
+    detection_details = Column(Text, nullable=True)   # YOLO 检测详情 JSON
     created_by = Column(Integer)
     confirmed_by = Column(Integer)
     resolved_at = Column(DateTime(timezone=True))

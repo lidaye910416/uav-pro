@@ -10,16 +10,27 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_ollama import router as ollama_router
 from app.api.routes_uav import router as uav_router
 
+from app.core.database import engine, Base
+
 # Import all models so SQLAlchemy registers them with Base.metadata
 from app.models.alert import Alert, RiskLevel, AlertStatus  # noqa: F401
 from app.models.user import User                          # noqa: F401
 from app.models.data_record import DataRecord            # noqa: F401
 from app.models.device import Device                     # noqa: F401
 
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
 )
+
+
+@app.on_event("startup")
+async def startup_event():
+    """启动时创建所有表"""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
 
 app.add_middleware(
     CORSMiddleware,

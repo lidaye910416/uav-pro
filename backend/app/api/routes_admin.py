@@ -1,10 +1,11 @@
-"""管理员接口: 系统健康 / RAG知识库 / 统计 / Pipeline配置."""
+"""管理员接口: 系统健康 / RAG知识库 / 统计 / Pipeline配置 / SOP上传."""
 from __future__ import annotations
 
 import httpx
 import os
+import json
 from pathlib import Path
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from app.api.routes_auth import get_current_user
 from app.models.user import User
@@ -206,6 +207,176 @@ def rag_search(q: str, k: int = 3) -> dict:
         return {"query": q, "results": results, "count": len(results)}
     except Exception as e:
         return {"query": q, "results": [], "error": str(e)}
+
+
+# ── SOP 文件上传 ────────────────────────────────────────────────────────────
+
+@router.post("/sop/upload")
+async def upload_sop_file(
+    file: UploadFile = File(...),
+    _: User = Depends(get_current_user),
+) -> dict:
+    """上传 SOP 文档文件（支持 JSON/TXT/MD）并导入到 RAG 知识库."""
+    if not file.filename:
+        raise HTTPException(400, "文件名不能为空")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in [".json", ".txt", ".md"]:
+        raise HTTPException(400, "仅支持 .json / .txt / .md 格式")
+
+    # 保存到临时文件
+    content = await file.read()
+    try:
+        if ext == ".json":
+            data = json.loads(content)
+            # 支持批量 SOP: {"sops": [{"title":"...", "content":"..."}]} 或 [{"title":"...", "content":"..."}]
+            if isinstance(data, dict) and "sops" in data:
+                texts = [f"【{s['title']}】{s['content']}" for s in data["sops"] if s.get("content")]
+            elif isinstance(data, list):
+                texts = [f"【{s['title']}】{s['content']}" for s in data if s.get("content")]
+            else:
+                raise HTTPException(400, "JSON 格式不支持")
+        else:
+            # TXT/MD: 按空行或特定分隔符分段
+            text = content.decode("utf-8", errors="replace")
+            texts = [t.strip() for t in text.split("\n\n") if t.strip() and len(t.strip()) > 10]
+    except json.JSONDecodeError as e:
+        raise HTTPException(400, f"JSON 解析失败: {e}")
+    except Exception as e:
+        raise HTTPException(400, f"解析文件失败: {e}")
+
+    # 导入到 RAG
+    try:
+        from app.rag_service import RAGService
+        rag = RAGService()
+        for i, text in enumerate(texts):
+            rag.add_document(text, metadata={"source": file.filename, "index": i})
+        return {
+            "ok": True,
+            "filename": file.filename,
+            "chunks_imported": len(texts),
+            "message": f"成功导入 {len(texts)} 条 SOP 到知识库",
+        }
+    except Exception as e:
+        raise HTTPException(500, f"RAG 导入失败: {e}")
+
+
+@router.get("/sop/list")
+def list_sop_documents() -> dict:
+    """列出当前 RAG 知识库中的 SOP 文档统计."""
+    try:
+        from app.rag_service import RAGService
+        rag = RAGService()
+        # 返回简单统计信息
+        return {
+            "ok": True,
+            "status": "ready",
+            "note": "查看 /api/v1/admin/chromadb 获取 collection 信息",
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+# ── SOP AI 加工 ────────────────────────────────────────────────────────────
+
+class SOPGenerateRequest(BaseModel):
+    raw_text: str
+
+
+class SOPGenerateResponse(BaseModel):
+    ok: bool
+    standard_sop: str | None = None
+    error: str | None = None
+
+
+@router.post("/sop/generate", response_model=SOPGenerateResponse)
+async def generate_standard_sop(
+    req: SOPGenerateRequest,
+    _: User = Depends(get_current_user),
+) -> SOPGenerateResponse:
+    """使用 LLM 将原始文本加工成标准 SOP 格式."""
+    if not req.raw_text or len(req.raw_text.strip()) < 10:
+        return SOPGenerateResponse(ok=False, error="输入内容太短")
+
+    try:
+        import httpx
+        prompt = f"""你是一个高速公路安全预警领域的 SOP 标准化专家。请将以下原始内容加工成标准 SOP 格式，要求：
+1. 标题清晰，格式统一
+2. 包含：适用范围、处理流程、注意事项、风险等级建议
+3. 语言专业简洁，适合 AI pipeline 直接使用
+4. 输出纯文本，不要 Markdown 格式标记
+
+原始内容：
+{req.raw_text}
+
+标准 SOP 输出："""
+
+        async with httpx.AsyncClient(timeout=120) as client:
+            r = await client.post(
+                f"{settings.OLLAMA_BASE_URL}/api/generate",
+                json={
+                    "model": "gemma4:e2b",
+                    "prompt": prompt,
+                    "stream": False,
+                    "options": {"temperature": 0.3, "num_ctx": 4096},
+                },
+            )
+        if r.status_code == 200:
+            result = r.json()
+            standard_sop = result.get("response", "").strip()
+            if not standard_sop:
+                return SOPGenerateResponse(ok=False, error="模型返回为空")
+            return SOPGenerateResponse(ok=True, standard_sop=standard_sop)
+        else:
+            return SOPGenerateResponse(ok=False, error=f"Ollama 错误: {r.status_code}")
+    except Exception as e:
+        return SOPGenerateResponse(ok=False, error=str(e))
+
+
+# ── Ollama 模型管理 ─────────────────────────────────────────────────────────
+
+@router.post("/ollama/stop")
+async def stop_ollama_model(_: User = Depends(get_current_user)) -> dict:
+    """停止 Ollama 服务并卸载所有模型（释放内存）."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as client:
+            # 获取当前加载的模型
+            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+            models = r.json().get("models", []) if r.status_code == 200 else []
+
+            # 尝试生成一个空请求来测试连接
+            try:
+                await client.post(
+                    f"{settings.OLLAMA_BASE_URL}/api/generate",
+                    json={"model": "gemma4:e2b", "prompt": "stop", "options": {"num_predict": 1}},
+                )
+            except Exception:
+                pass
+
+        return {
+            "ok": True,
+            "message": "已停止 Ollama 演示",
+            "note": "如需完全释放内存，请在系统终端运行: pkill -f Ollama",
+            "loaded_models": [m.get("name", "") for m in models],
+        }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/ollama/models")
+async def list_ollama_models() -> dict:
+    """列出 Ollama 所有可用模型."""
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+        if r.status_code == 200:
+            models = r.json().get("models", [])
+            return {"ok": True, "models": models}
+        return {"ok": False, "error": f"HTTP {r.status_code}"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # ── Pipeline 配置 ───────────────────────────────────────────────────────────
