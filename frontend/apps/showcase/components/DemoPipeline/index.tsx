@@ -626,20 +626,20 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
 
           {/* Launch / Stop button */}
           <div className="flex gap-2">
-            {running && (
-              <button
-                onClick={handleStop}
-                className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0"
-                style={{
-                  background: "var(--accent-red)",
-                  color: "#fff",
-                  border: "none",
-                  boxShadow: "0 0 12px rgba(255,59,59,0.3)",
-                }}
-              >
-                ⏹ 停止演示
-              </button>
-            )}
+            {/* 停止按钮 - 始终显示，随时可停止 Ollama 释放内存 */}
+            <button
+              onClick={handleStop}
+              className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0"
+              style={{
+                background: running ? "var(--accent-red)" : "rgba(255,59,59,0.15)",
+                color: running ? "#fff" : "var(--accent-red)",
+                border: `1px solid ${running ? "var(--accent-red)" : "rgba(255,59,59,0.3)"}`,
+                boxShadow: running ? "0 0 12px rgba(255,59,59,0.3)" : "none",
+              }}
+            >
+              ⏹ 停止
+            </button>
+            {/* 启动按钮 */}
             <button
               onClick={running ? undefined : handleDemo}
               disabled={running}
@@ -652,7 +652,7 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
                 cursor: running ? "not-allowed" : "pointer",
               }}
             >
-              {running ? "◈ 运行中..." : "▶ 启动演示"}
+              {running ? "◈ 运行中..." : "▶ 启动"}
             </button>
           </div>
           <div className="text-xs font-mono px-2 py-1 rounded flex-shrink-0" style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>
