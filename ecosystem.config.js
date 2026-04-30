@@ -1,5 +1,6 @@
 // PM2 配置文件
 // 支持通过环境变量自定义端口配置
+// 端口配置统一从 .env 读取，package.json 中使用 ${PORT:-默认值} 读取环境变量
 
 // 从 .env 加载配置
 const fs = require('fs');
@@ -22,9 +23,16 @@ loadEnv();
 
 const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
 const backendPort = process.env.BACKEND_PORT || '8888';
-const showcasePort = process.env.SHOWCASE_PORT || '4000';
-const dashboardPort = process.env.DASHBOARD_PORT || '4001';
-const adminPort = process.env.ADMIN_PORT || '4002';
+
+// 前端服务端口（从环境变量读取，没有则使用默认值）
+const showcasePort = process.env.SHOWCASE_PORT || '3000';
+const dashboardPort = process.env.DASHBOARD_PORT || '3001';
+const adminPort = process.env.ADMIN_PORT || '3002';
+
+// 前端 URL 配置（用于服务间跳转，动态构建）
+const showcaseUrl = `http://localhost:${showcasePort}`;
+const dashboardUrl = `http://localhost:${dashboardPort}`;
+const adminUrl = `http://localhost:${adminPort}`;
 
 module.exports = {
   apps: [
@@ -37,6 +45,8 @@ module.exports = {
         PYTHONPATH: './backend',
         BACKEND_HOST: backendHost,
         BACKEND_PORT: backendPort,
+        // 传递给前端的环境变量
+        NEXT_PUBLIC_API_BASE: `http://localhost:${backendPort}`,
       },
       autorestart: true,
       max_restarts: 10,
@@ -45,10 +55,14 @@ module.exports = {
     {
       name: 'uav-showcase',
       script: 'npm',
-      args: `run dev -- -p ${showcasePort}`,
+      args: 'run dev',
       cwd: './frontend/apps/showcase',
       env: {
         NODE_ENV: 'development',
+        PORT: showcasePort,
+        NEXT_PUBLIC_API_BASE: `http://localhost:${backendPort}`,
+        NEXT_PUBLIC_DASHBOARD_URL: dashboardUrl,
+        NEXT_PUBLIC_ADMIN_URL: adminUrl,
       },
       autorestart: true,
       max_restarts: 5,
@@ -57,10 +71,14 @@ module.exports = {
     {
       name: 'uav-dashboard',
       script: 'npm',
-      args: `run dev -- -p ${dashboardPort}`,
+      args: 'run dev',
       cwd: './frontend/apps/dashboard',
       env: {
         NODE_ENV: 'development',
+        PORT: dashboardPort,
+        NEXT_PUBLIC_API_BASE: `http://localhost:${backendPort}`,
+        NEXT_PUBLIC_SHOWCASE_URL: showcaseUrl,
+        NEXT_PUBLIC_ADMIN_URL: adminUrl,
       },
       autorestart: true,
       max_restarts: 5,
@@ -69,10 +87,14 @@ module.exports = {
     {
       name: 'uav-admin',
       script: 'npm',
-      args: `run dev -- -p ${adminPort}`,
+      args: 'run dev',
       cwd: './frontend/apps/admin',
       env: {
         NODE_ENV: 'development',
+        PORT: adminPort,
+        NEXT_PUBLIC_API_BASE: `http://localhost:${backendPort}`,
+        NEXT_PUBLIC_SHOWCASE_URL: showcaseUrl,
+        NEXT_PUBLIC_DASHBOARD_URL: dashboardUrl,
       },
       autorestart: true,
       max_restarts: 5,

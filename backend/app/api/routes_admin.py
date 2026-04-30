@@ -336,29 +336,37 @@ async def generate_standard_sop(
 # ── Ollama 模型管理 ─────────────────────────────────────────────────────────
 
 @router.post("/ollama/stop")
-async def stop_ollama_model(_: User = Depends(get_current_user)) -> dict:
-    """停止 Ollama 服务并卸载所有模型（释放内存）."""
+async def stop_ollama_model() -> dict:
+    """停止 Ollama 模型并释放内存（通过 keep_alive: 0 立即卸载）."""
     try:
-        import httpx
-        async with httpx.AsyncClient(timeout=10) as client:
-            # 获取当前加载的模型
-            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
-            models = r.json().get("models", []) if r.status_code == 200 else []
+        # 获取当前加载的模型
+        r = await httpx.AsyncClient(timeout=10).get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+        models = r.json().get("models", []) if r.status_code == 200 else []
+        loaded_models = [m.get("name", "") for m in models]
 
-            # 尝试生成一个空请求来测试连接
-            try:
-                await client.post(
-                    f"{settings.OLLAMA_BASE_URL}/api/generate",
-                    json={"model": "gemma4:e2b", "prompt": "stop", "options": {"num_predict": 1}},
-                )
-            except Exception:
-                pass
+        # 通过 Ollama API 停止所有已加载的模型（设置 keep_alive=0 立即释放内存）
+        async with httpx.AsyncClient(timeout=30) as client:
+            for model in models:
+                model_name = model.get("name", "")
+                if model_name:
+                    try:
+                        # 方式1: 使用 /api/generate 的 keep_alive 参数
+                        await client.post(
+                            f"{settings.OLLAMA_BASE_URL}/api/generate",
+                            json={
+                                "model": model_name,
+                                "prompt": "",  # 空 prompt
+                                "keep_alive": 0,  # 立即释放内存
+                            },
+                        )
+                        print(f"[Ollama] 已停止模型: {model_name}")
+                    except Exception as e:
+                        print(f"[Ollama] 停止模型 {model_name} 失败: {e}")
 
         return {
             "ok": True,
-            "message": "已停止 Ollama 演示",
-            "note": "如需完全释放内存，请在系统终端运行: pkill -f Ollama",
-            "loaded_models": [m.get("name", "") for m in models],
+            "message": "已停止 Ollama 模型并释放内存",
+            "stopped_models": loaded_models,
         }
     except Exception as e:
         return {"ok": False, "error": str(e)}
