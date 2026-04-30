@@ -22,37 +22,41 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24小时
 
-    # CORS - 从环境变量读取，可以是逗号分隔的字符串或 JSON 数组
-    # 默认端口: 8888(后端), 4000(showcase), 4001(dashboard), 4002(admin)
-    BACKEND_CORS_ORIGINS: str = "http://localhost:8888,http://localhost:4000,http://localhost:4001,http://localhost:4002"
+    # 服务端口配置（从环境变量读取，动态构建 CORS origins）
+    BACKEND_PORT: int = 8888
+    SHOWCASE_PORT: int = 4000
+    DASHBOARD_PORT: int = 4001
+    ADMIN_PORT: int = 4002
+
+    # CORS - 支持额外的自定义来源（可选）
+    EXTRA_CORS_ORIGINS: str = ""
 
     @property
     def cors_origins_list(self) -> list[str]:
-        """解析 CORS origins，可以是逗号分隔的字符串或 JSON 数组"""
-        if not self.BACKEND_CORS_ORIGINS:
-            origins = []
-        elif self.BACKEND_CORS_ORIGINS.startswith("[") or self.BACKEND_CORS_ORIGINS.startswith("'"):
-            # JSON 数组格式
-            try:
-                import json
-                origins = json.loads(self.BACKEND_CORS_ORIGINS)
-            except:
-                origins = [o.strip() for o in self.BACKEND_CORS_ORIGINS.strip("[]'\"").split(",") if o.strip()]
-        else:
-            # 逗号分隔的字符串
-            origins = [o.strip() for o in self.BACKEND_CORS_ORIGINS.split(",") if o.strip()]
+        """动态构建 CORS origins，基于服务端口配置"""
+        origins = []
 
-        # 添加默认端口（后端 + 三个前端）
-        default_ports = ["8888", "4000", "4001", "4002"]
-        for port in default_ports:
-            origins.append(f"http://localhost:{port}")
+        # 后端端口
+        origins.append(f"http://localhost:{self.BACKEND_PORT}")
 
-        # 添加 EXTRA_CORS_ORIGINS 中的额外来源
-        extra = os.environ.get("EXTRA_CORS_ORIGINS", "")
+        # 三个前端端口
+        origins.append(f"http://localhost:{self.SHOWCASE_PORT}")
+        origins.append(f"http://localhost:{self.DASHBOARD_PORT}")
+        origins.append(f"http://localhost:{self.ADMIN_PORT}")
+
+        # 额外端口（常见开发端口）
+        common_dev_ports = [3000, 3001, 3002, 3003]
+        for port in common_dev_ports:
+            if port not in [self.BACKEND_PORT, self.SHOWCASE_PORT, self.DASHBOARD_PORT, self.ADMIN_PORT]:
+                origins.append(f"http://localhost:{port}")
+
+        # 从 EXTRA_CORS_ORIGINS 环境变量添加额外来源
+        extra = os.environ.get("EXTRA_CORS_ORIGINS", self.EXTRA_CORS_ORIGINS)
         if extra:
             for o in extra.split(","):
                 if o.strip():
                     origins.append(o.strip())
+
         return list(set(origins))
 
     # Ollama
