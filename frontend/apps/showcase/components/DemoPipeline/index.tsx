@@ -1498,14 +1498,6 @@ function getRiskLabel(risk: string): string {
   return RISK_LABELS[risk] ?? risk
 }
 
-const INCIDENT_TYPE_NAMES: Record<string, string> = {
-  collision: "交通事故",
-  pothole: "路面塌陷",
-  obstacle: "道路障碍物",
-  pedestrian: "行人闯入",
-  congestion: "交通拥堵",
-}
-
 function AlertBanner({ alert }: { alert: Record<string, unknown> }) {
   const RISK_COLORS2: Record<string, string> = {
     critical: "var(--accent-red)",

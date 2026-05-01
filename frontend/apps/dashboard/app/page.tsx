@@ -1,6 +1,7 @@
 "use client"
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { NAV } from "@frontend/config"
 
 const SECTIONS = [
   {
