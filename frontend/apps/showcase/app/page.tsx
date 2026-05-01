@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState, useCallback } from "react"
+import { NAV } from "@frontend/config"
 import PipelinePanel from "../components/DemoPipeline"
 
 /* ── Interactive Particle Globe ────────────────────────────── */
