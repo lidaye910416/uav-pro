@@ -531,7 +531,7 @@ const YOLO_DEFAULTS: YoloParams = {
   enabled_categories: { vehicle: true, person: true, obstacle: true },
 }
 
-function SliderRow({ label, value, onChange, min, max, step = 1, unit = "", desc = "" }: {
+function YoloSliderRow({ label, value, onChange, min, max, step = 1, unit = "", desc = "" }: {
   label: string; value: number; onChange: (v: number) => void; min: number; max: number; step?: number; unit?: string; desc?: string
 }) {
   return (
@@ -634,12 +634,12 @@ function YoloParamsTab() {
         <div className="text-xs font-bold mb-3 tracking-widest uppercase" style={{ color: "var(--text-muted)" }}>
           检测参数
         </div>
-        <SliderRow
+        <YoloSliderRow
           label="置信度阈值" value={params.confidence_threshold}
           onChange={v => update("confidence_threshold", v)} min={0.05} max={0.95} step={0.05}
           unit="" desc="高于此置信度的目标才被检出"
         />
-        <SliderRow
+        <YoloSliderRow
           label="IoU 阈值" value={params.iou_threshold}
           onChange={v => update("iou_threshold", v)} min={0.1} max={0.9} step={0.05}
           unit="" desc="NMS 去除重叠框的 IoU 阈值"
@@ -651,12 +651,12 @@ function YoloParamsTab() {
         <div className="text-xs font-bold mb-3 tracking-widest uppercase" style={{ color: "var(--text-muted)" }}>
           跟踪参数
         </div>
-        <SliderRow
+        <YoloSliderRow
           label="最大保留帧" value={params.max_age}
           onChange={v => update("max_age", v)} min={10} max={60} step={5}
           unit="帧" desc="目标消失后保留的最大帧数"
         />
-        <SliderRow
+        <YoloSliderRow
           label="最小命中" value={params.min_hits}
           onChange={v => update("min_hits", v)} min={1} max={5} step={1}
           unit="帧" desc="确认跟踪所需的最小命中帧数"
