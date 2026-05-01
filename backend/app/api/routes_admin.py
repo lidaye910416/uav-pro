@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
+from typing import Optional, List
 from app.api.routes_auth import get_current_user
 from app.models.user import User
 from app.core.config import settings
@@ -21,20 +22,20 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 class HealthResponse(BaseModel):
     service: str
     status: str  # healthy | degraded | down
-    latency_ms: float | None = None
-    detail: str | None = None
+    latency_ms: Optional[float] = None
+    detail: Optional[str] = None
 
 
 class OllamaHealth(BaseModel):
     status: str
-    models: list[str] = []
-    error: str | None = None
+    models: List[str] = []
+    error: Optional[str] = None
 
 
 class ChromaHealth(BaseModel):
     status: str
-    collections: list[str] = []
-    error: str | None = None
+    collections: List[str] = []
+    error: Optional[str] = None
 
 
 class SystemStats(BaseModel):
@@ -47,15 +48,15 @@ class SystemStats(BaseModel):
 
 class RAGDoc(BaseModel):
     text: str
-    metadata: dict | None = None
+    metadata: Optional[dict] = None
 
 
 # ── 健康检查 ─────────────────────────────────────────────────────────────────
 
-@router.get("/health", response_model=list[HealthResponse])
-async def system_health() -> list[HealthResponse]:
+@router.get("/health", response_model=List[HealthResponse])
+async def system_health() -> List[HealthResponse]:
     """检查所有依赖服务的健康状态."""
-    results: list[HealthResponse] = []
+    results: List[HealthResponse] = []
 
     # Ollama
     try:
@@ -285,8 +286,8 @@ class SOPGenerateRequest(BaseModel):
 
 class SOPGenerateResponse(BaseModel):
     ok: bool
-    standard_sop: str | None = None
-    error: str | None = None
+    standard_sop: Optional[str] = None
+    error: Optional[str] = None
 
 
 @router.post("/sop/generate", response_model=SOPGenerateResponse)
@@ -408,13 +409,13 @@ async def list_ollama_models() -> dict:
 # ── Pipeline 配置 ───────────────────────────────────────────────────────────
 
 class PipelineConfigUpdate(BaseModel):
-    mode: str | None = None
+    mode: Optional[str] = None
 
 
 class PipelineModelInfo(BaseModel):
     name: str
     loaded: bool
-    size: int | None = None
+    size: Optional[int] = None
 
 
 class PipelineStatus(BaseModel):
@@ -422,13 +423,13 @@ class PipelineStatus(BaseModel):
     gemma4_e2b: PipelineModelInfo
     vision: PipelineModelInfo
     decision: PipelineModelInfo
-    all_available: list[str]
+    all_available: List[str]
 
 
 @router.get("/pipeline", response_model=PipelineStatus)
 async def get_pipeline_status() -> PipelineStatus:
     """返回当前 pipeline 配置状态和 Ollama 可用模型列表."""
-    all_models: list[str] = []
+    all_models: List[str] = []
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
@@ -467,7 +468,7 @@ async def update_pipeline_config(
     env_path = Path(__file__).resolve().parents[2] / ".env"
     env_lines = env_path.read_text().splitlines() if env_path.exists() else []
     updated = False
-    new_lines: list[str] = []
+    new_lines: List[str] = []
     for line in env_lines:
         if line.startswith("PIPELINE_MODE="):
             new_lines.append(f"PIPELINE_MODE={new_mode}")

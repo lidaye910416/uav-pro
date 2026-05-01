@@ -9,7 +9,7 @@ import asyncio
 import httpx
 import logging
 import time
-from typing import Callable, Awaitable
+from typing import Callable, Awaitable, Optional, Tuple, Dict, List, Any
 
 from app.core.config import settings
 
@@ -20,7 +20,7 @@ class HealthMonitor:
     """后台健康监控器"""
 
     # 服务检查配置: (name, url, expected_status, timeout)
-    SERVICES: list[tuple[str, str, int, float]] = [
+    SERVICES: List[Tuple[str, str, int, float]] = [
         ("ollama", f"{settings.OLLAMA_BASE_URL}/api/tags", 200, 5.0),
         ("chromadb", f"{settings.CHROMADB_URL}/api/v1/heartbeat", 200, 5.0),
         ("backend", f"http://localhost:{settings.BACKEND_PORT}/health", 200, 3.0),
@@ -33,16 +33,16 @@ class HealthMonitor:
         """
         self.check_interval = check_interval
         self._running = False
-        self._task: asyncio.Task | None = None
+        self._task: Optional[asyncio.Task] = None
         # 当前状态: service_name -> (status: bool, latency_ms: float, last_check: float)
-        self._status: dict[str, tuple[bool, float, float]] = {}
-        self._on_status_change: list[Callable[[str, bool, float], Awaitable[None]]] = []
+        self._status: Dict[str, Tuple[bool, float, float]] = {}
+        self._on_status_change: List[Callable[[str, bool, float], Awaitable[None]]] = []
 
     def register_callback(self, cb: Callable[[str, bool, float], Awaitable[None]]) -> None:
         """注册状态变更回调"""
         self._on_status_change.append(cb)
 
-    async def check_service(self, name: str, url: str, expected: int, timeout: float) -> tuple[bool, float]:
+    async def check_service(self, name: str, url: str, expected: int, timeout: float) -> Tuple[bool, float]:
         """检查单个服务，返回 (is_healthy, latency_ms)"""
         t0 = time.perf_counter()
         try:
@@ -52,11 +52,11 @@ class HealthMonitor:
                 if r.status_code == expected:
                     return True, latency_ms
                 return False, latency_ms
-        except Exception as e:
+        except Exception:
             latency_ms = (time.perf_counter() - t0) * 1000
             return False, latency_ms
 
-    async def check_all(self) -> dict[str, tuple[bool, float]]:
+    async def check_all(self) -> Dict[str, Tuple[bool, float]]:
         """并行检查所有服务"""
         tasks = [
             self.check_service(name, url, expected, timeout)
@@ -115,7 +115,7 @@ class HealthMonitor:
                 pass
             self._task = None
 
-    def get_status(self) -> dict[str, dict]:
+    def get_status(self) -> Dict[str, Dict[str, Any]]:
         """返回当前所有服务的状态快照"""
         now = time.time()
         result = {}
@@ -130,7 +130,7 @@ class HealthMonitor:
 
 
 # 全局单例
-_monitor: HealthMonitor | None = None
+_monitor: Optional[HealthMonitor] = None
 
 
 def get_monitor() -> HealthMonitor:

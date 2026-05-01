@@ -23,7 +23,7 @@ router = APIRouter(prefix="/streams", tags=["感知层"])
 # ── Stream Registry ──────────────────────────────────────────────────────────
 
 STREAM_REGISTRY: dict[str, dict[str, Any]] = {}
-ANALYSIS_TASKS: dict[str, asyncio.Task | None] = {}
+ANALYSIS_TASKS: Dict[str, Optional[asyncio.Task]] = {}
 
 
 class StreamConfig(BaseModel):
@@ -42,12 +42,12 @@ class StreamInfo(BaseModel):
     auto_analyze: bool
     interval_sec: float
     status: str  # idle | running | error
-    last_frame_ts: float | None = None
+    last_frame_ts: Optional[float] = None
 
 
 # ── Frame Extraction ─────────────────────────────────────────────────────────
 
-def _extract_frame(path: str, source_type: str) -> bytes | None:
+def _extract_frame(path: str, source_type: str) -> Optional[bytes]:
     if source_type == "file":
         cap = cv2.VideoCapture(path)
     elif source_type == "rtsp":

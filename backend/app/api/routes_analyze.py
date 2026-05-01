@@ -45,7 +45,7 @@ async def analyze_status() -> dict[str, Any]:
             available = [m["name"] for m in r.json().get("models", [])]
 
         mode = settings.PIPELINE_MODE
-        active_model: str | None = None
+        active_model: Optional[str] = None
         if mode == "single":
             active_model = settings.MODEL_GEMMA4 if settings.MODEL_GEMMA4 in available else None
         else:

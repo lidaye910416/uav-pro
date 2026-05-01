@@ -420,7 +420,7 @@ MITRA_VIDEOS: list[dict] = [
 ]
 
 
-def _resolve_video_path(video_id: str) -> Path | None:
+def _resolve_video_path(video_id: str) -> Optional[Path]:
     """Resolve video_id → Path, supporting 'default', 'gal_1' and 'd1'-'d6'."""
     if video_id == "default":
         return DEMO_VIDEO if DEMO_VIDEO.exists() else None
@@ -909,7 +909,7 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
         }
 
 
-async def _decision_decide(scene_desc: str, rag_context: str, model: str, timeout: float) -> dict | None:
+async def _decision_decide(scene_desc: str, rag_context: str, model: str, timeout: float) -> Optional[dict]:
     """Call decision LLM with scene description + RAG context."""
     import re as _re
 

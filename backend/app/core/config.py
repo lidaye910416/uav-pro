@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
+from typing import Optional, ClassVar, List
 import os
 
 
@@ -32,7 +33,7 @@ class Settings(BaseSettings):
     EXTRA_CORS_ORIGINS: str = ""
 
     @property
-    def cors_origins_list(self) -> list[str]:
+    def cors_origins_list(self) -> List[str]:
         """动态构建 CORS origins，基于服务端口配置"""
         origins = []
 
@@ -78,8 +79,8 @@ class Settings(BaseSettings):
 
     # ── 模型自动检测 ─────────────────────────────
     # 这些会在运行时自动检测可用的模型
-    _available_gemma: str | None = None
-    _available_qwen: str | None = None
+    _available_gemma: ClassVar[Optional[str]] = None
+    _available_qwen: ClassVar[Optional[str]] = None
 
     def get_vision_model(self) -> str:
         """获取可用的视觉模型"""

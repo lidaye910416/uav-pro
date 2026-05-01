@@ -1,5 +1,5 @@
 #!/bin/bash
-# UAV-PRO 服务管理脚本 (使用 PM2 守护进程)
+# UAV-PRO 服务管理脚本 (使用 PM2 ecosystem.config.js)
 # 设置颜色
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -10,261 +10,71 @@ NC='\033[0m'
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
-# PM2 配置目录
-PM2_HOME="$PROJECT_ROOT/.pm2"
+# 加载端口配置
+export BACKEND_PORT=${BACKEND_PORT:-8888}
+export CHROMADB_PORT=${CHROMADB_PORT:-8001}
+export OLLAMA_PORT=${OLLAMA_PORT:-11434}
+# 前端端口：Next.js Turbo 默认 3000/3001/3002
+export SHOWCASE_PORT=${SHOWCASE_PORT:-3000}
+export DASHBOARD_PORT=${DASHBOARD_PORT:-3001}
+export ADMIN_PORT=${ADMIN_PORT:-3002}
 
-# ==================== 加载服务配置 ====================
-# 从 config/services.json 读取端口配置
-load_service_config() {
-    # 默认端口: 8888(后端), 4000(showcase), 4001(dashboard), 4002(admin), 8001(ChromaDB)
-    export BACKEND_PORT=${BACKEND_PORT:-8888}
-    export BACKEND_HOST=${BACKEND_HOST:-127.0.0.1}
-    export OLLAMA_PORT=${OLLAMA_PORT:-11434}
-    export CHROMADB_PORT=${CHROMADB_PORT:-8001}
-    export SHOWCASE_PORT=${SHOWCASE_PORT:-4000}
-    export DASHBOARD_PORT=${DASHBOARD_PORT:-4001}
-    export ADMIN_PORT=${ADMIN_PORT:-4002}
-
-    # 如果存在 .env 文件，加载它
-    if [ -f "$PROJECT_ROOT/.env" ]; then
-        set -a  # 自动导出
-        source "$PROJECT_ROOT/.env"
-        set +a
-    fi
-}
-
-load_service_config
-
-# 检查并创建数据库表
-init_database() {
-    echo -e "${YELLOW}检查数据库...${NC}"
-    cd "$PROJECT_ROOT/backend"
-    python3 -c "
-from sqlalchemy import create_engine, text
-import os
-
-db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 'uav.db')
-engine = create_engine(f'sqlite:///{db_path}')
-
-with engine.connect() as conn:
-    try:
-        conn.execute(text('SELECT 1 FROM alerts LIMIT 1'))
-        print('✓ alerts 表存在')
-    except:
-        print('⚠ alerts 表不存在，创建中...')
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT,
-                risk_level TEXT,
-                recommendation TEXT,
-                confidence REAL,
-                scene_description TEXT,
-                source_type TEXT,
-                source_path TEXT,
-                pipeline_mode TEXT,
-                ai_model TEXT,
-                detection_details TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        '''))
-        conn.commit()
-        print('✓ alerts 表创建完成')
-except Exception as e:
-    print(f'数据库检查失败: {e}')
-"
-    cd "$PROJECT_ROOT"
-}
-
-# 使用 PM2 停止所有服务
-stop_all() {
-    echo -e "${YELLOW}停止所有服务 (PM2)...${NC}"
-    cd "$PM2_HOME" 2>/dev/null || true
-    pm2 delete all 2>/dev/null || true
-    pm2 kill 2>/dev/null || true
-
-    # 也杀掉残留进程
-    pkill -f "uvicorn main:app" 2>/dev/null || true
-    pkill -f "next dev" 2>/dev/null || true
-    pkill -f "ollama serve" 2>/dev/null || true
-    pkill -f "chromadb.app" 2>/dev/null || true
-    pkill -f "uvicorn chromadb" 2>/dev/null || true
-    sleep 2
-    echo -e "${GREEN}✓ 所有服务已停止${NC}"
-}
-
-# ==================== Ollama 模型配置 ====================
-# 需要下载的 Ollama 模型列表
-# 注意：gemma4:e2b 需要最新版本 Ollama，如下载失败会自动回退到 qwen2.5:latest
-REQUIRED_MODELS=(
-    "qwen2.5:latest"
-    "nomic-embed-text"
-)
-
-# 检查并下载缺失的 Ollama 模型
-ensure_ollama_models() {
-    echo -e "${YELLOW}检查 Ollama 模型...${NC}"
-
-    # 获取已安装模型列表
-    local installed_models=$(ollama list 2>/dev/null | awk 'NR>1 {print $1}' | grep -v "^$")
-
-    for model in "${REQUIRED_MODELS[@]}"; do
-        if echo "$installed_models" | grep -q "^${model}$"; then
-            echo -e "  ${GREEN}✓${NC} $model (已安装)"
-        else
-            echo -e "  ${YELLOW}↓${NC} $model (下载中...)"
-            ollama pull "$model" 2>&1 | while IFS= read -r line; do
-                # 显示下载进度（去掉进度条字符）
-                echo -ne "\r    $line    \r"
-            done
-            echo -e "  ${GREEN}✓${NC} $model (安装完成)"
-        fi
-    done
-    echo ""
-}
-
-# 启动 Ollama
+# ==================== Ollama 检查 ====================
 start_ollama() {
-    echo -e "${YELLOW}启动 Ollama (端口 $OLLAMA_PORT)...${NC}"
+    echo -e "${YELLOW}检查 Ollama...${NC}"
     if pgrep -f "ollama serve" > /dev/null 2>&1; then
         echo -e "${GREEN}✓ Ollama 已在运行${NC}"
-        # 仍然检查模型
-        ensure_ollama_models
-        return 0
-    fi
-
-    # 使用 PM2 启动
-    pm2 start --name "uav-ollama" --no-autorestart -- \
-        ollama serve > /tmp/ollama.log 2>&1 &
-    sleep 3
-
-    if curl -s --max-time 5 http://localhost:$OLLAMA_PORT/api/tags > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ Ollama 已启动${NC}"
-        # 下载缺失的模型
-        ensure_ollama_models
     else
-        echo -e "${RED}✗ Ollama 启动失败${NC}"
-        tail -5 /tmp/ollama.log
+        echo -e "${YELLOW}启动 Ollama...${NC}"
+        ollama serve > /tmp/ollama.log 2>&1 &
+        sleep 3
     fi
 }
 
-# ==================== ChromaDB 服务 ====================
+# ==================== PM2 启动/停止 ====================
+start_all() {
+    echo -e "${YELLOW}启动所有服务 (PM2)...${NC}"
+    pm2 start ecosystem.config.js 2>&1
+    sleep 10
 
-# 启动 ChromaDB
-start_chromadb() {
-    echo -e "${YELLOW}启动 ChromaDB (端口 $CHROMADB_PORT)...${NC}"
-
-    # 检查是否已在运行
-    if curl -s --max-time 3 http://localhost:$CHROMADB_PORT/api/v1/heartbeat > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ ChromaDB 已在运行${NC}"
-        return 0
+    # 验证后端
+    if curl -s --max-time 5 http://localhost:$BACKEND_PORT/health > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ 后端已启动 (PM2 守护中)${NC}"
+    else
+        echo -e "${RED}✗ 后端启动失败${NC}"
+        pm2 logs uav-backend --lines 15 --nostream
     fi
 
-    cd "$PROJECT_ROOT/backend"
-
-    # 确保数据目录存在
-    mkdir -p data/knowledge_base
-
-    # 停止可能存在的残留进程
-    pkill -f "chromadb.app" 2>/dev/null || true
-
-    # 使用 uvicorn 启动 ChromaDB 服务器
-    PYTHONPATH="$PROJECT_ROOT/backend" pm2 start \
-        --name "uav-chromadb" \
-        --no-autorestart \
-        -- \
-        python3 -m uvicorn chromadb.app:app --host 0.0.0.0 --port $CHROMADB_PORT > /tmp/chromadb.log 2>&1
-
-    sleep 5
-
-    # 验证启动
+    # 验证 ChromaDB
     if curl -s --max-time 5 http://localhost:$CHROMADB_PORT/api/v1/heartbeat > /dev/null 2>&1; then
         echo -e "${GREEN}✓ ChromaDB 已启动${NC}"
     else
         echo -e "${RED}✗ ChromaDB 启动失败${NC}"
-        tail -10 /tmp/chromadb.log
-    fi
-
-    cd "$PROJECT_ROOT"
-}
-
-# 启动后端 (PM2 守护)
-start_backend() {
-    echo -e "${YELLOW}启动后端 (端口 $BACKEND_PORT, PM2 守护)...${NC}"
-
-    cd "$PROJECT_ROOT/backend"
-    export PYTHONPATH="$PROJECT_ROOT/backend"
-
-    pm2 start \
-        --name "uav-backend" \
-        --no-autorestart \
-        -- \
-        python3 -m uvicorn main:app --host $BACKEND_HOST --port $BACKEND_PORT
-
-    cd "$PROJECT_ROOT"
-    sleep 4
-
-    if curl -s http://localhost:$BACKEND_PORT/docs > /dev/null 2>&1; then
-        echo -e "${GREEN}✓ 后端已启动 (PM2 守护中)${NC}"
-    else
-        echo -e "${RED}✗ 后端启动失败${NC}"
-        pm2 logs uav-backend --lines 10 --nostream
     fi
 }
 
-# 启动前端 (使用 Turbo 通过 PM2)
-start_frontend() {
-    echo -e "${YELLOW}启动前端服务 (PM2 守护)...${NC}"
-
-    cd "$PROJECT_ROOT/frontend"
-
-    # 使用 Turbo 启动前端应用
-    # Turbo 会同时启动 showcase, dashboard, admin
-    pm2 start \
-        --name "uav-frontend" \
-        --no-autorestart \
-        -- \
-        pnpm dev
-
-    sleep 10
-
-    # 检查所有前端服务
-    local all_ok=true
-    for port in $SHOWCASE_PORT $DASHBOARD_PORT $ADMIN_PORT; do
-        if curl -s --max-time 3 http://localhost:$port > /dev/null 2>&1; then
-            echo -e "  ${GREEN}✓${NC} 端口 $port"
-        else
-            echo -e "  ${RED}✗${NC} 端口 $port (等待中...)"
-            all_ok=false
-        fi
-    done
-
-    if [ "$all_ok" = true ]; then
-        echo -e "${GREEN}✓ 前端服务已启动 (PM2 守护中)${NC}"
-    else
-        echo -e "${YELLOW}部分前端服务正在启动，请稍后...${NC}"
-    fi
+stop_all() {
+    echo -e "${YELLOW}停止所有服务 (PM2)...${NC}"
+    pm2 delete all 2>/dev/null || true
+    pkill -f "uvicorn main:app" 2>/dev/null || true
+    pkill -f "uvicorn chromadb" 2>/dev/null || true
+    pkill -f "next" 2>/dev/null || true
+    sleep 1
+    echo -e "${GREEN}✓ 所有服务已停止${NC}"
 }
 
-# 检查服务状态
 check_status() {
     echo ""
     echo "=========================================="
-    echo -e "         ${BLUE}服务状态检查 (PM2)${NC}"
+    echo -e "         ${BLUE}服务状态检查${NC}"
     echo "=========================================="
-
-    echo -e "\n${YELLOW}PM2 进程列表:${NC}"
-    pm2 list
-
+    pm2 list 2>/dev/null
     echo ""
     echo -e "${YELLOW}HTTP 服务检测:${NC}"
-
     local all_ok=true
     for name in "Ollama:$OLLAMA_PORT" "ChromaDB:$CHROMADB_PORT" "Backend:$BACKEND_PORT" "Showcase:$SHOWCASE_PORT" "Dashboard:$DASHBOARD_PORT" "Admin:$ADMIN_PORT"; do
         service="${name%%:*}"
         port="${name##*:}"
-
         if curl -s --max-time 2 http://localhost:$port > /dev/null 2>&1; then
             echo -e "  ${GREEN}✓${NC} $service (端口 $port)"
         else
@@ -272,41 +82,20 @@ check_status() {
             all_ok=false
         fi
     done
-
     echo ""
     if [ "$all_ok" = true ]; then
         echo -e "${GREEN}所有服务运行正常!${NC}"
     else
-        echo -e "${YELLOW}部分服务离线，可使用 '$0 restart' 重启${NC}"
+        echo -e "${YELLOW}部分服务离线${NC}"
     fi
     echo "=========================================="
-}
-
-# 清理并重启 (处理端口占用问题)
-clean_restart() {
-    echo -e "${YELLOW}清理残留进程...${NC}"
-    pkill -9 -f "next" 2>/dev/null || true
-    pkill -9 -f "node.*showcase" 2>/dev/null || true
-    pkill -9 -f "node.*dashboard" 2>/dev/null || true
-    pkill -9 -f "node.*admin" 2>/dev/null || true
-    pkill -9 -f "uvicorn" 2>/dev/null || true
-    lsof -ti:$SHOWCASE_PORT | xargs kill -9 2>/dev/null || true
-    lsof -ti:$DASHBOARD_PORT | xargs kill -9 2>/dev/null || true
-    lsof -ti:$ADMIN_PORT | xargs kill -9 2>/dev/null || true
-    lsof -ti:$BACKEND_PORT | xargs kill -9 2>/dev/null || true
-    sleep 3
-    echo -e "${GREEN}清理完成${NC}"
 }
 
 # 主流程
 case "${1:-start}" in
     start)
-        init_database
-        stop_all
         start_ollama
-        start_chromadb
-        start_backend
-        start_frontend
+        start_all
         sleep 3
         check_status
         ;;
@@ -314,13 +103,10 @@ case "${1:-start}" in
         stop_all
         ;;
     restart)
-        init_database
-        clean_restart
         stop_all
+        sleep 2
         start_ollama
-        start_chromadb
-        start_backend
-        start_frontend
+        start_all
         sleep 3
         check_status
         ;;
@@ -328,25 +114,13 @@ case "${1:-start}" in
         check_status
         ;;
     logs)
-        echo -e "${YELLOW}查看后端日志:${NC}"
-        pm2 logs uav-backend --lines 50 --nostream
-        ;;
-    clean)
-        clean_restart
-        ;;
-    chromadb)
-        start_chromadb
+        echo -e "${YELLOW}后端日志:${NC}"
+        pm2 logs uav-backend --lines 30 --nostream
+        echo -e "${YELLOW}ChromaDB 日志:${NC}"
+        cat /tmp/chromadb.log 2>/dev/null | tail -20
         ;;
     *)
-        echo "用法: $0 {start|stop|restart|status|logs|clean|chromadb}"
-        echo ""
-        echo "  start    - 启动所有服务 (PM2 守护)"
-        echo "  stop     - 停止所有服务"
-        echo "  restart  - 重启所有服务"
-        echo "  status   - 检查服务状态"
-        echo "  logs     - 查看后端日志"
-        echo "  clean    - 清理残留进程"
-        echo "  chromadb - 仅启动 ChromaDB"
+        echo "用法: $0 {start|stop|restart|status|logs}"
         exit 1
         ;;
 esac
