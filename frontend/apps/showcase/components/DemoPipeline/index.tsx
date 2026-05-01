@@ -66,29 +66,37 @@ const DEFAULT_DETECTION_PARAMS: DetectionParams = {
 }
 
 // ── Local demo scenes (YOLO + SAM + Gemma4:e2b Pipeline) ────────────────────────────
+// 模拟场景对标 ChromaDB SOP 知识库五大类别：
+//   1. 交通事故 (collision)
+//   2. 交通违法 (violation)  3. 道路障碍 (obstacle)
+//   4. 人员异常 (person)     5. 交通拥堵 (congestion)
 
 const LOCAL_DEMOS = [
   {
+    // 场景 1: 正常通行 — 无风险
     perception: {
-      detail: { frame_idx: "00001", timestamp: "00:00.0", resolution: "1280×720", fps: "30", detections: "0", roi_count: "0" },
+      detail: { frame_idx: "00001", timestamp: "00:00.0", resolution: "1280×720", fps: "30", detections: "2", roi_count: "2" },
     },
-    rois: [] as ROIBox[],
+    rois: [
+      { x1: 25, y1: 40, x2: 48, y2: 62, confidence: 0.91 },
+      { x1: 55, y1: 38, x2: 75, y2: 60, confidence: 0.88 },
+    ] as ROIBox[],
     identify: {
-      detail: "无运动区域，检测到 2 辆正常行驶车辆，道路表面完好，无异常事件。",
+      detail: "航拍俯视高速公路直道区域，分辨率1280×720。车道线清晰可见，主路通行正常，2辆汽车匀速行驶，无异常物体或行人。",
     },
     rag: {
-      query: "道路正常通行",
+      query: "道路正常通行持续监控规范",
       snippets: [
-        "持续监控道路通行状态，记录车流密度与车速，发现异常立即上报。",
-        "道路障碍物处置规范：发现障碍物立即通知指挥中心。",
-        "行人闯入处置规范：立即通知交警，记录行人特征，防止事故发生。",
+        "[SOP-1] 事件：交通拥堵预警 | 识别特征：多辆车速度持续低于30km/h | 处置流程：持续监控，更新路况，必要时触发交通诱导",
+        "[SOP-2] 事件：行人闯入高速 | 识别特征：行人在行车道行走 | 处置流程：立即通知交警，防止事故发生，记录行人特征",
+        "[SOP-3] 事件：车辆追尾事故 | 识别特征：多辆车异常停滞、车辆间距过近 | 处置流程：确认数量位置、记录现场、通知交警和救援",
       ],
     },
     decision: {
       detail: {
         risk_level: "low",
         has_incident: false,
-        confidence: 0.94,
+        confidence: 0.95,
         title: "道路通行正常",
         recommendation: "持续监控，暂无预警处置建议。",
         incident_type: "none",
@@ -96,36 +104,39 @@ const LOCAL_DEMOS = [
     },
   },
   {
+    // 场景 2: 追尾事故 — high
     perception: {
-      detail: { frame_idx: "00048", timestamp: "00:01.6", resolution: "1280×720", fps: "30", detections: "2", roi_count: "2", roi_area: "2100" },
+      detail: { frame_idx: "00048", timestamp: "00:01.6", resolution: "1280×720", fps: "30", detections: "3", roi_count: "3", roi_area: "3500" },
     },
     rois: [
-      { x1: 20, y1: 35, x2: 42, y2: 60, confidence: 0.89 },
-      { x1: 50, y1: 45, x2: 72, y2: 68, confidence: 0.82 },
+      { x1: 22, y1: 38, x2: 46, y2: 62, confidence: 0.94 },
+      { x1: 48, y1: 35, x2: 68, y2: 58, confidence: 0.89 },
+      { x1: 62, y1: 50, x2: 82, y2: 74, confidence: 0.81 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到道路散落物事件：1 处疑似货车掉落纸箱（置信度 89%），位于主路应急车道边缘，后方 1 辆轿车（置信度 82%）正在紧急制动绕行。异常类型: obstacle",
+      detail: "航拍俯视高速公路主车道区域，检测到 3 辆车辆异常停滞形成追尾（置信度 94%），前车开启双闪，后方 200 米范围车辆排队减速，有散落物占据 2 条车道。异常类型: collision",
     },
     rag: {
-      query: "道路障碍物 obstacle 处置规范",
+      query: "交通事故车辆追尾处置规范",
       snippets: [
-        "开启双闪警示灯，在来车方向150米外放置三角警示牌。",
-        "如障碍物可移动且安全，在确保自身安全下移至路肩，通知路政或养护部门清理。",
-        "如障碍物为危险品(化学品、玻璃等)，勿自行处理，协调专业部门进行清理。",
+        "[SOP-1] 事件：车辆追尾事故 | 严重程度：high | 识别特征：多辆车异常停滞、车辆间距过近、可见碰撞痕迹 | 处置流程：确认数量位置→观察人员伤亡→记录现场→通知交警指挥中心→同步通知急救路政",
+        "[SOP-2] 事件：连环追尾事故 | 严重程度：critical | 识别特征：3辆以上连续碰撞、大面积堆积 | 处置流程：快速评估规模→上报最高预警→通知急救消防交警路政多部门联动",
+        "[SOP-3] 事件：单车故障事故 | 严重程度：medium | 识别特征：单车静止、开启双闪 | 处置流程：确认位置→通知路政清障→如影响主线通知交警管制",
       ],
     },
     decision: {
       detail: {
         risk_level: "high",
         has_incident: true,
-        confidence: 0.88,
-        title: "道路散落物险情",
-        recommendation: "高风险！立即通知高速交警与路政部门，限制后方车辆通行速度，派遣养护人员前往清理。",
-        incident_type: "obstacle",
+        confidence: 0.91,
+        title: "多车追尾事故",
+        recommendation: "高风险！立即通知高速交警指挥中心和急救中心，开启事故路段预警，封闭相关车道，疏导后方车辆绕行。",
+        incident_type: "collision",
       },
     },
   },
   {
+    // 场景 3: 行人闯入 — critical
     perception: {
       detail: { frame_idx: "00072", timestamp: "00:02.4", resolution: "1280×720", fps: "30", detections: "1", roi_count: "1", roi_area: "890" },
     },
@@ -133,14 +144,14 @@ const LOCAL_DEMOS = [
       { x1: 28, y1: 30, x2: 48, y2: 58, confidence: 0.95 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到行人闯入高危区域事件：1 名行人（置信度 95%）正在翻越护栏进入应急车道，距离主路约 15 米，后方 1 辆货车（置信度 88%）正快速接近。异常类型: pedestrian",
+      detail: "航拍俯视高速公路应急车道区域，检测到 1 名行人（置信度 95%）正在应急车道行走，距主路约 15 米，后方 1 辆货车（置信度 88%）正快速接近。异常类型: pedestrian",
     },
     rag: {
-      query: "行人闯入 pedestrian 处置规范",
+      query: "行人闯入高速公路人员异常处置规范",
       snippets: [
-        "立即通知高速交警(12122)，开启双闪警示，提醒后方来车。",
-        "持续跟踪行人位置，等待交警到达，切勿拦截或追逐行人，避免危险。",
-        "记录行人外貌特征、位置、进入时间，配合应急响应联动规程。",
+        "[SOP-1] 事件：行人闯入高速 | 严重程度：critical | 识别特征：行人在行车道行走、行人穿越中央分隔带 | 处置流程：立即通知高速交警12122→开启预警提醒→持续跟踪位置→切勿拦截追逐→记录外貌特征",
+        "[SOP-2] 事件：疑似故障乘客 | 严重程度：medium | 识别特征：人员站在车旁、打双闪的故障车辆 | 处置流程：确认人员状态→提醒撤离护栏外→通知路政清障",
+        "[SOP-3] 事件：交通拥堵预警 | 严重程度：medium | 识别特征：多车速度低于30km/h、拥堵趋势明显 | 处置流程：持续监控拥堵状态→排查拥堵原因→通知路网中心协调交警疏导",
       ],
     },
     decision: {
@@ -149,72 +160,69 @@ const LOCAL_DEMOS = [
         has_incident: true,
         confidence: 0.93,
         title: "行人闯入高危区域",
-        recommendation: "紧急！立即通知高速交警与急救中心，限制相关路段通行，配合疏散行人，通知周边巡逻力量支援。",
+        recommendation: "严重！立即通知高速交警12122和急救中心，限制该路段通行，配合疏散行人，通知周边巡逻力量支援，禁止拦截。",
         incident_type: "pedestrian",
       },
     },
   },
   {
+    // 场景 4: 违法倒车逆行 — critical
     perception: {
-      detail: { frame_idx: "00096", timestamp: "00:03.2", resolution: "1280×720", fps: "30", detections: "3", roi_count: "3", roi_area: "3500" },
+      detail: { frame_idx: "00096", timestamp: "00:03.2", resolution: "1280×720", fps: "30", detections: "1", roi_count: "1", roi_area: "1200" },
     },
     rois: [
-      { x1: 22, y1: 38, x2: 46, y2: 62, confidence: 0.94 },
-      { x1: 48, y1: 35, x2: 68, y2: 58, confidence: 0.87 },
-      { x1: 60, y1: 50, x2: 80, y2: 72, confidence: 0.79 },
+      { x1: 45, y1: 35, x2: 65, y2: 58, confidence: 0.92 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到交通事故事件：主车道 3 辆车辆追尾（置信度 94%），有散落物占据 2 条车道，后方车辆排队约 200 米。异常类型: collision",
+      detail: "航拍俯视高速公路匝道分流区域，检测到 1 辆白色轿车（置信度 92%）正在应急车道向后行驶，行驶方向与车道方向相反，后方车辆紧急制动避让。异常类型: violation",
     },
     rag: {
-      query: "交通事故 collision 处置规范",
+      query: "违法倒车逆行交通违法处置规范",
       snippets: [
-        "立即开启危险报警闪光灯(双闪)，在来车方向150米外放置三角警示牌。",
-        "人员迅速撤离至路肩或应急车道安全地带，记录事故现场:车牌、位置、时间。",
-        "通知高速交警(12122)和路政，勿自行拆卸、移动事故车辆和散落物。",
+        "[SOP-1] 事件：违法倒车逆行 | 严重程度：critical | 识别特征：车辆向后行驶、行驶方向与车道方向相反、在匝道分流处逆行 | 处置流程：立即确认车辆方向→上报最高预警→通知交警拦截→持续跟踪位置轨迹→评估危险程度→协助发布预警提醒后方车辆",
+        "[SOP-2] 事件：应急车道违规停车 | 严重程度：high | 识别特征：车辆停靠应急车道、未开启双闪、车内人员未撤离 | 处置流程：确认双闪状态→记录车牌特征→判断停靠原因→通知交警处罚→如故障通知路政清障",
+        "[SOP-3] 事件：车辆追尾事故 | 严重程度：high | 识别特征：多辆车异常停滞、可见碰撞痕迹 | 处置流程：确认数量→观察伤亡→记录现场→通知交警急救路政",
       ],
     },
     decision: {
       detail: {
         risk_level: "critical",
         has_incident: true,
-        confidence: 0.95,
-        title: "多车追尾事故",
-        recommendation: "严重风险！立即启动交通事故应急预案，通知交警、路政、急救中心，封闭事故路段，疏导后方车辆。",
+        confidence: 0.96,
+        title: "违法逆行险情",
+        recommendation: "严重！立即上报最高级别预警，通知交警紧急拦截处置，持续跟踪车辆位置和轨迹，发布后方车辆预警信息。",
         incident_type: "collision",
       },
     },
   },
   {
+    // 场景 5: 道路障碍物 — high
     perception: {
-      detail: { frame_idx: "00120", timestamp: "00:04.0", resolution: "1280×720", fps: "30", detections: "5", roi_count: "5", roi_area: "8500" },
+      detail: { frame_idx: "00120", timestamp: "00:04.0", resolution: "1280×720", fps: "30", detections: "2", roi_count: "2", roi_area: "2100" },
     },
     rois: [
-      { x1: 10, y1: 30, x2: 30, y2: 55, confidence: 0.91 },
-      { x1: 32, y1: 25, x2: 52, y2: 50, confidence: 0.88 },
-      { x1: 54, y1: 32, x2: 74, y2: 58, confidence: 0.85 },
-      { x1: 18, y1: 55, x2: 38, y2: 78, confidence: 0.83 },
-      { x1: 56, y1: 58, x2: 76, y2: 80, confidence: 0.80 },
+      { x1: 30, y1: 40, x2: 55, y2: 62, confidence: 0.89 },
+      { x1: 55, y1: 45, x2: 72, y2: 65, confidence: 0.82 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到交通拥堵事件：主车道车辆密集排列（置信度 91%），行驶速度明显降低，车流排队约 500 米，持续时间已超过 5 分钟。异常类型: congestion",
+      detail: "航拍俯视高速公路主路应急车道边缘，检测到 1 处疑似货车掉落纸箱（置信度 89%）占据部分车道，后方 1 辆轿车（置信度 82%）正在紧急制动绕行。异常类型: obstacle",
     },
     rag: {
-      query: "交通拥堵 congestion 处置规范",
+      query: "道路障碍物遗撒物处置规范",
       snippets: [
-        "持续监控拥堵状态，记录拥堵长度和持续时间，排查拥堵原因: 事故/施工/收费站。",
-        "通知路网监控中心，协调交警疏导，配合发布路况信息和诱导提示。",
-        "如拥堵持续超过30分钟，协调救援力量待命。",
+        "[SOP-1] 事件：道路遗撒物 | 严重程度：high | 识别特征：路面有不明物体、货物散落占用车道 | 处置流程：确认遗撒位置→评估占用车道情况→通知路政清理→同步更新路况信息提醒车辆",
+        "[SOP-2] 事件：散落货物车辆 | 严重程度：high | 识别特征：行驶中持续掉落货物、形成轨迹、后方车辆紧急避让 | 处置流程：追踪货物来源车辆→记录车牌→通知交警处理→持续监控后续掉落",
+        "[SOP-3] 事件：应急车道违规停车 | 严重程度：high | 识别特征：停靠应急车道、未开双闪、持续停靠超5分钟 | 处置流程：记录车牌→通知交警处罚→判断是否故障→通知路政清障",
       ],
     },
     decision: {
       detail: {
-        risk_level: "medium",
+        risk_level: "high",
         has_incident: true,
-        confidence: 0.87,
-        title: "交通拥堵预警",
-        recommendation: "中等风险！持续监控拥堵状态，排查事故原因，通知路网中心协调交警疏导，适时发布路况信息。",
-        incident_type: "congestion",
+        confidence: 0.88,
+        title: "道路散落物险情",
+        recommendation: "高风险！立即开启预警提醒后车注意避让，通知路政协助清理，确认是否危险品，协调交警封闭车道。",
+        incident_type: "obstacle",
       },
     },
   },
@@ -1269,34 +1277,36 @@ function AnomalyOutputSection({ detail, sceneKey, running }: { detail?: string |
 
 // ── RAG Output Section ───────────────────────────────────────────────────────
 
-function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: string[]; query?: string; sceneKey: number; running: boolean }) {
-  const RAG_KWS = ["应急车道", "道路散落物", "交通事故", "行人闯入", "交警", "报警", "护栏", "二次事故", "处置", "规范", "通知", "预警", "路政", "拥堵"]
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: "var(--accent-red)",
+  high:     "var(--accent-amber)",
+  medium:   "var(--accent-blue)",
+  low:      "var(--accent-green)",
+}
 
-  function highlight(text: string, kws: string[]): React.ReactNode {
-    if (!text) return <>{text}</>
-    const lower = text.toLowerCase()
-    const matches: { start: number; end: number }[] = []
-    for (const kw of kws) {
-      let pos = 0
-      while (true) {
-        const idx = lower.indexOf(kw, pos)
-        if (idx === -1) break
-        matches.push({ start: idx, end: idx + kw.length })
-        pos = idx + 1
-      }
-    }
-    matches.sort((a, b) => a.start - b.start)
-    const filtered = matches.filter((m, i) => i === 0 || m.start >= matches[i - 1].end)
-    const parts: React.ReactNode[] = []
-    let last = 0
-    for (const m of filtered) {
-      if (m.start > last) parts.push(text.slice(last, m.start))
-      parts.push(<mark key={`${m.start}`} style={{ background: "rgba(74,158,255,0.2)", color: "var(--accent-blue)", borderRadius: 2 }}>{text.slice(m.start, m.end)}</mark>)
-      last = m.end
-    }
-    if (last < text.length) parts.push(text.slice(last))
-    return <>{parts}</>
+function parseSOP(snippet: string): { event: string; severity: string; features: string; steps: string } {
+  const parts: Record<string, string> = {}
+  const segments = snippet.split("|").map(s => s.trim())
+  for (const seg of segments) {
+    const colonIdx = seg.indexOf("：")
+    if (colonIdx === -1) continue
+    const key = seg.slice(0, colonIdx).trim()
+    const val = seg.slice(colonIdx + 1).trim()
+    if (key === "事件") parts.event = val
+    else if (key === "严重程度") parts.severity = val
+    else if (key === "识别特征") parts.features = val
+    else if (key === "处置流程") parts.steps = val
   }
+  return {
+    event: parts.event || snippet,
+    severity: parts.severity || "low",
+    features: parts.features || "",
+    steps: parts.steps || "",
+  }
+}
+
+function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: string[]; query?: string; sceneKey: number; running: boolean }) {
+  const sops = (snippets || []).slice(0, 3).map(parseSOP)
 
   return (
     <div
@@ -1307,24 +1317,56 @@ function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: s
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid rgba(74,158,255,0.1)", background: "rgba(74,158,255,0.06)" }}>
         <span style={{ color: "var(--accent-blue)" }}>◫</span>
-        <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-blue)" }}>RAG SOP 知识库检索</span>
-        {running && <span className="animate-pulse text-xs font-mono" style={{ color: "var(--accent-blue)" }}>◈ 检索中...</span>}
-        {!running && query && <span className="ml-auto text-xs font-mono truncate max-w-48" style={{ color: "rgba(74,158,255,0.5)" }}>查询: {query}</span>}
+        <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-blue)" }}>RAG 知识库检索</span>
+        {running && <span className="animate-pulse text-xs font-mono" style={{ color: "var(--accent-blue)" }}>◈ ChromaDB 向量匹配中...</span>}
+        {!running && query && (
+          <span className="ml-auto text-xs font-mono truncate max-w-48" style={{ color: "rgba(74,158,255,0.5)" }}>
+            查询: {query.slice(0, 30)}
+          </span>
+        )}
       </div>
-      {/* Snippet cards */}
+      {/* Body */}
       <div className="p-3 space-y-2">
-        {(snippets || []).slice(0, 3).map((s, i) => (
+        {sops.map((sop, i) => (
           <div
             key={`${sceneKey}-${i}`}
-            className="p-3 rounded-lg text-xs leading-relaxed"
+            className="rounded-lg overflow-hidden"
             style={{
               animation: `slideIn 0.4s ease-out ${i * 0.3}s both`,
-              background: "var(--bg-primary)",
-              border: "1px solid rgba(74,158,255,0.1)",
-              borderLeft: "3px solid rgba(74,158,255,0.35)",
+              border: `1px solid ${SEVERITY_COLORS[sop.severity] || "var(--border)"}30`,
+              borderLeft: `3px solid ${SEVERITY_COLORS[sop.severity] || "var(--border)"}`,
             }}
           >
-            {highlight(s, RAG_KWS)}
+            {/* SOP Header: event name + severity badge */}
+            <div
+              className="flex items-center gap-2 px-3 py-2"
+              style={{ background: `${SEVERITY_COLORS[sop.severity] || "var(--border)"}0a`, borderBottom: `1px solid ${SEVERITY_COLORS[sop.severity] || "var(--border)"}15` }}
+            >
+              <span className="text-xs font-mono font-bold" style={{ color: SEVERITY_COLORS[sop.severity] }}>
+                {sop.event}
+              </span>
+              <span
+                className="ml-auto px-1.5 py-0.5 rounded text-xs font-mono font-bold"
+                style={{ background: `${SEVERITY_COLORS[sop.severity]}20`, color: SEVERITY_COLORS[sop.severity] }}
+              >
+                {sop.severity === "critical" ? "严重" : sop.severity === "high" ? "高危" : sop.severity === "medium" ? "中危" : "低危"}
+              </span>
+            </div>
+            {/* SOP Body: features + steps */}
+            <div className="p-3 text-xs leading-relaxed space-y-1.5">
+              {sop.features && (
+                <div className="flex gap-2">
+                  <span className="font-mono font-bold flex-shrink-0" style={{ color: "var(--accent-amber)" }}>◉ 识别:</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{sop.features}</span>
+                </div>
+              )}
+              {sop.steps && (
+                <div className="flex gap-2">
+                  <span className="font-mono font-bold flex-shrink-0" style={{ color: "var(--accent-green)" }}>▶ 处置:</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{sop.steps}</span>
+                </div>
+              )}
+            </div>
           </div>
         ))}
       </div>
