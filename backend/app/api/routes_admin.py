@@ -339,35 +339,53 @@ async def generate_standard_sop(
 async def stop_ollama_model() -> dict:
     """停止 Ollama 模型并释放内存（通过 keep_alive: 0 立即卸载）."""
     try:
-        # 获取当前加载的模型
-        r = await httpx.AsyncClient(timeout=10).get(f"{settings.OLLAMA_BASE_URL}/api/tags")
-        models = r.json().get("models", []) if r.status_code == 200 else []
-        loaded_models = [m.get("name", "") for m in models]
+        # 获取当前可用的模型列表
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
+            available_models = r.json().get("models", []) if r.status_code == 200 else []
 
-        # 通过 Ollama API 停止所有已加载的模型（设置 keep_alive=0 立即释放内存）
-        async with httpx.AsyncClient(timeout=30) as client:
-            for model in models:
+        stopped_models = []
+        errors = []
+
+        # 对每个已安装的模型，尝试卸载（设置 keep_alive=0）
+        async with httpx.AsyncClient(timeout=60) as client:
+            for model in available_models:
                 model_name = model.get("name", "")
                 if model_name:
                     try:
-                        # 方式1: 使用 /api/generate 的 keep_alive 参数
-                        await client.post(
+                        # 使用 generate API 发送一个最小请求，设置 keep_alive=0 立即释放
+                        resp = await client.post(
                             f"{settings.OLLAMA_BASE_URL}/api/generate",
                             json={
                                 "model": model_name,
-                                "prompt": "",  # 空 prompt
-                                "keep_alive": 0,  # 立即释放内存
+                                "prompt": ".",
+                                "stream": False,
+                                "options": {"num_predict": 1},
+                                "keep_alive": 0,  # 关键：立即从内存卸载
                             },
                         )
-                        print(f"[Ollama] 已停止模型: {model_name}")
+                        if resp.status_code == 200:
+                            stopped_models.append(model_name)
+                            print(f"[Ollama] ✓ 已卸载模型: {model_name}")
+                        else:
+                            errors.append(f"{model_name}: {resp.status_code}")
+                            print(f"[Ollama] ✗ 卸载失败 {model_name}: {resp.status_code}")
                     except Exception as e:
-                        print(f"[Ollama] 停止模型 {model_name} 失败: {e}")
+                        errors.append(f"{model_name}: {str(e)}")
+                        print(f"[Ollama] ✗ 卸载异常 {model_name}: {e}")
 
-        return {
-            "ok": True,
-            "message": "已停止 Ollama 模型并释放内存",
-            "stopped_models": loaded_models,
-        }
+        if stopped_models:
+            return {
+                "ok": True,
+                "message": f"已释放 {len(stopped_models)} 个模型，共 {sum(m.get('size', 0) for m in available_models if m.get('name') in stopped_models) / 1024 / 1024 / 1024:.1f}GB 内存",
+                "stopped_models": stopped_models,
+                "errors": errors if errors else None,
+            }
+        elif errors:
+            return {"ok": False, "error": "部分模型卸载失败", "details": errors}
+        else:
+            return {"ok": True, "message": "无加载中的模型", "stopped_models": []}
+
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
