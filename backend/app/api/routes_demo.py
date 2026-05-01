@@ -786,52 +786,63 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             parts = [f"{label} {count}个" for label, count in sorted(categories.items())]
             detection_summary = f"【YOLO检测摘要】检测到：{', '.join(parts)}。"
 
-    system_prompt = f"""你是高速公路航拍图像安全分析专家。
+    system_prompt = f"""你是一个高速公路航拍图像智能分析系统，只分析当前帧的静态画面给出 JSON 输出。
 
-【重要约束 - 静态帧分析】
-你只能分析当前帧的静态信息，无法判断时序状态（如车辆是否静止、移动方向）。
-因此请基于以下静态可观测要素进行分析：
+【检测目标】请识别以下 5 类道路异常（必须精确分类）：
+  1. collision   — 交通事故/碰撞（多车聚集静止、有碰撞痕迹）
+  2. pothole     — 路面塌陷/坑洞（路面深色凹陷、纹理断裂）
+  3. obstacle    — 道路障碍物（异物占据车道、货物散落）
+  4. pedestrian  — 行人闯入（行人在行车道或应急车道）
+  5. congestion  — 交通拥堵（车流减速聚集、排队延伸）
+  0. none        — 正常（车辆匀速、无行人、无障碍）
 
-【静态可判断要素】
-1. 空间位置：物体是否出现在异常位置（路肩/应急车道 vs 正常车道）
-2. 外观特征：车辆是否开启双闪（车顶闪烁光斑）、是否有明显变形/损坏
-3. 聚集模式：多车是否异常聚集（可能交通事故）、间距是否异常
-4. 道路状态：路面是否有坑洞、遗撒物、积水、障碍物
-5. 人员活动：是否有行人/人员在非允许区域
+【识别要点 - 空间位置】
+  - 行人在行车道/应急车道行走 → pedestrian（critical）
+  - 行人在边坡护栏外 → 忽略，不报警
+  - 车辆静止在应急车道+开双闪 → 单车故障（medium），不触发 collision
+  - 车辆静止在主车道 → collision 高风险（critical）
+  - 多车聚集静止+间距近 → collision（high）
+  - 路面有明显深色区域 → pothole
+  - 车道有不明物体/货物散落 → obstacle
+
+【识别要点 - 外观特征】
+  - 车辆开启双闪（车顶闪烁光斑）→ 非正常但优先级低
+  - 可见碰撞变形/散落物 → collision（high~critical）
+  - 车流整体减速聚集 → congestion（medium）
+
+【正常场景特征】
+  - 车辆匀速行驶、保持车距
+  - 应急车道空旷
+  - 无行人在通行区域
+  - 路面平整无坑洞
 
 {detection_summary}
 
-【高速公路场景上下文】
-- 车道分布：正常情况下车辆应沿车道行驶
-- 应急车道：位于最外侧，用于紧急停靠，正常应空旷
-- 路肩：灰色硬化区域，正常应无车辆长时间停靠
-- 正常模式：车辆匀速行驶、保持车距、无行人
-
-【处置规范】（必须遵循）
+【RAG 规范参考】（来自知识库，必须遵循）
 {rag_context if rag_context else '（无相关规范）'}
 
-【输出要求】
-只输出纯JSON，不要任何其他文字：
+【JSON 输出格式 - 严格遵循，不要输出任何额外文字】
 {{
-  "scene_description": "场景描述（50字内）",
+  "incident_type": "collision|pothole|obstacle|pedestrian|congestion|none",
+  "scene_description": "场景描述（30字内）",
   "should_alert": true或false,
   "risk_level": "low|medium|high|critical",
   "title": "预警标题（8字内）",
   "description": "描述（30字内）",
   "recommendation": "建议（40字内）",
-  "confidence": 0.0-1.0
+  "confidence": 0.0到1.0之间的数字
 }}"""
 
-    user_prompt = f"""请分析这张航拍图像，基于静态视觉特征判断是否存在交通安全异常。
+    user_prompt = f"""请分析这张航拍图像。
 
-【分析重点】
-1. 观察整体场景类型（直道/弯道/立交/收费站）
-2. 检查车辆位置是否正常（是否压线/骑车道/停在应急车道）
-3. 观察是否有异常聚集、静止不动的车辆
-4. 检查路面是否有坑洞、遗撒物、积水
-5. 是否有行人或非机动车在非允许区域
+重点检查：
+1. 是否有行人在行车道或应急车道？（pedestrian）
+2. 是否有车辆聚集静止在主车道？（collision）
+3. 路面是否有坑洞或塌陷区域？（pothole）
+4. 车道是否有障碍物或散落物？（obstacle）
+5. 车流是否整体减速聚集？（congestion）
 
-直接输出JSON结果。"""
+请严格按 JSON 格式输出，不要输出任何解释。"""
 
     payload = {
         "model": model,
@@ -861,15 +872,23 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             json_str = clean_raw[start:end]
             try:
                 result = json.loads(json_str)
-                # 验证必需字段
+                # 规范化 incident_type
+                incident_type = str(result.get("incident_type", "none")).lower()
+                if incident_type not in ["collision", "pothole", "obstacle", "pedestrian", "congestion", "none"]:
+                    incident_type = "none"
+                result["incident_type"] = incident_type
+                # 规范化 should_alert
+                result["should_alert"] = bool(result.get("should_alert", False))
+                # 规范化 should_alert based on incident_type if not set
+                if not result.get("should_alert") and incident_type not in ["none"]:
+                    result["should_alert"] = True
+                # 验证 scene_description 和 risk_level
                 if result.get("scene_description") and result.get("risk_level"):
                     # 规范化 risk_level
                     risk = str(result.get("risk_level", "low")).lower()
                     if risk not in ["low", "medium", "high", "critical"]:
                         risk = "low"
                     result["risk_level"] = risk
-                    # 规范化 should_alert
-                    result["should_alert"] = bool(result.get("should_alert", False))
                     # 规范化 confidence
                     conf = float(result.get("confidence", 0.5))
                     result["confidence"] = max(0.0, min(1.0, conf))
@@ -881,7 +900,17 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
         try:
             single_line = _re.sub(r'\s+', ' ', clean_raw)
             result = json.loads(single_line)
-            if result.get("scene_description"):
+            if result.get("scene_description") and result.get("risk_level"):
+                # 规范化
+                incident_type = str(result.get("incident_type", "none")).lower()
+                if incident_type not in ["collision", "pothole", "obstacle", "pedestrian", "congestion", "none"]:
+                    incident_type = "none"
+                result["incident_type"] = incident_type
+                result["should_alert"] = bool(result.get("should_alert", incident_type not in ["none"]))
+                risk = str(result.get("risk_level", "low")).lower()
+                if risk not in ["low", "medium", "high", "critical"]:
+                    risk = "low"
+                result["risk_level"] = risk
                 return result
         except:
             pass
@@ -889,6 +918,7 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
         # 4. 最后回退：使用原始文本前100字符
         fallback_desc = raw[:100].strip() if raw else "分析失败"
         return {
+            "incident_type": "none",
             "scene_description": fallback_desc,
             "should_alert": False,
             "risk_level": "low",
@@ -899,6 +929,7 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
         }
     except Exception:
         return {
+            "incident_type": "none",
             "scene_description": "分析失败",
             "should_alert": False,
             "risk_level": "low",
@@ -1258,13 +1289,13 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 })}\n\n".encode())
 
                 # Decision: 基于检测结果生成预警
-                # 判断是否有异常（目前简化处理：只检测到车辆就是正常）
                 has_incident = False
                 risk_level = "low"
                 title = "道路通行正常"
                 description = scene_desc
                 recommendation = "持续监控，暂无预警处置建议。"
                 confidence = 0.85
+                incident_type = "none"
 
                 # 如果有行人，可能是安全隐患
                 if person_count > 0 and person_count >= 1:
@@ -1273,8 +1304,10 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     title = "行人检测告警"
                     recommendation = "持续跟踪行人位置，通知相关部门关注。"
                     confidence = 0.75
+                    incident_type = "pedestrian"
 
                 decision_result = {
+                    "incident_type": incident_type,
                     "has_incident": has_incident,
                     "risk_level": risk_level,
                     "title": title,
@@ -1372,19 +1405,41 @@ async def _rag_retrieve(query: str, top_k: int = 3) -> str:
     if not nodes:
         return "[RAG] ⚠️ 警告: 未检索到相关 SOP 知识，依赖模型通用推理"
 
-    # 格式化检索结果：完整返回每条 SOP 的实质性内容，供前端结构化展示
+    # 格式化检索结果：结构化为 incident_type | 严重程度 | 识别特征 | 建议
+    # 这些字段与 Gemma 的 JSON 输出字段直接对应
     results = []
-    SKIP_PREFIXES = ("类别：", "响应时间：", "响应:")
     for i, node in enumerate(nodes, 1):
         lines = node.text.split("\n")
-        content_lines = [
-            ln.strip()
-            for ln in lines
-            if ln.strip() and not any(ln.strip().startswith(p) for p in SKIP_PREFIXES)
-        ]
-        # 取前 3 行实质性内容（事件 / 识别特征 / 处置流程）
-        body = " | ".join(content_lines[:3])
-        results.append(f"[SOP-{i}] {body}" if body else f"[SOP-{i}] {content_lines[0][:120] if content_lines else f'SOP-{i}'}")
+        # 解析各字段
+        event = severity = features = recommendation = ""
+        for ln in lines:
+            ln = ln.strip()
+            if not ln:
+                continue
+            if ln.startswith("事件："):
+                event = ln[3:].strip()
+            elif ln.startswith("严重程度："):
+                severity = ln[5:].strip()
+            elif ln.startswith("识别特征："):
+                features = ln[5:].strip()
+            elif ln.startswith("处置建议："):
+                recommendation = ln[5:].strip()
+        # 推断 incident_type 从事件名
+        incident_type = "none"
+        ename = event.lower()
+        if "追尾" in ename or "碰撞" in ename or "事故" in ename:
+            incident_type = "collision"
+        elif "坑洞" in ename or "塌陷" in ename or "路面" in ename:
+            incident_type = "pothole"
+        elif "障碍" in ename or "遗撒" in ename or "散落" in ename:
+            incident_type = "obstacle"
+        elif "行人" in ename or "闯入" in ename:
+            incident_type = "pedestrian"
+        elif "拥堵" in ename or "排队" in ename:
+            incident_type = "congestion"
+        # 组装紧凑格式（与 Gemma 5 类完全对齐）
+        body = f"{incident_type} | {severity} | 识别：{features} | 建议：{recommendation}"
+        results.append(f"[SOP-{i}] {body}")
 
     return "\n".join(results)
 
@@ -1605,18 +1660,16 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 )
                 # 使用 Gemma 返回的结果
                 scene_desc = gemma_result.get("scene_description", scene_desc)
+                incident_type = gemma_result.get("incident_type", "none")
                 risk_level = gemma_result.get("risk_level", "low")
                 title = gemma_result.get("title", "道路通行正常")
                 description = gemma_result.get("description", scene_desc)
                 recommendation = gemma_result.get("recommendation", "持续监控，暂无预警处置建议。")
-                should_alert = gemma_result.get("should_alert", False)
+                should_alert = gemma_result.get("should_alert", incident_type != "none")
                 has_incident = should_alert
-                if risk_level in ["high", "critical"]:
-                    incident_type = "safety_alert"
-                elif should_alert:
-                    incident_type = "anomaly"
             except Exception as e:
                 # Gemma 调用失败时使用备用描述
+                incident_type = "none"
                 if detection_details:
                     car_count = sum(1 for d in detection_details if 'car' in d.get('label', '').lower())
                     person_count = sum(1 for d in detection_details if 'person' in d.get('label', '').lower())
@@ -1647,13 +1700,14 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             })}\n\n".encode()
             await asyncio.sleep(0.3)  # 等待前端渲染 decision running 状态
 
-            gemma_confidence = gemma_result.get("confidence", 0.85) if 'gemma_result' in dir() else 0.85
+            gemma_confidence = gemma_result.get("confidence", 0.85) if gemma_result else 0.85
 
             yield f"event: stage\ndata: {json.dumps({
                 'stage': 'decision',
                 'progress': frame_base + 80,
                 'status': 'done',
                 'detail': {
+                    'incident_type': incident_type,
                     'has_incident': has_incident,
                     'risk_level': risk_level,
                     'title': title,
@@ -1677,6 +1731,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'source_type': 'demo',
                 'source_path': str(video_path.name),
                 'detection_details': detection_details,
+                'incident_type': incident_type,
             }
             yield f"event: alert\ndata: {json.dumps(alert_payload)}\n\n".encode()
             # 保存预警到数据库

@@ -1284,26 +1284,44 @@ const SEVERITY_COLORS: Record<string, string> = {
   low:      "var(--accent-green)",
 }
 
-function parseSOP(snippet: string): { event: string; severity: string; features: string; steps: string } {
-  const parts: Record<string, string> = {}
-  // 去除 [SOP-X] 前缀再解析
+// incident_type → 中文名称映射
+const INCIDENT_TYPE_NAMES: Record<string, string> = {
+  collision:   "交通事故",
+  pothole:     "路面塌陷",
+  obstacle:    "道路障碍",
+  pedestrian:  "行人闯入",
+  congestion:  "交通拥堵",
+  none:        "正常通行",
+}
+
+function parseSOP(snippet: string): { incident_type: string; severity: string; features: string; recommendation: string } {
+  // 去除 [SOP-X] 前缀
   const clean = snippet.replace(/^\[SOP-\d+\]\s*/, "")
+  const parts: Record<string, string> = {}
+  // 格式: incident_type | severity | 识别：... | 建议：...
   const segments = clean.split("|").map(s => s.trim())
   for (const seg of segments) {
     const colonIdx = seg.indexOf("：")
-    if (colonIdx === -1) continue
-    const key = seg.slice(0, colonIdx).trim()
-    const val = seg.slice(colonIdx + 1).trim()
-    if (key === "事件") parts.event = val
-    else if (key === "严重程度") parts.severity = val
-    else if (key === "识别特征") parts.features = val
-    else if (key === "处置流程") parts.steps = val
+    if (colonIdx === -1) {
+      // 没有冒号的是 incident_type 或 severity
+      const lower = seg.toLowerCase()
+      if (["collision","pothole","obstacle","pedestrian","congestion","none"].includes(lower)) {
+        parts.incident_type = seg
+      } else if (["critical","high","medium","low"].includes(lower)) {
+        parts.severity = seg
+      }
+    } else {
+      const key = seg.slice(0, colonIdx).trim()
+      const val = seg.slice(colonIdx + 1).trim()
+      if (key === "识别") parts.features = val
+      else if (key === "建议") parts.recommendation = val
+    }
   }
   return {
-    event: parts.event || clean,
+    incident_type: parts.incident_type || "none",
     severity: parts.severity || "low",
     features: parts.features || "",
-    steps: parts.steps || "",
+    recommendation: parts.recommendation || "",
   }
 }
 
@@ -1329,32 +1347,35 @@ function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: s
       </div>
       {/* Body */}
       <div className="p-3 space-y-2">
-        {sops.map((sop, i) => (
+        {sops.map((sop, i) => {
+          const color = SEVERITY_COLORS[sop.severity] || "var(--border)"
+          const typeLabel = INCIDENT_TYPE_NAMES[sop.incident_type] || sop.incident_type
+          return (
           <div
             key={`${sceneKey}-${i}`}
             className="rounded-lg overflow-hidden"
             style={{
               animation: `slideIn 0.4s ease-out ${i * 0.3}s both`,
-              border: `1px solid ${SEVERITY_COLORS[sop.severity] || "var(--border)"}30`,
-              borderLeft: `3px solid ${SEVERITY_COLORS[sop.severity] || "var(--border)"}`,
+              border: `1px solid ${color}30`,
+              borderLeft: `3px solid ${color}`,
             }}
           >
-            {/* SOP Header: event name + severity badge */}
+            {/* SOP Header: incident type badge + severity */}
             <div
               className="flex items-center gap-2 px-3 py-2"
-              style={{ background: `${SEVERITY_COLORS[sop.severity] || "var(--border)"}0a`, borderBottom: `1px solid ${SEVERITY_COLORS[sop.severity] || "var(--border)"}15` }}
+              style={{ background: `${color}0a`, borderBottom: `1px solid ${color}15` }}
             >
-              <span className="text-xs font-mono font-bold" style={{ color: SEVERITY_COLORS[sop.severity] }}>
-                {sop.event}
+              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: `${color}20`, color }}>
+                {typeLabel}
               </span>
               <span
                 className="ml-auto px-1.5 py-0.5 rounded text-xs font-mono font-bold"
-                style={{ background: `${SEVERITY_COLORS[sop.severity]}20`, color: SEVERITY_COLORS[sop.severity] }}
+                style={{ background: `${color}20`, color }}
               >
                 {sop.severity === "critical" ? "严重" : sop.severity === "high" ? "高危" : sop.severity === "medium" ? "中危" : "低危"}
               </span>
             </div>
-            {/* SOP Body: features + steps */}
+            {/* SOP Body: features + recommendation */}
             <div className="p-3 text-xs leading-relaxed space-y-1.5">
               {sop.features && (
                 <div className="flex gap-2">
@@ -1362,15 +1383,15 @@ function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: s
                   <span style={{ color: "var(--text-secondary)" }}>{sop.features}</span>
                 </div>
               )}
-              {sop.steps && (
+              {sop.recommendation && (
                 <div className="flex gap-2">
-                  <span className="font-mono font-bold flex-shrink-0" style={{ color: "var(--accent-green)" }}>▶ 处置:</span>
-                  <span style={{ color: "var(--text-secondary)" }}>{sop.steps}</span>
+                  <span className="font-mono font-bold flex-shrink-0" style={{ color: "var(--accent-green)" }}>▶ 建议:</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{sop.recommendation}</span>
                 </div>
               )}
             </div>
           </div>
-        ))}
+        )})}
       </div>
     </div>
   )
