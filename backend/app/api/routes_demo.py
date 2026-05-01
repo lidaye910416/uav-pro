@@ -1372,12 +1372,18 @@ async def _rag_retrieve(query: str, top_k: int = 3) -> str:
     if not nodes:
         return "[RAG] ⚠️ 警告: 未检索到相关 SOP 知识，依赖模型通用推理"
 
-    # 格式化检索结果：只取每条 SOP 的摘要行（前120字符），避免元数据混入
+    # 格式化检索结果：只取 SOP 的实质内容行，过滤掉元数据头
     results = []
+    SKIP_PREFIXES = ("类别：", "严重程度：", "响应时间：", "响应:")
     for i, node in enumerate(nodes, 1):
-        # 取文档第一行作为摘要（通常是 类别 + 事件）
-        first_line = node.text.split('\n')[0].strip()
-        summary = first_line[:120] if first_line else f"SOP-{i}"
+        # 取文档前120字符内容（跳过元数据头行）
+        lines = node.text.split("\n")
+        content_lines = [ln.strip() for ln in lines if not any(ln.strip().startswith(p) for p in SKIP_PREFIXES)]
+        # 取第一条实质性内容行
+        if content_lines:
+            summary = content_lines[0][:120]
+        else:
+            summary = f"SOP-{i}"
         results.append(f"[SOP-{i}] {summary}")
 
     return "\n".join(results)
