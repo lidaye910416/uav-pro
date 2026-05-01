@@ -786,35 +786,49 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             parts = [f"{label} {count}个" for label, count in sorted(categories.items())]
             detection_summary = f"【YOLO检测摘要】检测到：{', '.join(parts)}。"
 
-    # Gemma 图像分析：只输出结构化场景属性，不做决策
-    # 决策由 Decision LLM 结合 RAG SOP 完成
-    system_prompt = f"""你是一个高速公路航拍图像场景特征提取专家。
-【角色】只做图像感知，输出结构化的场景属性。不要输出任何决策或预警内容。
-
-【检测类型】（5类 + 正常）
-  collision   — 交通事故/碰撞：多车聚集静止、可见碰撞痕迹
-  pothole     — 路面塌陷/坑洞：路面深色凹陷、纹理断裂
-  obstacle    — 道路障碍物：异物占据车道、货物散落
-  pedestrian  — 行人闯入：行人在行车道或应急车道
-  congestion  — 交通拥堵：车流减速聚集、排队延伸
-  none        — 正常：无以上异常
+    # Gemma 图像分析：仅基于单帧静态特征提取场景属性，不做决策
+    # 静态帧可观测：位置/数量/间距/灯光/痕迹/障碍，不包含速度/加速度等动态信息
+    system_prompt = f"""你是一个高速公路航拍图像静态特征提取专家。
+【角色】仅观测当前帧的静态画面，输出结构化场景特征。不要输出任何决策、预警或动态判断。
 
 {detection_summary}
 
-【识别要点】
-  - 行人在行车道/应急车道行走 → pedestrian
-  - 行人在边坡护栏外 → none（忽略）
-  - 车辆静止在主车道+间距近 → collision
-  - 车辆静止在应急车道+开双闪 → none（正常故障处理）
-  - 路面有明显深色凹陷/纹理断裂 → pothole
-  - 车道有不明物体/货物散落 → obstacle
-  - 车流整体减速聚集排队 → congestion
-  - 车辆匀速行驶+保持车距+应急车道空旷 → none
+【单帧可观测特征】（仅观察，不要推测）
+  ✓ 车道占用情况（哪些车道被占用）
+  ✓ 目标数量和位置（车辆/行人/物体的精确位置）
+  ✓ 目标间距（车辆之间的空间密度）
+  ✓ 车辆警示灯（双闪灯闪烁光斑 = 静止/故障车辆）
+  ✓ 碰撞痕迹（车辆变形、玻璃碎片、散落物）
+  ✓ 坑洞凹陷（路面深色区域、纹理断裂）
+  ✓ 障碍物（异物、散落物占据车道）
+  ✗ 车速/加速度/运动轨迹（单帧无法判断）
+  ✗ 排队是否在延伸（需要多帧对比）
 
-【输出格式 - 仅输出JSON，不要任何解释】
+【5类异常识别规则】（基于静态特征）
+  collision   — 主车道有车辆聚集 + （双闪灯 OR 碰撞痕迹 OR 间距很近）→ 高可信度
+                主车道有车辆聚集 + 间距很近但无明显痕迹 → 中等可疑
+  pothole     — 路面有明显深色凹陷或纹理断裂区域
+  obstacle    — 车道内有不明物体、货物散落
+  pedestrian  — 行人在主车道或应急车道内（边坡护栏外不计入）
+  congestion  — 单车道≥5辆聚集 + 间距很近；或所有车道均密集 + 车辆排队长
+
+【场景间距判断标准】（单帧判断）
+  很近：车辆间距≤1个车身，车头几乎相接
+  近：车辆间距约1-2个车身，可见但紧密
+  一般：车辆间距约2-3个车身，正常跟车距离
+  远：车辆间距≥3个车身，明显稀疏
+
+【正常场景特征】
+  - 车辆间距一般或远，保持正常跟车距离
+  - 主车道和应急车道均无异常占用
+  - 无行人在通行区域
+  - 路面平整，无坑洞和障碍物
+  - 有双闪灯的车辆仅在应急车道且不影响主路
+
+【输出格式 - 仅输出JSON，不要任何其他文字】
 {{
   "incident_type": "collision|pothole|obstacle|pedestrian|congestion|none",
-  "scene_description": "场景描述（40字内）",
+  "scene_description": "场景描述（40字内，基于当前帧可观测内容）",
   "spatial_features": {{
     "lane_occupied": "主车道|应急车道|所有车道|无",
     "object_count": 数字,
@@ -828,21 +842,20 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
     "pothole_visible": true或false,
     "queue_forming": true或false
   }},
-  "vehicle_state": "匀速行驶|减速|静止|加速逃离|混合|未知",
-  "suggested_severity": "critical|high|medium|low|none",
+  "density_assessment": "密集|正常|稀疏",
   "confidence": 0.0到1.0之间的数字
 }}"""
 
-    user_prompt = """请分析这张航拍图像，仅输出JSON，不要有任何解释文字。
+    user_prompt = """请分析这张航拍图像的静态画面特征。
 
-依次回答：
-1. 是否有行人在通行区域？
-2. 是否有车辆聚集静止在主车道？
-3. 路面是否有坑洞或塌陷区域？
-4. 车道是否有障碍物或散落物？
-5. 车流是否减速聚集形成排队？
+观测要点：
+1. 哪些车道被占用？目标数量和位置？
+2. 车辆间距如何（很近/近/一般/远）？
+3. 有没有开启双闪灯的车辆（闪烁光斑）？
+4. 有没有碰撞痕迹、散落物、坑洞、障碍物？
+5. 有没有行人在主车道或应急车道内？
 
-严格按 JSON 格式输出，不要输出任何解释。"""
+请严格按 JSON 格式输出，不要输出任何解释。"""
 
     payload = {
         "model": model,
@@ -880,13 +893,18 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
                 # 规范化 confidence
                 conf = float(result.get("confidence", 0.5))
                 result["confidence"] = max(0.0, min(1.0, conf))
-                # 规范化 suggested_severity
-                sev = str(result.get("suggested_severity", "none")).lower()
-                if sev not in ["critical", "high", "medium", "low", "none"]:
-                    sev = "none"
-                result["suggested_severity"] = sev
+                # 规范化 density_assessment
+                density = str(result.get("density_assessment", "正常")).lower()
+                if density not in ["密集", "正常", "稀疏"]:
+                    density = "正常"
+                result["density_assessment"] = density
+                # 确保 spatial_features 和 visual_features 有默认值
+                if "spatial_features" not in result:
+                    result["spatial_features"] = {}
+                if "visual_features" not in result:
+                    result["visual_features"] = {}
                 return result
-            except (json.JSONDecodeError, ValueError) as e:
+            except (json.JSONDecodeError, ValueError):
                 pass
 
         # 3. 回退：尝试单行 JSON
@@ -898,8 +916,10 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
                 incident_type = "none"
             result["incident_type"] = incident_type
             result["confidence"] = max(0.0, min(1.0, float(result.get("confidence", 0.5))))
-            sev = str(result.get("suggested_severity", "none")).lower()
-            result["suggested_severity"] = sev if sev in ["critical", "high", "medium", "low", "none"] else "none"
+            density = str(result.get("density_assessment", "正常")).lower()
+            result["density_assessment"] = density if density in ["密集", "正常", "稀疏"] else "正常"
+            result.setdefault("spatial_features", {})
+            result.setdefault("visual_features", {})
             return result
         except:
             pass
@@ -915,8 +935,7 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             "scene_description": raw[:80].strip() if raw else "分析失败",
             "spatial_features": {"lane_occupied": "无", "object_count": 0, "object_positions": [], "distance_between_objects": "无"},
             "visual_features": {"vehicle_hazard_lights": False, "collision_marks": False, "debris_scattered": False, "pothole_visible": False, "queue_forming": False},
-            "vehicle_state": "未知",
-            "suggested_severity": "none",
+            "density_assessment": "正常",
             "confidence": 0.3,
         }
     except Exception:
@@ -925,23 +944,24 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             "scene_description": "分析失败",
             "spatial_features": {"lane_occupied": "无", "object_count": 0, "object_positions": [], "distance_between_objects": "无"},
             "visual_features": {"vehicle_hazard_lights": False, "collision_marks": False, "debris_scattered": False, "pothole_visible": False, "queue_forming": False},
-            "vehicle_state": "未知",
-            "suggested_severity": "none",
+            "density_assessment": "正常",
             "confidence": 0.0,
         }
 
 
 async def _decision_decide(gemma_result: dict, rag_context: str, model: str, timeout: float) -> Optional[dict]:
-    """Decision LLM: combine Gemma scene features + RAG SOP → final alert JSON.
+    """Decision LLM: combine Gemma static scene features + RAG SOP → final alert JSON.
+
+    Gemma provides only static-frame-observable features. Decision LLM maps these
+    to risk levels and alert decisions based on SOP knowledge.
 
     Args:
-        gemma_result: structured scene features from Gemma image analysis:
+        gemma_result: structured static features from Gemma image analysis:
             - incident_type: collision|pothole|obstacle|pedestrian|congestion|none
             - scene_description: 场景描述
             - spatial_features: {lane_occupied, object_count, object_positions, distance_between_objects}
             - visual_features: {vehicle_hazard_lights, collision_marks, debris_scattered, pothole_visible, queue_forming}
-            - vehicle_state: 匀速行驶|减速|静止|加速逃离|混合|未知
-            - suggested_severity: critical|high|medium|low|none
+            - density_assessment: 密集|正常|稀疏
             - confidence: 0.0-1.0
         rag_context: RAG SOP knowledge from ChromaDB
         model: Ollama model name
@@ -952,39 +972,38 @@ async def _decision_decide(gemma_result: dict, rag_context: str, model: str, tim
     incident_type = gemma_result.get("incident_type", "none")
     spatial = gemma_result.get("spatial_features", {})
     visual = gemma_result.get("visual_features", {})
-    vehicle_state = gemma_result.get("vehicle_state", "未知")
+    density = gemma_result.get("density_assessment", "正常")
     scene_desc = gemma_result.get("scene_description", "")
-    suggested_sev = gemma_result.get("suggested_severity", "none")
     confidence = gemma_result.get("confidence", 0.5)
 
-    # 构建场景特征摘要（给 Decision LLM 用）
-    scene_features_summary = f"""【Gemma图像分析结果】
+    # 构建场景静态特征摘要（给 Decision LLM 做判断）
+    scene_features_summary = f"""【Gemma静态图像分析结果】
 异常类型：{incident_type}
 场景描述：{scene_desc}
 车道占用：{spatial.get('lane_occupied', '无')}
 目标数量：{spatial.get('object_count', 0)}
 目标位置：{', '.join(spatial.get('object_positions', [])) or '无'}
 目标间距：{spatial.get('distance_between_objects', '无')}
-车辆双闪：{'是' if visual.get('vehicle_hazard_lights') else '否'}
+空间密度：{density}
+车辆双闪：{'是（车辆可能静止/故障）' if visual.get('vehicle_hazard_lights') else '否'}
 碰撞痕迹：{'有' if visual.get('collision_marks') else '无'}
 散落物：{'有' if visual.get('debris_scattered') else '否'}
-坑洞：{'有' if visual.get('pothole_visible') else '否'}
+坑洞可见：{'是' if visual.get('pothole_visible') else '否'}
 排队形成：{'是' if visual.get('queue_forming') else '否'}
-车辆状态：{vehicle_state}
-分析置信度：{confidence:.0%}
-建议严重程度：{suggested_sev}"""
+分析置信度：{confidence:.0%}"""
 
     system_prompt = (
         "你是一个高速公路安全预警决策专家。"
-        "根据图像分析结果和处置规范，输出最终预警决策。"
+        "根据静态图像分析结果（仅含当前帧可观测特征）和处置规范，输出最终预警决策。"
+        "注意：不要推测车速、加速度等动态信息，只基于可观测静态特征做判断。"
         "严格按JSON格式输出，不要添加任何解释。"
     )
     user_prompt = f"""{scene_features_summary}
 
-【RAG处置规范参考】
+【RAG处置规范参考】（来自知识库）
 {rag_context if rag_context else "（无相关规范，请自行判断）"}
 
-请综合以上信息，输出最终预警决策（仅JSON，不要任何解释）：
+请综合以上静态特征和处置规范，输出最终预警决策（仅JSON，不要任何解释）：
 {{"incident_type":"collision|pothole|obstacle|pedestrian|congestion|none","should_alert":true或false,"risk_level":"low|medium|high|critical","title":"预警标题（8字内）","description":"描述（30字内）","recommendation":"建议（40字内）","confidence":0.0到1.0之间"}}"""
 
     payload = {
@@ -1014,13 +1033,16 @@ async def _decision_decide(gemma_result: dict, rag_context: str, model: str, tim
         json_match = _re.search(r"\{[^{}]*\}", raw, _re.DOTALL)
         if json_match:
             try:
-                return json.loads(json_match.group())
+                result = json.loads(json_match.group())
             except:
-                pass
+                result = None
+        else:
+            try:
+                result = json.loads(raw)
+            except:
+                result = None
 
-        try:
-            result = json.loads(raw)
-        except:
+        if not result:
             return None
 
         # 规范化所有字段
@@ -1034,9 +1056,21 @@ async def _decision_decide(gemma_result: dict, rag_context: str, model: str, tim
             should_alert = True
         result["should_alert"] = should_alert
 
-        risk = str(result.get("risk_level", suggested_sev)).lower()
+        # 基于静态特征的默认 risk_level 回退逻辑
+        default_risk = "low"
+        if incident_type != "none":
+            if visual.get("collision_marks") or spatial.get("lane_occupied") == "所有车道":
+                default_risk = "critical"
+            elif visual.get("debris_scattered") or spatial.get("lane_occupied") == "主车道":
+                default_risk = "high"
+            elif density == "密集":
+                default_risk = "medium"
+            else:
+                default_risk = "medium"
+
+        risk = str(result.get("risk_level", default_risk)).lower()
         if risk not in ["low", "medium", "high", "critical"]:
-            risk = suggested_sev if suggested_sev in ["low", "medium", "high", "critical"] else "low"
+            risk = default_risk
         result["risk_level"] = risk
 
         result["confidence"] = max(0.0, min(1.0, float(result.get("confidence", confidence))))
@@ -1362,15 +1396,14 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                         "scene_description": scene_desc,
                         "spatial_features": {"lane_occupied": "无", "object_count": car_count + truck_count + person_count, "object_positions": [], "distance_between_objects": "一般"},
                         "visual_features": {"vehicle_hazard_lights": False, "collision_marks": False, "debris_scattered": False, "pothole_visible": False, "queue_forming": False},
-                        "vehicle_state": "匀速行驶",
-                        "suggested_severity": "none",
+                        "density_assessment": "正常",
                         "confidence": 0.5,
                     }
 
                 # 用 Gemma 的 scene_description 替换硬编码版本
                 gemma_scene_desc = gemma_result.get("scene_description", scene_desc)
                 gemma_incident_type = gemma_result.get("incident_type", "none")
-                gemma_severity = gemma_result.get("suggested_severity", "none")
+                gemma_density = gemma_result.get("density_assessment", "正常")
 
                 # Vision done（Gemma 结构化场景属性透传给前端）
                 identify_payload = json.dumps({
@@ -1395,10 +1428,22 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 except Exception:
                     decision_result = {}
 
-                # 如果 Decision LLM 失败，基于 Gemma 结果回退
+                # 如果 Decision LLM 失败，基于 Gemma 静态特征做回退
                 if not decision_result:
                     has_incident = gemma_incident_type != "none"
-                    risk_level = gemma_severity if gemma_severity in ["low", "medium", "high", "critical"] else "low"
+                    # 基于静态特征的 risk_level 回退
+                    if gemma_incident_type == "pedestrian":
+                        risk_level = "critical"
+                    elif gemma_incident_type == "collision" and gemma_result.get("visual_features", {}).get("collision_marks"):
+                        risk_level = "critical"
+                    elif gemma_incident_type == "collision":
+                        risk_level = "high"
+                    elif gemma_incident_type in ["obstacle", "pothole"]:
+                        risk_level = "medium"
+                    elif gemma_incident_type == "congestion":
+                        risk_level = "medium" if gemma_density == "密集" else "low"
+                    else:
+                        risk_level = "low"
                     title = "道路通行正常" if not has_incident else f"检测到{gemma_incident_type}异常"
                     description = gemma_scene_desc
                     recommendation = "持续监控，暂无预警处置建议。" if not has_incident else "已通知相关部门关注，请持续跟踪。"
@@ -1406,7 +1451,7 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     incident_type = gemma_incident_type
                 else:
                     has_incident = decision_result.get("has_incident", decision_result.get("should_alert", gemma_incident_type != "none"))
-                    risk_level = decision_result.get("risk_level", gemma_severity)
+                    risk_level = decision_result.get("risk_level", "low")
                     title = decision_result.get("title", "道路通行正常")
                     description = decision_result.get("description", gemma_scene_desc)
                     recommendation = decision_result.get("recommendation", "持续监控，暂无预警处置建议。")
