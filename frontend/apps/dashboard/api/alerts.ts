@@ -1,13 +1,6 @@
-// 从环境变量读取 API 地址，或使用 services.json 中的默认配置
-const getApiBase = () => {
-  if (process.env.NEXT_PUBLIC_API_BASE) {
-    return process.env.NEXT_PUBLIC_API_BASE
-  }
-  // 从 services.json 读取默认配置
-  return 'http://localhost:8888'
-}
+import { API } from "@frontend/config"
 
-const API_BASE = `${getApiBase()}/api/v1`
+const API_BASE = `${API.BASE}/api/v1`
 
 export interface Alert {
   id: number

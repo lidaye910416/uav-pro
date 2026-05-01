@@ -21,7 +21,8 @@ interface StageCardData {
   combinedImageUrl?: string  // URL to annotated image from Stage 1
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+import { API } from "@frontend/config"
+const API_BASE = API.BASE
 const DEMO_STREAM_URL = `${API_BASE}/api/v1/demo/stream`
 const DEMO_SEED_URL = `${API_BASE}/api/v1/demo/seed`
 

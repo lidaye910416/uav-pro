@@ -5,7 +5,7 @@ import TopHeader from "@/components/TopHeader"
 import LoginPage from "@/components/LoginPage"
 import { usePathname } from "next/navigation"
 
-const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:4000"
+import { NAV } from "@frontend/config"
 
 const NAV_ITEMS = [
   { href: "/", label: "系统概览", icon: "◈", section: "overview" },
@@ -103,7 +103,7 @@ function Sidebar() {
           <div className="text-sm font-mono mt-0.5" style={{ color: "var(--accent-green)" }}>● ALL SYSTEMS OK</div>
         </div>
         <a
-          href={SHOWCASE_URL}
+          href={NAV.TO_SHOWCASE}
           target="_blank"
           rel="noopener noreferrer"
           className="block text-center mt-2 text-sm py-2 rounded-lg transition-all hover:brightness-110"

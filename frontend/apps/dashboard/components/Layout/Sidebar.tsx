@@ -1,8 +1,8 @@
 "use client"
 import Link from "next/link"
 
-const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:4000"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:4002"
+import { NAV } from "@frontend/config"
+
 
 const navItems = [
   { href: "/", label: "◉ 控制台", icon: "◉" },
@@ -60,7 +60,7 @@ export default function Sidebar() {
         <a href={SHOWCASE_URL} target="_blank" rel="noopener noreferrer" className="block text-center mt-3 text-xs py-2 transition-colors" style={{ color: "var(--text-muted)" }}>
           ← 展示首页
         </a>
-        <a href={ADMIN_URL} target="_blank" rel="noopener noreferrer" className="block text-center mt-2 text-xs py-2 transition-colors" style={{ color: "var(--text-muted)" }}>
+        <a href={NAV.TO_ADMIN} target="_blank" rel="noopener noreferrer" className="block text-center mt-2 text-xs py-2 transition-colors" style={{ color: "var(--text-muted)" }}>
           ⚙ 管理后台
         </a>
       </div>

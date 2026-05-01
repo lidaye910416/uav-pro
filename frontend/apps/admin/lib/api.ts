@@ -1,6 +1,7 @@
-// 从环境变量读取 API 地址
-const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-const API_BASE = `${getApiBase()}/api/v1`
+import { API } from "@frontend/config"
+
+// 从环境变量读取 API 地址（已通过 @frontend/config 统一管理）
+const API_BASE = `${API.BASE}/api/v1`
 
 export interface StreamInfo {
   id: string

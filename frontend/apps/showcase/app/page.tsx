@@ -585,21 +585,21 @@ export default function HomePage() {
                 {/* CTA */}
                 <div className="flex items-center gap-3 flex-wrap mb-8" style={{ animation: "fadeIn 0.6s ease-out 0.5s both" }}>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"}/monitor`}
+                    href={`${NAV.TO_DASHBOARD}`}
                     className="px-7 py-3 rounded-xl font-mono text-sm font-medium tracking-wider transition-all hover:brightness-110"
                     style={{ background: "var(--accent-amber)", color: "#000", boxShadow: "0 0 24px rgba(255,184,0,0.3)" }}
                   >
                     感知中心 →
                   </a>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"}/brain`}
+                    href={`${NAV.TO_DASHBOARD_BRAIN}`}
                     className="px-7 py-3 rounded-xl font-mono text-sm font-medium tracking-wider transition-all hover:brightness-110"
                     style={{ background: "rgba(0,229,160,0.1)", color: "var(--accent-green)", border: "1px solid rgba(0,229,160,0.3)" }}
                   >
                     视觉大脑 →
                   </a>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"}/knowledge`}
+                    href={`${NAV.TO_DASHBOARD_KB}`}
                     className="px-7 py-3 rounded-xl font-mono text-sm font-medium tracking-wider transition-all hover:brightness-110"
                     style={{ background: "rgba(74,158,255,0.08)", color: "var(--accent-blue)", border: "1px solid rgba(74,158,255,0.25)" }}
                   >

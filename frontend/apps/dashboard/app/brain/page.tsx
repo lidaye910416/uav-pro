@@ -1,6 +1,7 @@
 "use client"
 import { useState, useEffect, useRef, useCallback } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
+import { API } from "@frontend/config"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ interface PipelineResult {
   decision: { risk: "low" | "medium" | "high" | "critical"; title: string; recommendation: string; confidence: number }
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+const API_BASE = API.BASE
 
 // ── Demo data ────────────────────────────────────────────────────────────────
 

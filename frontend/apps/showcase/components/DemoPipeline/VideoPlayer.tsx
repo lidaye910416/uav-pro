@@ -12,7 +12,8 @@ interface VideoPlayerProps {
   showROIBadge?: boolean
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+import { API } from "@frontend/config"
+const API_BASE = API.BASE
 
 export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge = false }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)

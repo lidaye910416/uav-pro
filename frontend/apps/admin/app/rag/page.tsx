@@ -2,6 +2,7 @@
 import { useState, useRef } from "react"
 import { useAuth } from "@/components/AuthContext"
 import { ragSearch } from "@/lib/api"
+import { API } from "@frontend/config"
 
 export default function RAGPage() {
   const { user } = useAuth()
@@ -25,7 +26,7 @@ export default function RAGPage() {
     setGenerating(true); setGenMsg(""); setError("")
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = API.BASE
       const res = await fetch(`${API_BASE}/api/v1/admin/sop/generate`, {
         method: "POST",
         headers: {
@@ -52,7 +53,7 @@ export default function RAGPage() {
   // 导入 SOP 到知识库
   async function importSOP(text: string) {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = API.BASE
       await fetch(`${API_BASE}/api/v1/admin/rag/add`, {
         method: "POST",
         headers: {
@@ -96,7 +97,7 @@ export default function RAGPage() {
     formData.append("file", file)
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = API.BASE
       const res = await fetch(`${API_BASE}/api/v1/admin/sop/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${user.token}` },

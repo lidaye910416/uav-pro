@@ -5,7 +5,8 @@ interface DemoThumbnailProps {
   src?: string
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+import { API } from "@frontend/config"
+const API_BASE = API.BASE
 
 export default function DemoThumbnail({ src }: DemoThumbnailProps) {
   const [imgSrc, setImgSrc] = useState<string>("")

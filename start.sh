@@ -10,14 +10,97 @@ NC='\033[0m'
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$PROJECT_ROOT"
 
-# 加载端口配置
+# ============================================================
+# 端口配置 — 只需修改这里，所有服务 + 按钮 URL 自动同步
+# ============================================================
 export BACKEND_PORT=${BACKEND_PORT:-8888}
 export CHROMADB_PORT=${CHROMADB_PORT:-8001}
 export OLLAMA_PORT=${OLLAMA_PORT:-11434}
-# 前端端口：Next.js Turbo 默认 3000/3001/3002
+# 前端端口（Next.js）：修改后 ecosystem.config.js + 按钮 URL 自动更新
 export SHOWCASE_PORT=${SHOWCASE_PORT:-3000}
 export DASHBOARD_PORT=${DASHBOARD_PORT:-3001}
 export ADMIN_PORT=${ADMIN_PORT:-3002}
+
+# 动态生成 ecosystem.config.js（端口换一处就改这里）
+write_ecosystem_config() {
+    cat > "$PROJECT_ROOT/ecosystem.config.js" << EOF
+module.exports = {
+  apps: [
+    {
+      name: 'uav-chromadb',
+      script: 'bash',
+      args: 'start_chromadb.sh',
+      cwd: '$PROJECT_ROOT/backend',
+      interpreter: 'none',
+      autorestart: false,
+      watch: false,
+      env: {
+        PYTHONPATH: '$PROJECT_ROOT/backend'
+      }
+    },
+    {
+      name: 'uav-backend',
+      script: 'bash',
+      args: 'start_backend.sh',
+      cwd: '$PROJECT_ROOT/backend',
+      interpreter: 'none',
+      autorestart: false,
+      watch: false,
+      env: {
+        PYTHONPATH: '$PROJECT_ROOT/backend'
+      }
+    },
+    {
+      name: 'uav-showcase',
+      script: 'bash',
+      args: '-c "PORT=$SHOWCASE_PORT pnpm --filter @uav/showcase dev"',
+      cwd: '$PROJECT_ROOT/frontend',
+      interpreter: 'none',
+      autorestart: false,
+      watch: false,
+    },
+    {
+      name: 'uav-dashboard',
+      script: 'bash',
+      args: '-c "PORT=$DASHBOARD_PORT pnpm --filter @uav/dashboard dev"',
+      cwd: '$PROJECT_ROOT/frontend',
+      interpreter: 'none',
+      autorestart: false,
+      watch: false,
+    },
+    {
+      name: 'uav-admin',
+      script: 'bash',
+      args: '-c "PORT=$ADMIN_PORT pnpm --filter @uav/admin dev"',
+      cwd: '$PROJECT_ROOT/frontend',
+      interpreter: 'none',
+      autorestart: false,
+      watch: false,
+    }
+  ]
+};
+EOF
+    echo "  ecosystem.config.js 已生成（前端端口: $SHOWCASE_PORT / $DASHBOARD_PORT / $ADMIN_PORT）"
+
+    # 生成前端 .env.local 文件（Next.js 读取 NEXT_PUBLIC_* 变量）
+    mkdir -p "$PROJECT_ROOT/frontend/apps/showcase"
+    mkdir -p "$PROJECT_ROOT/frontend/apps/dashboard"
+    mkdir -p "$PROJECT_ROOT/frontend/apps/admin"
+
+    cat > "$PROJECT_ROOT/frontend/apps/showcase/.env.local" << EOF
+NEXT_PUBLIC_BACKEND_PORT=$BACKEND_PORT
+NEXT_PUBLIC_CHROMADB_PORT=$CHROMADB_PORT
+EOF
+    cat > "$PROJECT_ROOT/frontend/apps/dashboard/.env.local" << EOF
+NEXT_PUBLIC_BACKEND_PORT=$BACKEND_PORT
+NEXT_PUBLIC_CHROMADB_PORT=$CHROMADB_PORT
+EOF
+    cat > "$PROJECT_ROOT/frontend/apps/admin/.env.local" << EOF
+NEXT_PUBLIC_BACKEND_PORT=$BACKEND_PORT
+NEXT_PUBLIC_CHROMADB_PORT=$CHROMADB_PORT
+EOF
+    echo "  前端 .env.local 已生成"
+}
 
 # ==================== Ollama 检查 ====================
 start_ollama() {
@@ -33,6 +116,9 @@ start_ollama() {
 
 # ==================== PM2 启动/停止 ====================
 start_all() {
+    echo -e "${YELLOW}生成服务配置...${NC}"
+    write_ecosystem_config
+
     echo -e "${YELLOW}启动所有服务 (PM2)...${NC}"
     pm2 start ecosystem.config.js 2>&1
     sleep 10

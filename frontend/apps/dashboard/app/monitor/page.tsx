@@ -1,5 +1,6 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
+import { API, NAV } from "@frontend/config"
 import Sidebar from "../../components/Layout/Sidebar"
 import { useAlertStream, StreamAlert } from "../../hooks/useAlertStream"
 import { PipelineStageCard } from "../../components/PipelineStageCard"
@@ -28,7 +29,7 @@ const VIDEOS: VideoConfig[] = [
 ]
 
 function buildVideoUrls() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+  const API_BASE = API.BASE
   return VIDEOS.map((v) => ({
     ...v,
     videoUrl: `${API_BASE}/api/v1/demo/video?video_id=${v.id}`,
@@ -617,7 +618,7 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
   const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+    const API_BASE = API.BASE
     fetch(`${API_BASE}/api/v1/admin/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d.alerts_by_risk || {}))
@@ -785,7 +786,7 @@ export default function MonitorPage() {
 
   // Load YOLO params from backend
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+    const API_BASE = API.BASE
     fetch(`${API_BASE}/api/v1/analyze/yolo-params`)
       .then(r => r.json())
       .then((p: any) => setYoloParams({
@@ -798,7 +799,7 @@ export default function MonitorPage() {
 
   const handleYoloParamsChange = useCallback((newParams: YOLOParams) => {
     setYoloParams(newParams)
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+    const API_BASE = API.BASE
     fetch(`${API_BASE}/api/v1/analyze/yolo-params`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },

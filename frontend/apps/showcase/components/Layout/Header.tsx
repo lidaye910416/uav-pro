@@ -1,9 +1,7 @@
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:4002"
+import { NAV } from "@frontend/config"
 
 const navItems = [
   { href: "/",      label: "首页" },
@@ -61,7 +59,7 @@ export default function Header() {
             )
           })}
           <a
-            href={`${DASHBOARD_URL}/monitor`}
+            href={`${NAV.TO_DASHBOARD}`}
             className="text-sm font-medium px-5 py-2 rounded-lg transition-all duration-200 font-mono tracking-wider"
             style={{
               background: "var(--accent-amber)",
@@ -72,7 +70,7 @@ export default function Header() {
             感知中心 →
           </a>
           <a
-            href={ADMIN_URL}
+            href={NAV.TO_ADMIN}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm font-medium px-4 py-2 rounded-lg transition-all duration-200 font-mono tracking-wider border"

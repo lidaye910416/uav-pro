@@ -2,7 +2,8 @@
 import useSWR from "swr"
 
 // 从环境变量读取 API 地址
-const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+import { API } from "@frontend/config"
+const getApiBase = () => API.BASE
 
 interface OllamaModel {
   name: string
