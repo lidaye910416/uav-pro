@@ -1203,8 +1203,18 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 rag_snippets = [
                     ln.strip()
                     for ln in rag_context.split("\n")
-                    if ln.strip() and not ln.strip().startswith("-")
+                    if ln.strip() and ln.strip().startswith("[SOP-")
                 ]
+                if len(rag_snippets) < 3:
+                    extra = [
+                        ln.strip()
+                        for ln in rag_context.split("\n")
+                        if ln.strip()
+                        and not ln.strip().startswith("-")
+                        and not ln.strip().startswith("[SOP-")
+                        and any(kw in ln for kw in ["事件", "识别特征", "处置流程"])
+                    ]
+                    rag_snippets = (rag_snippets + extra)[:3]
 
                 # ── Vision: 基于 YOLO+SAM 检测结果生成描述 ───────────────────────
                 events.append(f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': idx * 33 + 8, 'status': 'running'})}\n\n".encode())
@@ -1540,8 +1550,19 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             rag_snippets = [
                 ln.strip()
                 for ln in rag_context.split("\n")
-                if ln.strip() and not ln.strip().startswith("-")
+                if ln.strip() and ln.strip().startswith("[SOP-")
             ]
+            if len(rag_snippets) < 3:
+                # Fallback: also grab non-[SOP] lines that look like key SOP fields
+                extra = [
+                    ln.strip()
+                    for ln in rag_context.split("\n")
+                    if ln.strip()
+                    and not ln.strip().startswith("-")
+                    and not ln.strip().startswith("[SOP-")
+                    and any(kw in ln for kw in ["事件", "识别特征", "处置流程"])
+                ]
+                rag_snippets = (rag_snippets + extra)[:3]
 
             # RAG done
             yield f"event: stage\ndata: {json.dumps({
