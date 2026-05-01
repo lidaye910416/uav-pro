@@ -1286,7 +1286,9 @@ const SEVERITY_COLORS: Record<string, string> = {
 
 function parseSOP(snippet: string): { event: string; severity: string; features: string; steps: string } {
   const parts: Record<string, string> = {}
-  const segments = snippet.split("|").map(s => s.trim())
+  // 去除 [SOP-X] 前缀再解析
+  const clean = snippet.replace(/^\[SOP-\d+\]\s*/, "")
+  const segments = clean.split("|").map(s => s.trim())
   for (const seg of segments) {
     const colonIdx = seg.indexOf("：")
     if (colonIdx === -1) continue
@@ -1298,7 +1300,7 @@ function parseSOP(snippet: string): { event: string; severity: string; features:
     else if (key === "处置流程") parts.steps = val
   }
   return {
-    event: parts.event || snippet,
+    event: parts.event || clean,
     severity: parts.severity || "low",
     features: parts.features || "",
     steps: parts.steps || "",
