@@ -1372,19 +1372,19 @@ async def _rag_retrieve(query: str, top_k: int = 3) -> str:
     if not nodes:
         return "[RAG] ⚠️ 警告: 未检索到相关 SOP 知识，依赖模型通用推理"
 
-    # 格式化检索结果：只取 SOP 的实质内容行，过滤掉元数据头
+    # 格式化检索结果：完整返回每条 SOP 的实质性内容，供前端结构化展示
     results = []
-    SKIP_PREFIXES = ("类别：", "严重程度：", "响应时间：", "响应:")
+    SKIP_PREFIXES = ("类别：", "响应时间：", "响应:")
     for i, node in enumerate(nodes, 1):
-        # 取文档前120字符内容（跳过元数据头行）
         lines = node.text.split("\n")
-        content_lines = [ln.strip() for ln in lines if not any(ln.strip().startswith(p) for p in SKIP_PREFIXES)]
-        # 取第一条实质性内容行
-        if content_lines:
-            summary = content_lines[0][:120]
-        else:
-            summary = f"SOP-{i}"
-        results.append(f"[SOP-{i}] {summary}")
+        content_lines = [
+            ln.strip()
+            for ln in lines
+            if ln.strip() and not any(ln.strip().startswith(p) for p in SKIP_PREFIXES)
+        ]
+        # 取前 3 行实质性内容（事件 / 识别特征 / 处置流程）
+        body = " | ".join(content_lines[:3])
+        results.append(f"[SOP-{i}] {body}" if body else f"[SOP-{i}] {content_lines[0][:120] if content_lines else f'SOP-{i}'}")
 
     return "\n".join(results)
 
