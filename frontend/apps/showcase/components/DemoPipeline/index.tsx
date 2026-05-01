@@ -260,6 +260,8 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
   const [currentRois, setCurrentRois] = useState<ROIBox[]>([])
   const [detectionParams, setDetectionParams] = useState<DetectionParams>(DEFAULT_DETECTION_PARAMS)
   const [sceneIdx, setSceneIdx] = useState(0)  // 用 state 而不是 ref，确保组件能响应更新
+  const [isStopping, setIsStopping] = useState(false)  // 停止中状态
+  const [stopConfirm, setStopConfirm] = useState(false)  // 确认弹窗
   const esRef = useRef<EventSource | null>(null)
   const localTimersRef = useRef<ReturnType<typeof setTimeout>[]>([])
   const revealTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -294,34 +296,50 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
   // ── Stop / Reset ─────────────────────────────────────────────────────────────────
 
   async function handleStop() {
+    setStopConfirm(false)
+    setIsStopping(true)
     console.log("[Pipeline] handleStop called")
-    // Close SSE
-    if (esRef.current) {
-      esRef.current.close()
-      esRef.current = null
-    }
-    // Clear all timers
-    Object.values(revealTimersRef.current).forEach(clearTimeout)
-    revealTimersRef.current = {}
-    localTimersRef.current.forEach(clearTimeout)
-    localTimersRef.current = []
-    // Reset state
-    reset()
-    setRunning(false)
-    setDone(false)
-    playVideo()
 
-    // 调用后端停止 Ollama
     try {
-      await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, {
+      // Close SSE
+      if (esRef.current) {
+        esRef.current.close()
+        esRef.current = null
+      }
+      // Clear all timers
+      Object.values(revealTimersRef.current).forEach(clearTimeout)
+      revealTimersRef.current = {}
+      localTimersRef.current.forEach(clearTimeout)
+      localTimersRef.current = []
+      // Reset state
+      reset()
+      setRunning(false)
+      setDone(false)
+      playVideo()
+
+      // 调用后端强制卸载 Ollama 模型
+      const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       })
+      const data = await res.json()
+      if (data.ok) {
+        console.log("[Pipeline] Ollama models stopped:", data.stopped_models)
+      }
     } catch (e) {
       console.warn("[Pipeline] Failed to stop Ollama via API:", e)
     }
 
-    console.log("[Pipeline] Stopped - Ollama model should be unloaded")
+    setIsStopping(false)
+    console.log("[Pipeline] Stopped - Ollama model unloaded")
+  }
+
+  function confirmStop() {
+    setStopConfirm(true)
+  }
+
+  function cancelStop() {
+    setStopConfirm(false)
   }
 
   // ── Local demo orchestrator (no backend required) ────────────────────────
@@ -626,18 +644,29 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
 
           {/* Launch / Stop button */}
           <div className="flex gap-2">
-            {/* 停止按钮 - 始终显示，随时可停止 Ollama 释放内存 */}
+            {/* 停止按钮 - 始终显示，点击弹出确认 */}
             <button
-              onClick={handleStop}
-              className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0"
+              onClick={confirmStop}
+              disabled={isStopping}
+              className="px-4 py-1.5 rounded-lg font-mono text-xs font-medium transition-all flex-shrink-0 relative overflow-hidden"
               style={{
-                background: running ? "var(--accent-red)" : "rgba(255,59,59,0.15)",
-                color: running ? "#fff" : "var(--accent-red)",
-                border: `1px solid ${running ? "var(--accent-red)" : "rgba(255,59,59,0.3)"}`,
+                background: isStopping
+                  ? "var(--accent-red)"
+                  : running
+                    ? "var(--accent-red)"
+                    : "rgba(255,59,59,0.15)",
+                color: isStopping || running ? "#fff" : "var(--accent-red)",
+                border: `1px solid ${isStopping || running ? "var(--accent-red)" : "rgba(255,59,59,0.3)"}`,
                 boxShadow: running ? "0 0 12px rgba(255,59,59,0.3)" : "none",
               }}
             >
-              ⏹ 停止
+              {isStopping ? (
+                <span className="flex items-center gap-1">
+                  <span className="animate-spin">⟳</span> 释放中...
+                </span>
+              ) : (
+                "⏹ 停止"
+              )}
             </button>
             {/* 启动按钮 */}
             <button
@@ -655,6 +684,45 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
               {running ? "◈ 运行中..." : "▶ 启动"}
             </button>
           </div>
+
+          {/* 停止确认弹窗 */}
+          {stopConfirm && (
+            <div
+              className="fixed inset-0 z-50 flex items-center justify-center"
+              style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+              onClick={cancelStop}
+            >
+              <div
+                className="rounded-2xl p-6 max-w-sm mx-4 animate-fade-in"
+                style={{ background: "var(--bg-card)", border: "2px solid var(--accent-red)" }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="text-2xl mb-3 text-center">⚠️</div>
+                <h3 className="text-base font-bold mb-2 text-center" style={{ color: "var(--accent-red)" }}>
+                  确认释放 Ollama 内存？
+                </h3>
+                <p className="text-sm mb-4 text-center" style={{ color: "var(--text-secondary)" }}>
+                  将从内存中卸载 Gemma4 模型，<br/>释放约 7GB 内存空间。
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={cancelStop}
+                    className="flex-1 py-2 rounded-lg text-sm font-mono"
+                    style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
+                  >
+                    取消
+                  </button>
+                  <button
+                    onClick={handleStop}
+                    className="flex-1 py-2 rounded-lg text-sm font-mono font-bold"
+                    style={{ background: "var(--accent-red)", color: "#fff" }}
+                  >
+                    ✓ 确认释放
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="text-xs font-mono px-2 py-1 rounded flex-shrink-0" style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>
             Gemma4:e2b
           </div>
