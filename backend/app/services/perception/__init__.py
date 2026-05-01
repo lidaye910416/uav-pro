@@ -1,3 +1,3 @@
-from app.services.perception.frame_extractor import extract_frames, load_image
+from .frame_extractor import load_image, extract_frames
 
-__all__ = ["extract_frames", "load_image"]
+__all__ = ['load_image', 'extract_frames']

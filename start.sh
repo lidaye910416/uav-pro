@@ -16,10 +16,11 @@ PM2_HOME="$PROJECT_ROOT/.pm2"
 # ==================== 加载服务配置 ====================
 # 从 config/services.json 读取端口配置
 load_service_config() {
-    # 默认端口: 8888(后端), 4000(showcase), 4001(dashboard), 4002(admin)
+    # 默认端口: 8888(后端), 4000(showcase), 4001(dashboard), 4002(admin), 8001(ChromaDB)
     export BACKEND_PORT=${BACKEND_PORT:-8888}
     export BACKEND_HOST=${BACKEND_HOST:-127.0.0.1}
     export OLLAMA_PORT=${OLLAMA_PORT:-11434}
+    export CHROMADB_PORT=${CHROMADB_PORT:-8001}
     export SHOWCASE_PORT=${SHOWCASE_PORT:-4000}
     export DASHBOARD_PORT=${DASHBOARD_PORT:-4001}
     export ADMIN_PORT=${ADMIN_PORT:-4002}
@@ -87,6 +88,8 @@ stop_all() {
     pkill -f "uvicorn main:app" 2>/dev/null || true
     pkill -f "next dev" 2>/dev/null || true
     pkill -f "ollama serve" 2>/dev/null || true
+    pkill -f "chromadb.app" 2>/dev/null || true
+    pkill -f "uvicorn chromadb" 2>/dev/null || true
     sleep 2
     echo -e "${GREEN}✓ 所有服务已停止${NC}"
 }
@@ -144,6 +147,46 @@ start_ollama() {
         echo -e "${RED}✗ Ollama 启动失败${NC}"
         tail -5 /tmp/ollama.log
     fi
+}
+
+# ==================== ChromaDB 服务 ====================
+
+# 启动 ChromaDB
+start_chromadb() {
+    echo -e "${YELLOW}启动 ChromaDB (端口 $CHROMADB_PORT)...${NC}"
+
+    # 检查是否已在运行
+    if curl -s --max-time 3 http://localhost:$CHROMADB_PORT/api/v1/heartbeat > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ ChromaDB 已在运行${NC}"
+        return 0
+    fi
+
+    cd "$PROJECT_ROOT/backend"
+
+    # 确保数据目录存在
+    mkdir -p data/knowledge_base
+
+    # 停止可能存在的残留进程
+    pkill -f "chromadb.app" 2>/dev/null || true
+
+    # 使用 uvicorn 启动 ChromaDB 服务器
+    PYTHONPATH="$PROJECT_ROOT/backend" pm2 start \
+        --name "uav-chromadb" \
+        --no-autorestart \
+        -- \
+        python3 -m uvicorn chromadb.app:app --host 0.0.0.0 --port $CHROMADB_PORT > /tmp/chromadb.log 2>&1
+
+    sleep 5
+
+    # 验证启动
+    if curl -s --max-time 5 http://localhost:$CHROMADB_PORT/api/v1/heartbeat > /dev/null 2>&1; then
+        echo -e "${GREEN}✓ ChromaDB 已启动${NC}"
+    else
+        echo -e "${RED}✗ ChromaDB 启动失败${NC}"
+        tail -10 /tmp/chromadb.log
+    fi
+
+    cd "$PROJECT_ROOT"
 }
 
 # 启动后端 (PM2 守护)
@@ -218,7 +261,7 @@ check_status() {
     echo -e "${YELLOW}HTTP 服务检测:${NC}"
 
     local all_ok=true
-    for name in "Ollama:$OLLAMA_PORT" "Backend:$BACKEND_PORT" "Showcase:$SHOWCASE_PORT" "Dashboard:$DASHBOARD_PORT" "Admin:$ADMIN_PORT"; do
+    for name in "Ollama:$OLLAMA_PORT" "ChromaDB:$CHROMADB_PORT" "Backend:$BACKEND_PORT" "Showcase:$SHOWCASE_PORT" "Dashboard:$DASHBOARD_PORT" "Admin:$ADMIN_PORT"; do
         service="${name%%:*}"
         port="${name##*:}"
 
@@ -261,6 +304,7 @@ case "${1:-start}" in
         init_database
         stop_all
         start_ollama
+        start_chromadb
         start_backend
         start_frontend
         sleep 3
@@ -274,6 +318,7 @@ case "${1:-start}" in
         clean_restart
         stop_all
         start_ollama
+        start_chromadb
         start_backend
         start_frontend
         sleep 3
@@ -289,15 +334,19 @@ case "${1:-start}" in
     clean)
         clean_restart
         ;;
+    chromadb)
+        start_chromadb
+        ;;
     *)
-        echo "用法: $0 {start|stop|restart|status|logs|clean}"
+        echo "用法: $0 {start|stop|restart|status|logs|clean|chromadb}"
         echo ""
-        echo "  start   - 启动所有服务 (PM2 守护)"
-        echo "  stop    - 停止所有服务"
-        echo "  restart - 重启所有服务"
-        echo "  status  - 检查服务状态"
-        echo "  logs    - 查看后端日志"
-        echo "  clean   - 清理残留进程"
+        echo "  start    - 启动所有服务 (PM2 守护)"
+        echo "  stop     - 停止所有服务"
+        echo "  restart  - 重启所有服务"
+        echo "  status   - 检查服务状态"
+        echo "  logs     - 查看后端日志"
+        echo "  clean    - 清理残留进程"
+        echo "  chromadb - 仅启动 ChromaDB"
         exit 1
         ;;
 esac

@@ -407,9 +407,11 @@ def format_sop_for_chroma(sop):
 
 
 def main():
-    """导入 SOP 到 ChromaDB"""
+    """导入 SOP 到 ChromaDB（使用 Ollama 嵌入模型）"""
     import sys
     sys.path.insert(0, str(Path(__file__).parent.parent))
+
+    from app.core.config import settings
 
     # 格式化所有 SOP
     all_sops = []
@@ -438,44 +440,52 @@ def main():
         except:
             pass
 
-        # 创建新集合
+        # 使用 Ollama 嵌入模型
+        from llama_index.embeddings.ollama import OllamaEmbedding
+        embed_model = OllamaEmbedding(
+            model_name="nomic-embed-text",
+            base_url=settings.OLLAMA_BASE_URL,
+        )
+
+        # 批量获取嵌入向量
+        print("\n正在生成嵌入向量（使用 Ollama nomic-embed-text）...")
+        texts = [sop['text'] for sop in all_sops]
+        embeddings = embed_model.get_text_embedding_batch(texts, show_progress=True)
+
+        # 创建集合（禁用自动嵌入，使用预计算嵌入）
         collection = client.create_collection(
             name="uav_sops",
             metadata={"description": "无人机高速公路检测 SOP 知识库"}
         )
 
-        # 批量添加文档
-        ids = []
-        documents = []
-        metadatas = []
-
-        for sop in all_sops:
-            ids.append(sop['id'])
-            documents.append(sop['text'])
-            metadatas.append({
-                "category": sop['category'],
-                "event": sop['event'],
-                "severity": sop['severity'],
-                "recommendations": sop['recommendations'],
-                "response_time": sop['response_time'],
-            })
+        # 批量添加文档和嵌入向量
+        ids = [sop['id'] for sop in all_sops]
+        documents = [sop['text'] for sop in all_sops]
+        metadatas = [{
+            "category": sop['category'],
+            "event": sop['event'],
+            "severity": sop['severity'],
+            "recommendations": sop['recommendations'],
+            "response_time": sop['response_time'],
+        } for sop in all_sops]
 
         collection.add(
             ids=ids,
             documents=documents,
+            embeddings=embeddings,
             metadatas=metadatas
         )
 
-        print(f"\n成功导入 {len(all_sops)} 条 SOP 到 ChromaDB")
-        print(f"存储路径: {db_path}")
+        print(f"\n✅ 成功导入 {len(all_sops)} 条 SOP 到 ChromaDB")
+        print(f"   存储路径: {db_path}")
 
         # 验证
         count = collection.count()
-        print(f"集合中现有文档数: {count}")
+        print(f"   集合中文档数: {count}")
 
     except ImportError as e:
         print(f"缺少依赖: {e}")
-        print("请先安装 chromadb: pip install chromadb")
+        print("请先安装: pip install chromadb llama-index-embeddings-ollama")
         return 1
     except Exception as e:
         print(f"导入失败: {e}")

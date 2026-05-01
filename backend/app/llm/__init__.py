@@ -1,3 +1,1 @@
-from .prompts import PromptManager, get_prompt_manager
-
-__all__ = ["PromptManager", "get_prompt_manager"]
+# LLM 模块 - 空目录保留结构

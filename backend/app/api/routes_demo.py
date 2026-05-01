@@ -641,12 +641,20 @@ async def _check_ollama() -> dict:
             "gemma4": None,
             "vision": None,
             "decision": None,
+            "qwen": None,  # 新增 qwen 作为备选
         }
 
         if mode == "single":
             # Gemma 4 E2B handles both vision + decision
             gemma_candidates = ["gemma4-e2b", "gemma-4-e2b", "gemma4:e2b"]
             result["gemma4"] = next((m for m in gemma_candidates if m in models), None)
+
+            # 如果没有 Gemma，尝试 Qwen2.5
+            if result["gemma4"] is None:
+                qwen_candidates = ["qwen2.5:latest", "qwen2.5:0.5b", "qwen2.5:1.5b", "qwen2.5:3b", "qwen2.5:7b", "qwen2.5:14b", "qwen2.5"]
+                result["qwen"] = next((m for m in qwen_candidates if m in models), None)
+                if result["qwen"]:
+                    result["gemma4"] = result["qwen"]  # 复用 qwen 作为视觉模型
         else:
             # Dual mode: llava for vision, deepseek for decision
             vision_candidates = ["llava:7b", "llava:13b", "moondream2", "llava"]
@@ -656,7 +664,7 @@ async def _check_ollama() -> dict:
 
         return result
     except Exception:
-        return {"mode": settings.PIPELINE_MODE, "gemma4": None, "vision": None, "decision": None}
+        return {"mode": settings.PIPELINE_MODE, "gemma4": None, "vision": None, "decision": None, "qwen": None}
 
 
 def _image_to_base64(img: Image.Image) -> str:
@@ -1178,8 +1186,20 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 rag_context = ""
                 try:
                     rag_context = await _rag_retrieve(DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)])
-                except Exception:
-                    pass
+                except Exception as e:
+                    # ⚠️ ChromaDB 异常时，Pipeline 无法继续
+                    rag_context = ""
+                    events.append(f"event: stage\ndata: {json.dumps({
+                        'stage': 'rag',
+                        'progress': idx * 33 + 16,
+                        'status': 'error',
+                        'snippets': [f"⚠️ RAG 检索失败: {str(e)}"],
+                        'query': DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)][:80],
+                        'error': f"RAG 检索失败: {str(e)}",
+                    })}\n\n".encode())
+                    # 跳过这一帧的处理
+                    continue
+
                 rag_snippets = [
                     ln.strip()
                     for ln in rag_context.split("\n")
@@ -1300,40 +1320,55 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
 
 
 async def _rag_retrieve(query: str, top_k: int = 3) -> str:
-    """Simple RAG retrieval: embed query + search ChromaDB."""
-    try:
-        from llama_index.embeddings.ollama import OllamaEmbedding
-        import chromadb
-        from llama_index.core import VectorStoreIndex, StorageContext
-        from llama_index.vector_stores.chroma import ChromaVectorStore
-        from llama_index.core.retrievers import VectorIndexRetriever
+    """RAG retrieval: embed query + search ChromaDB SOP knowledge base.
 
-        chroma_client = chromadb.PersistentClient(path="./data/knowledge_base")
-        try:
-            collection = chroma_client.get_collection("uav_sops")
-        except Exception:
-            # Empty collection — return generic SOP
-            return _FALLBACK_SOP
+    ⚠️ ChromaDB 必须正常运行，此函数不会降级！
+    如果 ChromaDB 不可用，将抛出异常导致 Pipeline 失败。
+    """
+    from llama_index.embeddings.ollama import OllamaEmbedding
+    import chromadb
+    from llama_index.core import VectorStoreIndex, StorageContext
+    from llama_index.vector_stores.chroma import ChromaVectorStore
+    from llama_index.core.retrievers import VectorIndexRetriever
 
-        if collection.count() == 0:
-            return _FALLBACK_SOP
+    # 使用持久化客户端连接本地 ChromaDB
+    chroma_client = chromadb.PersistentClient(path="./data/knowledge_base")
 
-        vector_store = ChromaVectorStore(chroma_collection=collection)
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-        embed_model = OllamaEmbedding(
-            model_name="nomic-embed-text",
-            base_url=settings.OLLAMA_BASE_URL,
+    # 获取 SOP 集合
+    collection = chroma_client.get_or_create_collection("uav_sops")
+
+    # 检查是否有数据
+    count = collection.count()
+    if count == 0:
+        raise RuntimeError(
+            "[RAG] ⚠️ ChromaDB 知识库为空！"
+            "请先通过管理员后台导入 SOP 文档到知识库。"
+            "访问 /rag 页面上传 SOP 文件。"
         )
-        index = VectorStoreIndex.from_vector_store(
-            vector_store, storage_context=storage_context, embed_model=embed_model
-        )
-        retriever = VectorIndexRetriever(index=index, similarity_top_k=top_k)
-        nodes = retriever.retrieve(query)
-        if not nodes:
-            return _FALLBACK_SOP
-        return "\n".join(f"- {n.text[:200]}" for n in nodes)
-    except Exception:
-        return _FALLBACK_SOP
+
+    # 构建向量存储和检索器
+    vector_store = ChromaVectorStore(chroma_collection=collection)
+    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    embed_model = OllamaEmbedding(
+        model_name="nomic-embed-text",
+        base_url=settings.OLLAMA_BASE_URL,
+    )
+    index = VectorStoreIndex.from_vector_store(
+        vector_store, storage_context=storage_context, embed_model=embed_model
+    )
+    retriever = VectorIndexRetriever(index=index, similarity_top_k=top_k)
+    nodes = retriever.retrieve(query)
+
+    if not nodes:
+        return "[RAG] ⚠️ 警告: 未检索到相关 SOP 知识，依赖模型通用推理"
+
+    # 格式化检索结果，带来源标记
+    results = []
+    for i, node in enumerate(nodes, 1):
+        text = node.text[:300]  # 限制长度
+        results.append(f"[SOP-{i}] {text}")
+
+    return "\n".join(results)
 
 
 _FALLBACK_SOP = """
@@ -1482,12 +1517,26 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             else:
                 rag_query = "高速公路道路通行安全监控正常状态处置流程"
 
-            # RAG retrieval
+            # RAG retrieval - ChromaDB 必须正常，否则 Pipeline 失败
             rag_context = ""
             try:
                 rag_context = await _rag_retrieve(rag_query, top_k=3)
-            except Exception:
-                pass
+            except Exception as e:
+                # ⚠️ ChromaDB 异常时，明确标记为失败，不静默降级
+                rag_context = ""
+                rag_snippets = [f"⚠️ RAG 检索失败: {str(e)}"]
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'rag',
+                    'progress': frame_base + 20,
+                    'status': 'error',
+                    'snippets': rag_snippets,
+                    'query': rag_query[:80],
+                    'error': f"RAG 检索失败: {str(e)}",
+                })}\n\n".encode()
+                await asyncio.sleep(0.3)
+                # 跳过后续阶段，Pipeline 无法正常执行
+                continue
+
             rag_snippets = [
                 ln.strip()
                 for ln in rag_context.split("\n")
