@@ -152,26 +152,6 @@ export default function OverviewSection({ inView }: OverviewSectionProps) {
         ))}
       </div>
 
-      {/* 性能指标 */}
-      <div className="about-metrics">
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-green)" }}>94.2%</div>
-          <div className="about-metric-label">预警准确率</div>
-        </div>
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-amber)" }}>25 FPS</div>
-          <div className="about-metric-label">帧处理速率</div>
-        </div>
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-blue)" }}>1,423</div>
-          <div className="about-metric-label">知识库规模</div>
-        </div>
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-purple)" }}>230ms</div>
-          <div className="about-metric-label">端到端延迟</div>
-        </div>
-      </div>
-
       {/* Pipeline 全屏覆盖层 */}
       <div
         className={`overview-pipeline-overlay ${showPipeline ? "active" : ""}`}
