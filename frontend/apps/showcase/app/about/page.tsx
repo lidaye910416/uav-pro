@@ -251,6 +251,7 @@ export default function AboutPage() {
   const [inViewSections, setInViewSections] = useState<Set<SectionId>>(new Set(["hero"]))
   const [isNavExpanded, setIsNavExpanded] = useState(false)
   const [isScrolling, setIsScrolling] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false) // 全屏展开状态
   const containerRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Map<SectionId, HTMLElement>>(new Map())
   const scrollTimeoutRef = useRef<number>(0)
@@ -285,6 +286,21 @@ export default function AboutPage() {
         setIsScrolling(false)
       }, 600)
     }
+  }
+
+  // Toggle expanded mode for current section
+  const toggleExpanded = () => {
+    setIsExpanded(!isExpanded)
+  }
+
+  // Expand current section
+  const expandCurrentSection = () => {
+    setIsExpanded(true)
+  }
+
+  // Collapse to normal mode
+  const collapseSections = () => {
+    setIsExpanded(false)
   }
 
   // Track active section using IntersectionObserver
@@ -382,12 +398,14 @@ export default function AboutPage() {
       } else if (e.key === "End") {
         e.preventDefault()
         scrollToSection(SECTIONS.length - 1)
+      } else if (e.key === "Escape" && isExpanded) {
+        setIsExpanded(false)
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [activeSection])
+  }, [activeSection, isExpanded])
 
   // Auto-scroll thumbnail track to center active item
   useEffect(() => {
@@ -408,12 +426,12 @@ export default function AboutPage() {
   }, [activeSection])
 
   return (
-    <div className="about-root">
+    <div className={`about-root ${isExpanded ? "about-root-expanded" : ""}`}>
       {/* Animated background */}
-      <StarCanvas />
-      <GlowCanvas />
+      {!isExpanded && <StarCanvas />}
+      {!isExpanded && <GlowCanvas />}
       {/* Top nav - Simplified */}
-      <header className="about-header">
+      <header className={`about-header ${isExpanded ? "about-header-expanded" : ""}`}>
         <div className="about-header-brand">
           <div className="about-header-logo">AI</div>
           <div>
@@ -427,37 +445,72 @@ export default function AboutPage() {
       </header>
 
       {/* YouTube-style progress bar */}
-      <div className="about-progress-bar">
-        <div
-          className="about-progress-bar-fill"
-          style={{
-            width: `${((SECTIONS.findIndex(s => s.id === activeSection) + 1) / SECTIONS.length) * 100}%`
-          }}
-        />
+      {!isExpanded && (
+        <div className="about-progress-bar">
+          <div
+            className="about-progress-bar-fill"
+            style={{
+              width: `${((SECTIONS.findIndex(s => s.id === activeSection) + 1) / SECTIONS.length) * 100}%`
+            }}
+          />
+        </div>
+      )}
+
+      {/* Right-side progress track - hide in expanded mode */}
+      {!isExpanded && <ProgressTrack active={activeSection} onNavigate={scrollToSection} />}
+
+      {/* Left-side expand control */}
+      <div className={`about-expand-control ${isExpanded ? "expanded" : ""}`}>
+        <button
+          className="about-expand-btn"
+          onClick={toggleExpanded}
+          title={isExpanded ? "退出全屏" : "全屏展开当前板块"}
+        >
+          <span className="about-expand-icon">
+            {isExpanded ? "⤓" : "⤒"}
+          </span>
+          <span className="about-expand-label">
+            {isExpanded ? "退出全屏" : "全屏展开"}
+          </span>
+        </button>
+        <div className="about-expand-hint">
+          {isExpanded ? "点击按钮或按 ESC 退出" : "点击展开查看完整内容"}
+        </div>
       </div>
 
-      {/* Right-side progress track */}
-      <ProgressTrack active={activeSection} onNavigate={scrollToSection} />
-
       {/* Scroll container */}
-      <main ref={containerRef} className="about-scroll-container">
+      <main
+        ref={containerRef}
+        className={`about-scroll-container ${isExpanded ? "about-scroll-container-expanded" : ""}`}
+      >
         {SECTIONS.map((s) => {
           const Component = SECTION_COMPONENTS[s.id]
           if (!Component) return null
-          return <Component key={s.id} inView={inViewSections.has(s.id)} />
+          // In expanded mode, only show current section
+          if (isExpanded && s.id !== activeSection) return null
+          return (
+            <div
+              key={s.id}
+              className={isExpanded ? "about-section-expanded" : ""}
+            >
+              <Component inView={inViewSections.has(s.id) || isExpanded} />
+            </div>
+          )
         })}
       </main>
 
       {/* Footer */}
-      <footer className="about-footer">
-        <div className="about-footer-left">
-          © 2026 时空数据要素驱动的低空经济多场景应用 · 空天地一体化 + 生成式AI驱动
-        </div>
-        <div className="about-footer-right">
-          <span className="about-status-dot" />
-          SYSTEM ONLINE
-        </div>
-      </footer>
+      {!isExpanded && (
+        <footer className="about-footer">
+          <div className="about-footer-left">
+            © 2026 时空数据要素驱动的低空经济多场景应用 · 空天地一体化 + 生成式AI驱动
+          </div>
+          <div className="about-footer-right">
+            <span className="about-status-dot" />
+            SYSTEM ONLINE
+          </div>
+        </footer>
+      )}
     </div>
   )
 }
