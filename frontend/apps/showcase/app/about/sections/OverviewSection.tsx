@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Overview Section — 项目概览
+// 基于《时空数据要素驱动的低空经济多场景应用研究》中期检查报告
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from "react"
@@ -7,6 +8,106 @@ import { useState, useEffect } from "react"
 interface OverviewSectionProps {
   inView: boolean
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 中期检查报告数据
+// ═══════════════════════════════════════════════════════════════════════════
+
+// 项目基本信息
+const PROJECT_INFO = {
+  name: "时空数据要素驱动的低空经济多场景应用",
+  subtitle: "理论突破与实践创新研究",
+  org: "湖北省数字产业发展集团有限公司",
+  period: "2025年5月 — 2028年4月（36个月）",
+  funding: "480万元",
+  partners: ["湖北省数字产业发展集团有限公司", "武汉大学", "武汉理工大学"],
+  team: { total: 11, senior: 5, mid: 6, phd: 5, master: 3 },
+}
+
+// 研究进展（四大方面）
+const RESEARCH_PROGRESS = [
+  {
+    title: "前期调研与理论模型构建",
+    items: [
+      "系统梳理国内外低空经济、时空数据要素、数字孪生技术文献",
+      "完成低空经济时空数据要素驱动理论模型框架设计（已形成初稿）",
+      "调研北斗导航、5G通信、数字孪生、AI等关键技术应用现状",
+    ],
+  },
+  {
+    title: "时空数据要素底座建设",
+    items: [
+      "完成底座需求分析和技术架构设计",
+      "核心功能模块（多源数据采集、存储、整合）已完成开发",
+      "结合GIS、CIM构建时空数据模型，完成数据清洗融合基础算法",
+    ],
+  },
+  {
+    title: "多场景应用设计与终端研发",
+    items: [
+      "完成五大应用领域技术需求分析",
+      "无人机泛在定位终端完成方案设计和核心算法研发",
+    ],
+  },
+  {
+    title: "知识产权成果",
+    items: [
+      "3篇SCI/EI论文已发表",
+      "3项软件著作权已获授权",
+      "1项发明专利已获授权（ZL 2024 1 1712175.5）",
+      "湖北省科技进步三等奖（2024年度）",
+    ],
+  },
+]
+
+// 下一步工作计划
+const NEXT_STEPS = [
+  {
+    period: "2026年5月—12月",
+    title: "加快专利布局",
+    desc: "围绕时空数据智能识别、数字孪生等核心技术，组织撰写并申报发明专利3-4项",
+  },
+  {
+    period: "2026年5月—11月",
+    title: "推进端侧硬件研发",
+    desc: "协调硬件供应商，加快核心传感器集成和算法优化",
+  },
+  {
+    period: "2026年6月—2027年4月",
+    title: "完成场景应用示范",
+    desc: '结合底座平台上线，同步开展不少于3个"低空+"场景应用的部署和验证',
+  },
+  {
+    period: "持续进行",
+    title: "加大软著申报力度",
+    desc: "围绕底座平台和场景应用，持续申报软件著作权",
+  },
+]
+
+// 经济/社会效益
+const BENEFITS = {
+  social: [
+    "构建低空经济时空数据要素驱动理论模型，填补相关研究理论空白",
+    '为湖北省乃至全国低空经济发展提供理论支撑',
+    '推动"低空+智慧城市""低空+应急监测""低空+物流配送"等领域发展',
+    "助力湖北省打造具有全国重要影响力的低空经济发展高地和示范区",
+  ],
+  corporate: [
+    "为公司在低空经济、数字产业等新兴领域的业务拓展提供技术支撑",
+    "提升公司在智慧城市、应急监测、物流配送、能源安全、北斗应用等领域的综合竞争力",
+    "培养跨学科复合型人才5名，提升团队整体科研能力",
+  ],
+}
+
+// 考核指标对照
+const TARGETS = [
+  { name: "高水平论文", target: "≥3篇", current: "3篇已发表", status: "completed" },
+  { name: "软件著作权", target: "≥5项", current: "3项已授权", status: "partial" },
+  { name: "发明专利", target: "≥5项", current: "1项已授权", status: "partial" },
+  { name: "科技进步奖", target: "≥1项", current: "1项(三等奖)", status: "completed" },
+  { name: "时空数据底座", target: "≥1套", current: "核心模块完成", status: "partial" },
+  { name: "场景示范应用", target: "≥3个", current: "需求分析完成", status: "partial" },
+]
 
 // Pipeline 四个 Stage 详细配置
 const PIPELINE_STAGES = [
@@ -94,6 +195,14 @@ export default function OverviewSection({ inView }: OverviewSectionProps) {
     }
   }, [isAnimating])
 
+  // State for expandable sections
+  const [expandedProgress, setExpandedProgress] = useState<number | null>(null)
+  const [showBenefits, setShowBenefits] = useState(false)
+
+  const toggleProgress = (index: number) => {
+    setExpandedProgress(expandedProgress === index ? null : index)
+  }
+
   const features = [
     {
       icon: "◉",
@@ -168,6 +277,99 @@ export default function OverviewSection({ inView }: OverviewSectionProps) {
         <div className="about-metric">
           <div className="about-metric-value" style={{ color: "var(--accent-purple)" }}>230ms</div>
           <div className="about-metric-label">端到端延迟</div>
+        </div>
+      </div>
+
+      {/* ── 研究进展 ── */}
+      <div className="about-overview-progress">
+        <div className="about-overview-section-title">📊 研究进展</div>
+        <div className="about-progress-list">
+          {RESEARCH_PROGRESS.map((section, idx) => (
+            <div key={idx} className="about-progress-item">
+              <button
+                className="about-progress-header"
+                onClick={() => toggleProgress(idx)}
+              >
+                <span className="about-progress-title">{section.title}</span>
+                <span className={`about-progress-arrow ${expandedProgress === idx ? "expanded" : ""}`}>▼</span>
+              </button>
+              {expandedProgress === idx && (
+                <ul className="about-progress-items">
+                  {section.items.map((item, i) => (
+                    <li key={i}>{item}</li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 下一步工作计划 ── */}
+      <div className="about-overview-next-steps">
+        <div className="about-overview-section-title">📋 下一步工作计划</div>
+        <div className="about-next-steps-grid">
+          {NEXT_STEPS.map((step, idx) => (
+            <div key={idx} className="about-next-step-card">
+              <div className="about-next-step-period">{step.period}</div>
+              <div className="about-next-step-title">{step.title}</div>
+              <div className="about-next-step-desc">{step.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── 经济/社会效益 ── */}
+      <div className="about-overview-benefits">
+        <button
+          className="about-benefits-toggle"
+          onClick={() => setShowBenefits(!showBenefits)}
+        >
+          <span>💡 经济/社会效益</span>
+          <span className={`about-benefits-arrow ${showBenefits ? "expanded" : ""}`}>▶</span>
+        </button>
+        {showBenefits && (
+          <div className="about-benefits-content">
+            <div className="about-benefits-section">
+              <div className="about-benefits-section-title">🌍 社会效益</div>
+              <ul>
+                {BENEFITS.social.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <div className="about-benefits-section">
+              <div className="about-benefits-section-title">🏢 企业效益</div>
+              <ul>
+                {BENEFITS.corporate.map((item, i) => (
+                  <li key={i}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── 考核指标对照 ── */}
+      <div className="about-overview-targets">
+        <div className="about-overview-section-title">🎯 任务书考核指标对照</div>
+        <div className="about-targets-table">
+          <div className="about-targets-header">
+            <span>指标名称</span>
+            <span>任务书要求</span>
+            <span>当前完成</span>
+            <span>状态</span>
+          </div>
+          {TARGETS.map((t, i) => (
+            <div key={i} className="about-targets-row">
+              <span>{t.name}</span>
+              <span>{t.target}</span>
+              <span>{t.current}</span>
+              <span className={`about-targets-status status-${t.status}`}>
+                {t.status === "completed" ? "✅ 完成" : "⏳ 进行中"}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 
