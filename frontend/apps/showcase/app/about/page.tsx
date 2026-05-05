@@ -252,6 +252,7 @@ export default function AboutPage() {
   const [isNavExpanded, setIsNavExpanded] = useState(false)
   const [isScrolling, setIsScrolling] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false) // 全屏展开状态
+  const [isOverflow, setIsOverflow] = useState(false) // 当前 section 是否有溢出
   const containerRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Map<SectionId, HTMLElement>>(new Map())
   const scrollTimeoutRef = useRef<number>(0)
@@ -295,11 +296,8 @@ export default function AboutPage() {
     const currentActive = activeSection
 
     if (isExpanded) {
-      // 退出全屏：移除展开遮罩动画类
-      const sectionEl = document.getElementById(currentActive)
-      if (sectionEl) {
-        sectionEl.classList.remove("is-expanding")
-      }
+      // 退出全屏：先隐藏遮罩
+      setIsOverflow(false)
       // 记录当前滚动位置
       if (container) {
         expandedScrollRef.current = container.scrollTop
@@ -311,23 +309,19 @@ export default function AboutPage() {
         if (el && container) {
           el.scrollIntoView({ behavior: "instant", block: "start" })
         }
+        // 重新检查溢出状态（带延迟确保布局稳定）
+        setTimeout(() => {
+          checkCurrentSectionOverflow()
+        }, 100)
       }, 150)
     } else {
-      // 进入全屏：先添加展开遮罩动画类，让渐变消失
-      const sectionEl = document.getElementById(currentActive)
-      if (sectionEl) {
-        sectionEl.classList.add("is-expanding")
-        // 短暂延迟后切换到全屏
-        setTimeout(() => {
-          setIsExpanded(true)
-        }, 200) // 等渐变动画完成
-      } else {
-        setIsExpanded(true)
-      }
+      // 进入全屏：先移除遮罩
+      setIsOverflow(false)
       // 记录当前滚动位置
       if (container) {
         expandedScrollRef.current = container.scrollTop
       }
+      setIsExpanded(true)
     }
   }
 
@@ -374,51 +368,51 @@ export default function AboutPage() {
     }
   }, [])
 
-  // Track if sections have overflow content (for gradient effect)
-  useEffect(() => {
+  // 检查当前可视 section 是否有溢出内容
+  const checkCurrentSectionOverflow = () => {
     const container = containerRef.current
     if (!container) return
 
-    const checkOverflow = () => {
-      const containerRect = container.getBoundingClientRect()
-      const headerHeight = 68 + 3 // header + progress bar
-
-      SECTIONS.forEach((s) => {
-        const el = document.getElementById(s.id)
-        if (el) {
-          const rect = el.getBoundingClientRect()
-          // 检查 section 是否在可视区域内（至少部分可见）
-          const isVisible = rect.top < containerRect.bottom && rect.bottom > containerRect.top
-
-          if (isVisible) {
-            // 检查是否有溢出内容（内容高度 > 可见高度）
-            const hasOverflow = el.scrollHeight > el.clientHeight
-            if (hasOverflow) {
-              el.classList.add("is-scrolled")
-            } else {
-              el.classList.remove("is-scrolled")
-            }
-          } else {
-            el.classList.remove("is-scrolled")
-          }
-        }
-      })
+    const el = document.getElementById(activeSection)
+    if (el) {
+      // 检查是否有溢出内容（内容高度 > 可见高度）
+      const hasOverflow = el.scrollHeight > el.clientHeight
+      setIsOverflow(hasOverflow)
     }
+  }
+
+  // Track if current section has overflow content (for gradient effect)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || isExpanded) return
 
     // 初始检查
-    checkOverflow()
+    checkCurrentSectionOverflow()
 
-    // 滚动时检查
-    container.addEventListener("scroll", checkOverflow, { passive: true })
+    // 滚动时检查（节流）
+    let scrollTimeout: number
+    const handleScroll = () => {
+      if (scrollTimeout) return
+      scrollTimeout = window.setTimeout(() => {
+        checkCurrentSectionOverflow()
+        scrollTimeout = 0
+      }, 100)
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
 
     // 窗口大小变化时检查
-    window.addEventListener("resize", checkOverflow)
+    const handleResize = () => {
+      checkCurrentSectionOverflow()
+    }
+    window.addEventListener("resize", handleResize)
 
     return () => {
-      container.removeEventListener("scroll", checkOverflow)
-      window.removeEventListener("resize", checkOverflow)
+      container.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("resize", handleResize)
+      if (scrollTimeout) clearTimeout(scrollTimeout)
     }
-  }, [])
+  }, [activeSection, isExpanded])
 
   // Handle wheel events for smooth section-by-section scrolling
   useEffect(() => {
@@ -532,6 +526,11 @@ export default function AboutPage() {
 
       {/* Right-side progress track - hide in expanded mode */}
       {!isExpanded && <ProgressTrack active={activeSection} onNavigate={scrollToSection} />}
+
+      {/* 固定底部渐变遮罩 - 始终固定在视窗底部 */}
+      <div
+        className={`about-bottom-gradient ${isExpanded || !isOverflow ? "about-bottom-gradient-hidden" : ""}`}
+      />
 
       {/* Left-side expand control */}
       <div className={`about-expand-control ${isExpanded ? "expanded" : ""}`}>

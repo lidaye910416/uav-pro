@@ -86,6 +86,33 @@
   overflow: hidden !important;
 }
 
+/* ── 固定底部渐变遮罩层 ─────────────────────────────────── */
+.about-bottom-gradient {
+  position: fixed;
+  bottom: 40px; /* footer 高度 */
+  left: 0;
+  right: 0;
+  height: 150px;
+  background: linear-gradient(
+    to top,
+    rgba(10, 10, 10, 0.95) 0%,
+    rgba(10, 10, 10, 0.8) 40%,
+    rgba(10, 10, 10, 0.4) 70%,
+    transparent 100%
+  );
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  pointer-events: none;
+  z-index: 99;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.about-bottom-gradient-hidden {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
 /* ── 左侧展开控制按钮 ─────────────────────────────────────── */
 .about-expand-control {
   position: fixed;
@@ -580,46 +607,7 @@
   scroll-margin-top: 80px;
 }
 
-/* 底部渐变毛玻璃效果 - 当内容超出时显示 */
-.about-section::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 150px;
-  background: linear-gradient(
-    to top,
-    rgba(10, 10, 10, 1) 0%,
-    rgba(10, 10, 10, 0.9) 30%,
-    rgba(10, 10, 10, 0.6) 60%,
-    transparent 100%
-  );
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  pointer-events: none;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.4s ease, transform 0.4s ease;
-  transform: translateY(0);
-}
-
-/* 当内容溢出时显示渐变 */
-.about-section.is-scrolled::after {
-  opacity: 1;
-}
-
-/* 进入全屏时的渐变消失动画 */
-.about-section.is-expanding::after {
-  opacity: 0 !important;
-  transform: translateY(20px);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-}
-
-/* 全屏模式下隐藏渐变 */
-.about-root-expanded .about-section-expanded::after {
-  display: none;
-}
+/* 移除旧的伪元素渐变样式，已改用独立遮罩层 */
 
 /* ── Home two-scroll ─────────────────────────────────────────── */
 .home-root {
