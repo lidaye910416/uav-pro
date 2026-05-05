@@ -9,6 +9,12 @@ services:
       - ollama_data:/root/.ollama
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
+    deploy:
+      resources:
+        limits:
+          memory: 8g
+        reservations:
+          memory: 6g
     # command is already set via CMD in the ollama image
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]

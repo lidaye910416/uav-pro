@@ -916,6 +916,210 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
         }
 
 
+async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_detections: list = None) -> dict:
+    """
+    步骤1: Gemma 视觉分析 - 仅判断场景类型，不使用 RAG
+    返回：{has_event, incident_type, severity, confidence, scene_description, description}
+    """
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    pil_img = Image.fromarray(frame_rgb)
+    img_b64 = _image_to_base64(pil_img)
+
+    # 构建检测结果摘要
+    detection_summary = ""
+    if yolo_detections:
+        categories = {}
+        for det in yolo_detections:
+            label = det.get('label', 'unknown')
+            categories[label] = categories.get(label, 0) + 1
+        if categories:
+            parts = [f"{label} {count}个" for label, count in sorted(categories.items())]
+            detection_summary = f"【YOLO检测摘要】检测到：{', '.join(parts)}。"
+
+    system_prompt = f"""你是高速公路航拍图像安全分析专家。
+
+【任务】
+仅根据图像中的静态视觉特征，判断是否存在以下5类事件之一：
+
+- collision: 车辆碰撞/追尾（两车或多车接触、车辆变形、碎片散落等）
+- pothole: 道路坑洼（路面凹陷、坑洞、破损等）
+- obstacle: 障碍物/遗撒（散落物、掉落物、占据车道的物体等）
+- pedestrian: 行人异常（行人在车道内、逆行、异常聚集等）
+- congestion: 交通拥堵（车辆排队、停滞、密集排列等）
+- none: 无异常（道路正常通行）
+
+{detection_summary}
+
+【约束】
+1. 仅基于当前帧的静态视觉特征判断
+2. 不要推测画面外的情况
+3. 如果不确定，倾向于判断为 "none"（正常）
+
+【输出格式 - 严格JSON】
+{{
+  "has_event": true或false,
+  "incident_type": "collision/pothole/obstacle/pedestrian/congestion/none",
+  "severity": "high/mid/low/none",
+  "confidence": 0-100,
+  "scene_description": "场景描述（30字内）",
+  "description": "具体观察到的视觉特征（50字内）"
+}}
+
+只输出JSON，不要其他文字。"""
+
+    user_prompt = """请分析这张航拍图像，判断是否存在交通安全异常。
+
+分析重点：
+1. 车辆是否正常行驶
+2. 是否有碰撞、障碍物、坑洞
+3. 是否有行人异常
+4. 是否有交通拥堵
+
+直接输出JSON。"""
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt, "images": [img_b64]},
+        ],
+        "stream": False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload)
+            r.raise_for_status()
+            raw = r.json().get("message", {}).get("content", "").strip()
+
+        # 解析 JSON
+        import re as _re
+        clean_raw = raw.replace('```json', '').replace('```', '').strip()
+        start = clean_raw.find("{")
+        end = clean_raw.rfind("}") + 1
+
+        if start != -1 and end > start:
+            json_str = clean_raw[start:end]
+            try:
+                result = json.loads(json_str)
+                return {
+                    "has_event": bool(result.get("has_event", False)),
+                    "incident_type": result.get("incident_type", "none"),
+                    "severity": str(result.get("severity", "low")).lower(),
+                    "confidence": max(0, min(100, float(result.get("confidence", 50)))),
+                    "scene_description": result.get("scene_description", ""),
+                    "description": result.get("description", ""),
+                }
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 回退
+        return {
+            "has_event": False,
+            "incident_type": "none",
+            "severity": "none",
+            "confidence": 50,
+            "scene_description": "分析失败，回退为正常",
+            "description": raw[:100] if raw else "分析失败",
+        }
+    except Exception as e:
+        print(f"[_gemma4_vision_analyze] 失败: {e}")
+        return {
+            "has_event": False,
+            "incident_type": "none",
+            "severity": "none",
+            "confidence": 50,
+            "scene_description": "分析服务不可用",
+            "description": "AI分析失败",
+        }
+
+
+async def _rag_decide(incident_type: str, scene_description: str, model: str, timeout: float) -> dict:
+    """
+    步骤2: 基于 RAG SOP 的决策
+    根据 Gemma 初步判断的场景类型，从 ChromaDB 检索相关 SOP，输出最终决策
+    """
+    # 从 ChromaDB 检索相关 SOP
+    rag_context = chroma_get_rag_context(incident_type, top_k=3)
+
+    # 如果没有检索到结果，使用场景描述检索
+    if not rag_context or rag_context.strip() == "":
+        rag_context = chroma_get_rag_context(scene_description, top_k=3)
+
+    system_prompt = f"""你是一个高速公路安全预警决策专家。
+
+【任务】
+根据以下 SOP 处置规范，判断当前场景的风险等级和建议措施。
+
+【SOP 处置规范】
+{rag_context if rag_context else '（无相关规范）'}
+
+【输出格式 - 严格JSON】
+{{
+  "risk_level": "low/medium/high/critical",
+  "title": "预警标题（10字内）",
+  "recommended_response": "具体处置建议（50字内）"
+}}
+
+注意事项：
+1. 根据 SOP 规范中的 severity 映射到 risk_level
+2. 推荐建议应具体、可执行
+3. 只输出 JSON，不要其他文字"""
+
+    user_prompt = f"""当前场景：{scene_description}
+检测到的异常类型：{incident_type}
+
+请根据 SOP 处置规范，给出风险等级和处置建议。
+直接输出 JSON。"""
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        "stream": False,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload)
+            r.raise_for_status()
+            raw = r.json().get("message", {}).get("content", "").strip()
+
+        # 解析 JSON
+        import re as _re
+        clean_raw = raw.replace('```json', '').replace('```', '').strip()
+        start = clean_raw.find("{")
+        end = clean_raw.rfind("}") + 1
+
+        if start != -1 and end > start:
+            json_str = clean_raw[start:end]
+            try:
+                result = json.loads(json_str)
+                return {
+                    "risk_level": result.get("risk_level", "low"),
+                    "title": result.get("title", "正常通行"),
+                    "recommended_response": result.get("recommended_response", "持续监控"),
+                }
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+        # 回退
+        return {
+            "risk_level": "low",
+            "title": "道路通行正常",
+            "recommended_response": "持续监控，暂无预警处置建议",
+        }
+    except Exception as e:
+        print(f"[_rag_decide] 失败: {e}")
+        return {
+            "risk_level": "low",
+            "title": "道路通行正常",
+            "recommended_response": "持续监控",
+        }
+
+
 async def _decision_decide(scene_desc: str, rag_context: str, model: str, timeout: float) -> dict | None:
     """Call decision LLM with scene description + RAG context."""
     import re as _re
@@ -1245,70 +1449,90 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     'detail': scene_desc,
                 })}\n\n".encode())
 
-                # Decision: 调用 Gemma4 进行 LLM 分析
+                # Decision: 使用新的 Pipeline - Gemma视觉分析 + RAG决策
                 # 检查 Ollama 是否可用
                 ollama_check = await _check_ollama()
                 gemma_model = ollama_check.get("gemma4")
 
-                # 构建 LLM 分析结果（默认正常）
-                llm_result = {
-                    "has_event": False,
-                    "incident_type": "none",
-                    "severity": "none",
-                    "confidence": 85,
-                    "scene_description": scene_desc,
-                    "description": "道路通行正常，无异常事件",
-                    "recommended_response": "持续监控，暂无预警处置建议。",
-                }
+                # 默认结果
+                has_incident = False
+                incident_type = "none"
+                severity = "none"
+                confidence = 85
+                risk_level = "low"
+                title = "道路通行正常"
+                description = scene_desc
+                recommendation = "持续监控，暂无预警处置建议。"
+                rag_snippets: list[str] = []
 
-                # 如果 Gemma 可用，调用 LLM 分析
                 if gemma_model:
                     try:
-                        # 使用 RAG 检索获取相关 SOP
-                        rag_context = chroma_get_rag_context(scene_desc, top_k=3)
-                        rag_snippets = [
-                            ln.strip()
-                            for ln in rag_context.split("\n")
-                            if ln.strip() and not ln.strip().startswith("-")
-                        ]
-
-                        # 调用 Gemma4 进行图像分析
-                        llm_result = await _gemma4_analyze(
+                        # 步骤1: Gemma 视觉分析 - 判断场景类型
+                        vision_result = await _gemma4_vision_analyze(
                             frame_bgr,
                             model=gemma_model,
-                            rag_context=rag_context,
-                            timeout=90.0,
+                            timeout=60.0,
                             yolo_detections=detection_details,
                         )
-                        print(f"[_demo_sse_stream] Gemma4 分析结果: {llm_result.get('incident_type')}, {llm_result.get('severity')}")
+                        print(f"[_demo_sse_stream] Gemma4 视觉分析: {vision_result.get('incident_type')}, has_event={vision_result.get('has_event')}")
+
+                        has_incident = vision_result.get("has_event", False)
+                        incident_type = vision_result.get("incident_type", "none")
+                        severity = vision_result.get("severity", "none")
+                        confidence = int(vision_result.get("confidence", 85))
+                        scene_desc_vision = vision_result.get("scene_description", scene_desc)
+                        description = vision_result.get("description", scene_desc)
+
+                        # 步骤2: RAG 检索 SOP
+                        if has_incident and incident_type != "none":
+                            rag_context = chroma_get_rag_context(incident_type, top_k=3)
+                            rag_snippets = [
+                                ln.strip()
+                                for ln in rag_context.split("\n")
+                                if ln.strip() and not ln.strip().startswith("-")
+                            ]
+
+                            # 步骤3: 基于 SOP 的决策
+                            decision_result = await _rag_decide(
+                                incident_type=incident_type,
+                                scene_description=scene_desc_vision,
+                                model=gemma_model,
+                                timeout=30.0,
+                            )
+                            risk_level = decision_result.get("risk_level", "low")
+                            title = decision_result.get("title", "")
+                            recommendation = decision_result.get("recommended_response", "持续监控")
+                            print(f"[_demo_sse_stream] RAG 决策: {risk_level}, {title}")
+                        else:
+                            # 无异常
+                            rag_context = chroma_get_rag_context("道路正常通行", top_k=2)
+                            rag_snippets = [
+                                ln.strip()
+                                for ln in rag_context.split("\n")
+                                if ln.strip() and not ln.strip().startswith("-")
+                            ]
+
                     except Exception as e:
-                        print(f"[_demo_sse_stream] Gemma4 调用失败: {e}")
+                        print(f"[_demo_sse_stream] Pipeline 执行失败: {e}")
                         import traceback
                         traceback.print_exc()
 
-                # 根据 LLM 结果生成预警
-                has_incident = llm_result.get("has_event", False)
-                incident_type = llm_result.get("incident_type", "none")
-                severity = llm_result.get("severity", "none")
-                confidence = int(llm_result.get("confidence", 85))
+                # 生成标题（如果没有从 RAG 获取）
+                if not title or title == "":
+                    title_map = {
+                        "collision": "碰撞事故告警",
+                        "pothole": "道路坑洼告警",
+                        "obstacle": "障碍物告警",
+                        "pedestrian": "行人异常告警",
+                        "congestion": "交通拥堵告警",
+                        "none": "道路通行正常",
+                    }
+                    title = title_map.get(incident_type, "道路通行正常")
 
-                # 映射 severity 到 risk_level
-                risk_level_map = {"high": "high", "mid": "medium", "low": "low", "none": "low"}
-                risk_level = risk_level_map.get(severity, "low")
-
-                # 生成标题
-                title_map = {
-                    "collision": "碰撞事故告警",
-                    "pothole": "道路坑洼告警",
-                    "obstacle": "障碍物告警",
-                    "pedestrian": "行人异常告警",
-                    "congestion": "交通拥堵告警",
-                    "none": "道路通行正常",
-                }
-                title = title_map.get(incident_type, "道路通行正常")
-
-                description = llm_result.get("description", scene_desc)
-                recommendation = llm_result.get("recommended_response", "持续监控，暂无预警处置建议。")
+                # 映射 severity 到 risk_level（如果 RAG 没有返回）
+                if risk_level == "low" and severity in ["high", "mid"]:
+                    risk_level_map = {"high": "high", "mid": "medium", "low": "low", "none": "low"}
+                    risk_level = risk_level_map.get(severity, "low")
 
                 decision_result = {
                     "has_incident": has_incident,
@@ -1319,7 +1543,6 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     "description": description,
                     "recommendation": recommendation,
                     "confidence": confidence,
-                    "llm_analysis": llm_result,
                 }
 
                 events.append(f"event: stage\ndata: {json.dumps({
