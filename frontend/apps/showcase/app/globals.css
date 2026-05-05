@@ -38,12 +38,23 @@
   overflow-y: auto !important;
 }
 
-.about-section-expanded {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 80px 10%;
+/* 全屏模式下单独显示的 section */
+.about-root-expanded .about-section-expanded {
+  height: 100vh !important;
+  min-height: 100vh !important;
+  max-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  padding: 80px 10% !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+}
+
+.about-root-expanded .about-section-expanded > * {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .about-header-expanded {
@@ -54,6 +65,24 @@
   z-index: 100;
   background: rgba(10, 10, 10, 0.95) !important;
   backdrop-filter: blur(20px);
+}
+
+/* ── 确保退出全屏后恢复正常 ───────────────────────────────── */
+/* 恢复 section 的固定高度 */
+.about-scroll-container .about-section {
+  height: calc(100vh - 68px - 3px - 40px) !important;
+  min-height: calc(100vh - 68px - 3px - 40px) !important;
+  max-height: calc(100vh - 68px - 3px - 40px) !important;
+  overflow-y: auto !important;
+}
+
+/* 确保滚动容器恢复正常 */
+.about-scroll-container {
+  height: calc(100vh - 68px - 3px - 40px) !important;
+}
+
+.about-scroll-container.about-scroll-container-expanded {
+  height: 100vh !important;
 }
 
 /* ── 左侧展开控制按钮 ─────────────────────────────────────── */

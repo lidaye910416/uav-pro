@@ -290,17 +290,19 @@ export default function AboutPage() {
 
   // Toggle expanded mode for current section
   const toggleExpanded = () => {
-    setIsExpanded(!isExpanded)
-  }
-
-  // Expand current section
-  const expandCurrentSection = () => {
-    setIsExpanded(true)
-  }
-
-  // Collapse to normal mode
-  const collapseSections = () => {
-    setIsExpanded(false)
+    if (isExpanded) {
+      // 退出全屏时，先关闭全屏
+      setIsExpanded(false)
+      // 然后滚动到当前 section
+      setTimeout(() => {
+        const sectionEl = sectionRefs.current.get(activeSection) || document.getElementById(activeSection)
+        if (sectionEl) {
+          sectionEl.scrollIntoView({ behavior: "smooth", block: "start" })
+        }
+      }, 100)
+    } else {
+      setIsExpanded(true)
+    }
   }
 
   // Track active section using IntersectionObserver
