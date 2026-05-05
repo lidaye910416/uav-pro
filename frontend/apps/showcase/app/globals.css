@@ -92,22 +92,24 @@
   bottom: 40px; /* footer 高度 */
   left: 50%;
   transform: translateX(-50%);
-  width: calc(100% - 160px); /* 留出左右边距 */
-  max-width: 1400px;
-  height: 120px;
+  width: calc(100% - 240px); /* 缩小左右边距 */
+  max-width: 1200px;
+  height: 180px;
   background: linear-gradient(
     to top,
-    rgba(10, 10, 10, 0.98) 0%,
-    rgba(10, 10, 10, 0.9) 20%,
-    rgba(10, 10, 10, 0.7) 50%,
-    rgba(10, 10, 10, 0.3) 75%,
+    rgba(10, 10, 10, 1) 0%,
+    rgba(10, 10, 10, 0.95) 15%,
+    rgba(10, 10, 10, 0.85) 30%,
+    rgba(10, 10, 10, 0.6) 50%,
+    rgba(10, 10, 10, 0.3) 70%,
+    rgba(10, 10, 10, 0.1) 85%,
     transparent 100%
   );
   pointer-events: none;
   z-index: 99;
   opacity: 1;
   transition: opacity 0.3s ease;
-  border-radius: 20px 20px 0 0;
+  border-radius: 100px 100px 0 0;
 }
 
 .about-bottom-gradient-hidden {
