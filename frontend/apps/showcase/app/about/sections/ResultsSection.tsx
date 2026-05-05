@@ -25,7 +25,7 @@ const INTELLECTUAL_PROPERTY = {
     date: "2025年12月",
   },
   award: {
-    title: "湖北省软件企业协会科技进步三等奖",
+    title: "湖北省科技进步奖三等奖",
     level: "省级",
     year: "2024年度",
   },
