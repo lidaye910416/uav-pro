@@ -78,9 +78,8 @@ const LOCAL_DEMOS = [
     rag: {
       query: "道路正常通行",
       snippets: [
-        "持续监控道路通行状态，记录车流密度与车速，发现异常立即上报。",
-        "道路障碍物处置规范：发现障碍物立即通知指挥中心。",
-        "行人闯入处置规范：立即通知交警，记录行人特征，防止事故发生。",
+        "[SOP] none | severity=none | 场景特征：道路畅通，无异常物体/人员/事件 | 描述：正常交通状态 | 建议：正常行驶",
+        "[SOP] congestion | severity=low | 场景特征：车辆排队，但缓慢移动，无停滞 | 描述：常规交通拥堵 | 建议：保持车距，耐心等待",
       ],
     },
     decision: {
@@ -91,6 +90,7 @@ const LOCAL_DEMOS = [
         title: "道路通行正常",
         recommendation: "持续监控，暂无预警处置建议。",
         incident_type: "none",
+        severity: "none",
       },
     },
   },
@@ -103,14 +103,13 @@ const LOCAL_DEMOS = [
       { x1: 50, y1: 45, x2: 72, y2: 68, confidence: 0.82 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到道路散落物事件：1 处疑似货车掉落纸箱（置信度 89%），位于主路应急车道边缘，后方 1 辆轿车（置信度 82%）正在紧急制动绕行。异常类型: obstacle",
+      detail: "检测到道路散落物事件：1 处疑似货车掉落纸箱（置信度 89%），位于主路应急车道边缘。异常类型: obstacle",
     },
     rag: {
       query: "道路障碍物 obstacle 处置规范",
       snippets: [
-        "开启双闪警示灯，在来车方向150米外放置三角警示牌。",
-        "如障碍物可移动且安全，在确保自身安全下移至路肩，通知路政或养护部门清理。",
-        "如障碍物为危险品(化学品、玻璃等)，勿自行处理，协调专业部门进行清理。",
+        "[SOP] obstacle | severity=mid | 场景特征：小物体，掉落物，可单人移动 | 描述：路面散落物 | 建议：减速绕行，记录位置，联系清理",
+        "[SOP] obstacle | severity=high | 场景特征：大型障碍物，交通事故遗留物 | 描述：严重影响通行 | 建议：开启危险报警，保持车距，报警处理",
       ],
     },
     decision: {
@@ -119,8 +118,9 @@ const LOCAL_DEMOS = [
         has_incident: true,
         confidence: 0.88,
         title: "道路散落物险情",
-        recommendation: "高风险！立即通知高速交警与路政部门，限制后方车辆通行速度，派遣养护人员前往清理。",
+        recommendation: "高风险！立即通知高速交警与路政部门，派遣养护人员前往清理。",
         incident_type: "obstacle",
+        severity: "high",
       },
     },
   },
@@ -132,24 +132,24 @@ const LOCAL_DEMOS = [
       { x1: 28, y1: 30, x2: 48, y2: 58, confidence: 0.95 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到行人闯入高危区域事件：1 名行人（置信度 95%）正在翻越护栏进入应急车道，距离主路约 15 米，后方 1 辆货车（置信度 88%）正快速接近。异常类型: pedestrian",
+      detail: "检测到行人闯入高危区域事件：1 名行人正在翻越护栏进入应急车道。异常类型: pedestrian",
     },
     rag: {
       query: "行人闯入 pedestrian 处置规范",
       snippets: [
-        "立即通知高速交警(12122)，开启双闪警示，提醒后方来车。",
-        "持续跟踪行人位置，等待交警到达，切勿拦截或追逐行人，避免危险。",
-        "记录行人外貌特征、位置、进入时间，配合应急响应联动规程。",
+        "[SOP] pedestrian | severity=high | 场景特征：行人进入车道，奔跑，异常聚集，逆行 | 描述：危险行为，可能导致事故 | 建议：立即减速，停车避让，必要时报警",
+        "[SOP] pedestrian | severity=mid | 场景特征：行人在人行道或安全区域，无异常行为 | 描述：正常交通参与者 | 建议：保持正常行驶，注意观察",
       ],
     },
     decision: {
       detail: {
-        risk_level: "critical",
+        risk_level: "high",
         has_incident: true,
         confidence: 0.93,
-        title: "行人闯入高危区域",
-        recommendation: "紧急！立即通知高速交警与急救中心，限制相关路段通行，配合疏散行人，通知周边巡逻力量支援。",
+        title: "行人闯入告警",
+        recommendation: "高风险！立即减速停车避让，必要时报警，记录行人特征。",
         incident_type: "pedestrian",
+        severity: "high",
       },
     },
   },
@@ -163,14 +163,13 @@ const LOCAL_DEMOS = [
       { x1: 60, y1: 50, x2: 80, y2: 72, confidence: 0.79 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到交通事故事件：主车道 3 辆车辆追尾（置信度 94%），有散落物占据 2 条车道，后方车辆排队约 200 米。异常类型: collision",
+      detail: "检测到交通事故事件：主车道 3 辆车辆追尾，有散落物占据车道。异常类型: collision",
     },
     rag: {
       query: "交通事故 collision 处置规范",
       snippets: [
-        "立即开启危险报警闪光灯(双闪)，在来车方向150米外放置三角警示牌。",
-        "人员迅速撤离至路肩或应急车道安全地带，记录事故现场:车牌、位置、时间。",
-        "通知高速交警(12122)和路政，勿自行拆卸、移动事故车辆和散落物。",
+        "[SOP] collision | severity=high | 场景特征：车辆变形严重，多车连环追尾，有烟雾/火花 | 描述：严重交通事故，可能有人员伤亡 | 建议：立即报警，开启双闪，三角牌150m外，人员撤离至护栏外",
+        "[SOP] collision | severity=mid | 场景特征：两车近距离接触，单一碰撞点，无人员被困 | 描述：两辆车发生碰撞，可继续行驶 | 建议：开启双闪，缓慢移至路边，联系保险公司",
       ],
     },
     decision: {
@@ -179,8 +178,9 @@ const LOCAL_DEMOS = [
         has_incident: true,
         confidence: 0.95,
         title: "多车追尾事故",
-        recommendation: "严重风险！立即启动交通事故应急预案，通知交警、路政、急救中心，封闭事故路段，疏导后方车辆。",
+        recommendation: "严重风险！立即报警，开启双闪，人员撤离至安全区域。",
         incident_type: "collision",
+        severity: "high",
       },
     },
   },
@@ -196,14 +196,13 @@ const LOCAL_DEMOS = [
       { x1: 56, y1: 58, x2: 76, y2: 80, confidence: 0.80 },
     ] as ROIBox[],
     identify: {
-      detail: "检测到交通拥堵事件：主车道车辆密集排列（置信度 91%），行驶速度明显降低，车流排队约 500 米，持续时间已超过 5 分钟。异常类型: congestion",
+      detail: "检测到交通拥堵事件：主车道车辆密集排列，行驶速度明显降低。异常类型: congestion",
     },
     rag: {
       query: "交通拥堵 congestion 处置规范",
       snippets: [
-        "持续监控拥堵状态，记录拥堵长度和持续时间，排查拥堵原因: 事故/施工/收费站。",
-        "通知路网监控中心，协调交警疏导，配合发布路况信息和诱导提示。",
-        "如拥堵持续超过30分钟，协调救援力量待命。",
+        "[SOP] congestion | severity=mid | 场景特征：车辆完全停滞，长时间无移动，有应急车道被占用 | 描述：严重拥堵，可能有事故 | 建议：开启导航查看路况，按序排队，勿占用应急车道",
+        "[SOP] congestion | severity=low | 场景特征：车辆排队，但缓慢移动，无停滞 | 描述：常规交通拥堵 | 建议：保持车距，耐心等待，避免加塞",
       ],
     },
     decision: {
@@ -212,8 +211,9 @@ const LOCAL_DEMOS = [
         has_incident: true,
         confidence: 0.87,
         title: "交通拥堵预警",
-        recommendation: "中等风险！持续监控拥堵状态，排查事故原因，通知路网中心协调交警疏导，适时发布路况信息。",
+        recommendation: "中等风险！持续监控拥堵状态，排查事故原因，通知路网中心协调交警疏导。",
         incident_type: "congestion",
+        severity: "mid",
       },
     },
   },

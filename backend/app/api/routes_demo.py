@@ -1194,9 +1194,10 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 rag_query = scene_desc if scene_desc and not scene_desc.startswith("航拍图像，检测到") else DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)]
                 rag_context = ""
                 try:
-                    rag_context = await _rag_retrieve(rag_query)
+                    rag_context = chroma_get_rag_context(rag_query, top_k=3)
                 except Exception as e:
                     print(f"[_demo_sse_stream] RAG retrieval failed: {e}")
+                    rag_context = ""
                 rag_snippets = [
                     ln.strip()
                     for ln in rag_context.split("\n")
@@ -1244,30 +1245,81 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     'detail': scene_desc,
                 })}\n\n".encode())
 
-                # Decision: 基于检测结果生成预警
-                # 判断是否有异常（目前简化处理：只检测到车辆就是正常）
-                has_incident = False
-                risk_level = "low"
-                title = "道路通行正常"
-                description = scene_desc
-                recommendation = "持续监控，暂无预警处置建议。"
-                confidence = 0.85
+                # Decision: 调用 Gemma4 进行 LLM 分析
+                # 检查 Ollama 是否可用
+                ollama_check = await _check_ollama()
+                gemma_model = ollama_check.get("gemma4")
 
-                # 如果有行人，可能是安全隐患
-                if person_count > 0 and person_count >= 1:
-                    has_incident = True
-                    risk_level = "medium"
-                    title = "行人检测告警"
-                    recommendation = "持续跟踪行人位置，通知相关部门关注。"
-                    confidence = 0.75
+                # 构建 LLM 分析结果（默认正常）
+                llm_result = {
+                    "has_event": False,
+                    "incident_type": "none",
+                    "severity": "none",
+                    "confidence": 85,
+                    "scene_description": scene_desc,
+                    "description": "道路通行正常，无异常事件",
+                    "recommended_response": "持续监控，暂无预警处置建议。",
+                }
+
+                # 如果 Gemma 可用，调用 LLM 分析
+                if gemma_model:
+                    try:
+                        # 使用 RAG 检索获取相关 SOP
+                        rag_context = chroma_get_rag_context(scene_desc, top_k=3)
+                        rag_snippets = [
+                            ln.strip()
+                            for ln in rag_context.split("\n")
+                            if ln.strip() and not ln.strip().startswith("-")
+                        ]
+
+                        # 调用 Gemma4 进行图像分析
+                        llm_result = await _gemma4_analyze(
+                            frame_bgr,
+                            model=gemma_model,
+                            rag_context=rag_context,
+                            timeout=90.0,
+                            yolo_detections=detection_details,
+                        )
+                        print(f"[_demo_sse_stream] Gemma4 分析结果: {llm_result.get('incident_type')}, {llm_result.get('severity')}")
+                    except Exception as e:
+                        print(f"[_demo_sse_stream] Gemma4 调用失败: {e}")
+                        import traceback
+                        traceback.print_exc()
+
+                # 根据 LLM 结果生成预警
+                has_incident = llm_result.get("has_event", False)
+                incident_type = llm_result.get("incident_type", "none")
+                severity = llm_result.get("severity", "none")
+                confidence = int(llm_result.get("confidence", 85))
+
+                # 映射 severity 到 risk_level
+                risk_level_map = {"high": "high", "mid": "medium", "low": "low", "none": "low"}
+                risk_level = risk_level_map.get(severity, "low")
+
+                # 生成标题
+                title_map = {
+                    "collision": "碰撞事故告警",
+                    "pothole": "道路坑洼告警",
+                    "obstacle": "障碍物告警",
+                    "pedestrian": "行人异常告警",
+                    "congestion": "交通拥堵告警",
+                    "none": "道路通行正常",
+                }
+                title = title_map.get(incident_type, "道路通行正常")
+
+                description = llm_result.get("description", scene_desc)
+                recommendation = llm_result.get("recommended_response", "持续监控，暂无预警处置建议。")
 
                 decision_result = {
                     "has_incident": has_incident,
+                    "incident_type": incident_type,
                     "risk_level": risk_level,
+                    "severity": severity,
                     "title": title,
                     "description": description,
                     "recommendation": recommendation,
                     "confidence": confidence,
+                    "llm_analysis": llm_result,
                 }
 
                 events.append(f"event: stage\ndata: {json.dumps({
@@ -1282,9 +1334,11 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     "title": title,
                     "description": description,
                     "risk_level": risk_level,
+                    "incident_type": incident_type,
+                    "severity": severity,
                     "recommendation": recommendation,
                     "confidence": confidence,
-                    "scene_description": scene_desc,
+                    "scene_description": llm_result.get("scene_description", scene_desc),
                     "source_type": "demo",
                     "source_path": str(video_path.name),
                     "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),

@@ -85,6 +85,9 @@ services:
       NEXT_PUBLIC_ADMIN_URL: "http://localhost:4002"
     depends_on:
       - backend
+    # Add host.docker.internal for Linux
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     # Mount source for development, but keep node_modules inside container
     volumes:
       - ./frontend:/app

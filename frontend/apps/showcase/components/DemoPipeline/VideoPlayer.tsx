@@ -45,7 +45,7 @@ export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge =
     >
       <video
         ref={videoRef}
-        src={`${API_BASE}/api/v1/demo/video`}
+        src={`${API_BASE}/api/v1/demo/video?video_id=gal_1`}
         autoPlay
         muted
         loop
