@@ -90,22 +90,24 @@
 .about-bottom-gradient {
   position: fixed;
   bottom: 40px; /* footer 高度 */
-  left: 0;
-  right: 0;
-  height: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 160px); /* 留出左右边距 */
+  max-width: 1400px;
+  height: 120px;
   background: linear-gradient(
     to top,
-    rgba(10, 10, 10, 0.95) 0%,
-    rgba(10, 10, 10, 0.8) 40%,
-    rgba(10, 10, 10, 0.4) 70%,
+    rgba(10, 10, 10, 0.98) 0%,
+    rgba(10, 10, 10, 0.9) 20%,
+    rgba(10, 10, 10, 0.7) 50%,
+    rgba(10, 10, 10, 0.3) 75%,
     transparent 100%
   );
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
   pointer-events: none;
   z-index: 99;
   opacity: 1;
   transition: opacity 0.3s ease;
+  border-radius: 20px 20px 0 0;
 }
 
 .about-bottom-gradient-hidden {
