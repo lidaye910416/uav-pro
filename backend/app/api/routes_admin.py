@@ -86,7 +86,8 @@ async def system_health() -> list[HealthResponse]:
         import time
         t0 = time.perf_counter()
         async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f"{settings.CHROMADB_URL}/api/v1/heartbeat")
+            # ChromaDB v1.0.0 废弃了 v1 API，使用 v2
+            r = await client.get(f"{settings.CHROMADB_URL}/api/v2/heartbeat")
         latency = (time.perf_counter() - t0) * 1000
         results.append(HealthResponse(
             service="chromadb", status="healthy" if r.status_code == 200 else "degraded",
@@ -129,12 +130,13 @@ async def chromadb_status() -> ChromaHealth:
     """ChromaDB 状态."""
     try:
         async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(f"{settings.CHROMADB_URL}/api/v1/heartbeat")
+            # ChromaDB v1.0.0 使用 v2 API
+            r = await client.get(f"{settings.CHROMADB_URL}/api/v2/heartbeat")
         if r.status_code == 200:
-            # 尝试获取 collections
+            # 尝试获取 collections（v2 API）
             try:
-                rc = await client.get(f"{settings.CHROMADB_URL}/api/v1collections")
-                cols = [c.get("name", "") for c in rc.json()] if rc.status_code == 200 else []
+                rc = await client.get(f"{settings.CHROMADB_URL}/api/v2/collections")
+                cols = [c.get("name", "") for c in rc.json().get("collections", [])] if rc.status_code == 200 else []
             except Exception:
                 cols = []
             return ChromaHealth(status="running", collections=cols)

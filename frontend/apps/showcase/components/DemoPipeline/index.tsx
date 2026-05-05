@@ -347,8 +347,8 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
     const scene = LOCAL_DEMOS[sceneIndex]
     if (!scene) { setRunning(false); playVideo(); return }
 
-    // Use real ROI data from LOCAL_DEMOS (real algorithm results from Pipeline V2 tests)
-    setCurrentRois(scene.rois || [])
+    // 本地演示不显示 ROI 方框（SSE 模式使用后端标注帧）
+    setCurrentRois([])
 
     const t1 = 400, t2 = 2200, t3 = 4200, t4 = 6200, tNext = 8500
 

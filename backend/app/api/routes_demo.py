@@ -651,8 +651,17 @@ async def _check_ollama() -> dict:
 
         if mode == "single":
             # Gemma 4 E2B handles both vision + decision
-            gemma_candidates = ["gemma4-e2b", "gemma-4-e2b", "gemma4:e2b"]
-            result["gemma4"] = next((m for m in gemma_candidates if m in models), None)
+            # Match model name with colon (gemma4:e2b) or dash (gemma4-e2b)
+            gemma_candidates = ["gemma4:e2b", "gemma4-e2b", "gemma-4-e2b", "gemma-4:e2b"]
+            for m in gemma_candidates:
+                if m in models:
+                    result["gemma4"] = m
+                    break
+            # Also check partial match for gemma4
+            if not result["gemma4"]:
+                gemma_match = next((m for m in models if "gemma4" in m.lower() and "e2b" in m.lower()), None)
+                if gemma_match:
+                    result["gemma4"] = gemma_match
         else:
             # Dual mode: llava for vision, deepseek for decision
             vision_candidates = ["llava:7b", "llava:13b", "moondream2", "llava"]
@@ -735,26 +744,26 @@ async def _vision_describe(frame_bgr, model: str | None, timeout: float) -> str:
         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
         pil_img = Image.fromarray(frame_rgb)
         img_b64 = _image_to_base64(pil_img)
+
+        user_prompt = """你是一个高速公路安全监控专家。请详细描述这张航拍图像：
+1. 场景类型（高速公路/停车场/普通道路）
+2. 可见的车辆、行人、障碍物或其他物体
+3. 任何异常情况，如：违规停车、道路遗撒、交通事故、行人闯入等
+请用中文回答。"""
+
         payload = {
             "model": model,
-            "messages": [{
-                "role": "user",
-                "content": (
-                    "你是一个高速公路安全监控专家。请详细描述这张航拍图像："
-                    "1. 场景类型（高速公路/停车场/普通道路）"
-                    "2. 可见的车辆、行人、障碍物或其他物体"
-                    "3. 任何异常情况，如：违规停车、道路遗撒、交通事故、行人闯入等"
-                    "请用中文回答。"
-                ),
-                "images": [img_b64],
-            }],
+            "prompt": user_prompt,
+            "images": [img_b64],
             "stream": False,
+            "think": False,
+            "options": {"num_predict": 200},
         }
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
-                r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload)
+                r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
                 r.raise_for_status()
-                result = r.json().get("message", {}).get("content", "").strip()
+                result = r.json().get("response", "").strip()
                 if result:
                     return result
         except Exception:
@@ -829,19 +838,22 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
 
 请结合SOP处置规范给出判断，直接输出JSON结果。"""
 
+    # Use generate endpoint for gemma4:e2b vision
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
+
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt, "images": [img_b64]},
-        ],
+        "prompt": full_prompt,
+        "images": [img_b64],
         "stream": False,
+        "think": False,
+        "options": {"num_predict": 150},
     }
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload)
+            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
             r.raise_for_status()
-            raw = r.json().get("message", {}).get("content", "").strip()
+            raw = r.json().get("response", "").strip()
 
         # 改进的 JSON 解析：多层清理
         import re as _re
@@ -918,15 +930,21 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
 
 async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_detections: list = None) -> dict:
     """
-    步骤1: Gemma 视觉分析 - 仅判断场景类型，不使用 RAG
-    返回：{has_event, incident_type, severity, confidence, scene_description, description}
+    【识别层】Gemma 视觉分析 - 纯看图判断，不使用 RAG
+
+    职责：仅基于图像视觉特征，独立判断是否存在异常事件
+    输出：incident_type, severity, confidence, scene_description, description
+
+    设计原则：
+    - 不带 SOP 上下文，避免模型"套用"规范而偏离真实视觉判断
+    - 让模型先独立看图，确保判断基于实际图像特征
     """
     frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
     pil_img = Image.fromarray(frame_rgb)
     img_b64 = _image_to_base64(pil_img)
 
-    # 构建检测结果摘要
-    detection_summary = ""
+    # 构建 YOLO 检测结果摘要（仅作为图像理解辅助，不含 SOP）
+    yolo_summary = ""
     if yolo_detections:
         categories = {}
         for det in yolo_detections:
@@ -934,26 +952,30 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
             categories[label] = categories.get(label, 0) + 1
         if categories:
             parts = [f"{label} {count}个" for label, count in sorted(categories.items())]
-            detection_summary = f"【YOLO检测摘要】检测到：{', '.join(parts)}。"
+            yolo_summary = f"【图像中的物体】检测到：{', '.join(parts)}。"
 
+    # =====================================================
+    # 【识别层提示词】- 纯视觉分析，不使用 RAG 上下文
+    # =====================================================
     system_prompt = f"""你是高速公路航拍图像安全分析专家。
 
 【任务】
-仅根据图像中的静态视觉特征，判断是否存在以下5类事件之一：
+仅根据图像中的静态视觉特征，独立判断是否存在以下事件之一：
 
-- collision: 车辆碰撞/追尾（两车或多车接触、车辆变形、碎片散落等）
-- pothole: 道路坑洼（路面凹陷、坑洞、破损等）
-- obstacle: 障碍物/遗撒（散落物、掉落物、占据车道的物体等）
-- pedestrian: 行人异常（行人在车道内、逆行、异常聚集等）
-- congestion: 交通拥堵（车辆排队、停滞、密集排列等）
-- none: 无异常（道路正常通行）
+  collision  - 车辆碰撞/追尾（两车或多车接触、车辆变形、碎片散落）
+  pothole    - 道路坑洼（路面凹陷、坑洞、破损）
+  obstacle   - 障碍物/遗撒（散落物、掉落物、占据车道的物体）
+  pedestrian - 行人异常（行人在车道内、逆行、异常聚集）
+  congestion - 交通拥堵（车辆排队、停滞、密集排列）
+  none       - 无异常（道路正常通行）
 
-{detection_summary}
+{yolo_summary}
 
-【约束】
-1. 仅基于当前帧的静态视觉特征判断
-2. 不要推测画面外的情况
-3. 如果不确定，倾向于判断为 "none"（正常）
+【判断原则】
+1. 仅基于当前帧的视觉特征，不要推测画面外的情况
+2. 置信度较低时，倾向于判断为 "none"（正常通行）
+3. 视觉特征越明显、越严重，severity 越高
+4. 不要参考任何外部规范，你的判断必须基于图像本身
 
 【输出格式 - 严格JSON】
 {{
@@ -961,59 +983,60 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
   "incident_type": "collision/pothole/obstacle/pedestrian/congestion/none",
   "severity": "high/mid/low/none",
   "confidence": 0-100,
-  "scene_description": "场景描述（30字内）",
-  "description": "具体观察到的视觉特征（50字内）"
+  "scene_description": "场景描述（40字内）",
+  "description": "具体观察到的视觉特征（60字内）"
 }}
 
-只输出JSON，不要其他文字。"""
+只输出 JSON，不要其他任何文字。"""
 
-    user_prompt = """请分析这张航拍图像，判断是否存在交通安全异常。
+    user_prompt = """请分析这张航拍图像，独立判断是否存在交通安全异常。
 
-分析重点：
-1. 车辆是否正常行驶
-2. 是否有碰撞、障碍物、坑洞
-3. 是否有行人异常
-4. 是否有交通拥堵
+观察要点：
+1. 整体场景（直道/弯道/立交/收费站/服务区）
+2. 车辆状态（正常行驶/停滞/异常聚集）
+3. 路面状况（坑洞/遗撒/积水/破损）
+4. 行人/非机动车（是否在禁止区域）
+5. 异常物体（障碍物/事故车辆/散落物）
 
-直接输出JSON。"""
+请仅基于图像中的实际视觉特征给出判断。"""
+
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt, "images": [img_b64]},
-        ],
+        "prompt": full_prompt,
+        "images": [img_b64],
         "stream": False,
+        "think": False,
+        "options": {"num_predict": 200},
     }
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload)
+            print(f"[_gemma4_vision_analyze] 调用 Ollama，timeout={timeout}s")
+            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
             r.raise_for_status()
-            raw = r.json().get("message", {}).get("content", "").strip()
+            raw = r.json().get("response", "").strip()
+            print(f"[_gemma4_vision_analyze] 原始响应: {raw[:150]}...")
 
         # 解析 JSON
-        import re as _re
         clean_raw = raw.replace('```json', '').replace('```', '').strip()
         start = clean_raw.find("{")
         end = clean_raw.rfind("}") + 1
 
         if start != -1 and end > start:
             json_str = clean_raw[start:end]
-            try:
-                result = json.loads(json_str)
-                return {
-                    "has_event": bool(result.get("has_event", False)),
-                    "incident_type": result.get("incident_type", "none"),
-                    "severity": str(result.get("severity", "low")).lower(),
-                    "confidence": max(0, min(100, float(result.get("confidence", 50)))),
-                    "scene_description": result.get("scene_description", ""),
-                    "description": result.get("description", ""),
-                }
-            except (json.JSONDecodeError, ValueError):
-                pass
+            result = json.loads(json_str)
+            return {
+                "has_event": bool(result.get("has_event", False)),
+                "incident_type": result.get("incident_type", "none"),
+                "severity": str(result.get("severity", "low")).lower(),
+                "confidence": max(0, min(100, float(result.get("confidence", 50)))),
+                "scene_description": result.get("scene_description", ""),
+                "description": result.get("description", ""),
+            }
 
-        # 回退
+        # 回退：无法解析 JSON
         return {
             "has_event": False,
             "incident_type": "none",
@@ -1036,76 +1059,112 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
 
 async def _rag_decide(incident_type: str, scene_description: str, model: str, timeout: float) -> dict:
     """
-    步骤2: 基于 RAG SOP 的决策
-    根据 Gemma 初步判断的场景类型，从 ChromaDB 检索相关 SOP，输出最终决策
+    【决策层】基于 RAG SOP 的风险评估与处置建议
+
+    职责：
+    - 根据识别层输出的 incident_type，从 ChromaDB 检索相关 SOP
+    - 结合 SOP 规范输出风险等级（risk_level）、预警标题、处置建议
+
+    设计原则：
+    - RAG 检索基于 incident_type，精准匹配而非模糊查询
+    - 不重复做视觉分析，信任识别层的判断结果
+    - 输出直接用于预警推送
+
+    Args:
+        incident_type: 识别层输出的事件类型
+        scene_description: 识别层输出的场景描述
+        model: Gemma4 模型名
+        timeout: 超时时间
+
+    Returns:
+        {risk_level, title, recommended_response}
     """
-    # 从 ChromaDB 检索相关 SOP
-    rag_context = chroma_get_rag_context(incident_type, top_k=3)
+    # =====================================================
+    # RAG 检索：基于 incident_type 精准匹配 SOP
+    # =====================================================
+    if incident_type and incident_type != "none":
+        rag_context = chroma_get_rag_context(incident_type, top_k=3)
+    else:
+        # 无异常场景，查 "none" 相关的 SOP
+        rag_context = chroma_get_rag_context("道路正常通行", top_k=2)
 
-    # 如果没有检索到结果，使用场景描述检索
-    if not rag_context or rag_context.strip() == "":
-        rag_context = chroma_get_rag_context(scene_description, top_k=3)
+    # 格式化 SOP 上下文
+    sop_lines = []
+    if rag_context:
+        for line in rag_context.split("\n"):
+            line = line.strip()
+            if line and not line.startswith("-"):
+                sop_lines.append(f"  {line}")
 
-    system_prompt = f"""你是一个高速公路安全预警决策专家。
+    sop_text = "\n".join(sop_lines) if sop_lines else "（无相关 SOP 规范）"
+
+    # =====================================================
+    # 【决策层提示词】- 基于 SOP 的风险评估
+    # =====================================================
+    system_prompt = f"""你是高速公路安全预警决策专家。
+
+【输入信息】
+- 场景：{scene_description if scene_description else "正常通行"}
+- 事件类型：{incident_type if incident_type else "none"}
+
+【SOP 处置规范】（已从知识库检索）
+{sop_text}
 
 【任务】
-根据以下 SOP 处置规范，判断当前场景的风险等级和建议措施。
-
-【SOP 处置规范】
-{rag_context if rag_context else '（无相关规范）'}
+根据 SOP 规范，输出风险评估和处置建议。
 
 【输出格式 - 严格JSON】
 {{
   "risk_level": "low/medium/high/critical",
-  "title": "预警标题（10字内）",
-  "recommended_response": "具体处置建议（50字内）"
+  "title": "预警标题（8字内）",
+  "recommended_response": "处置建议（50字内）"
 }}
 
-注意事项：
-1. 根据 SOP 规范中的 severity 映射到 risk_level
-2. 推荐建议应具体、可执行
-3. 只输出 JSON，不要其他文字"""
+【风险等级映射规则】
+- SOP severity=none → risk_level=low
+- SOP severity=low → risk_level=low
+- SOP severity=mid → risk_level=medium
+- SOP severity=high → risk_level=high
 
-    user_prompt = f"""当前场景：{scene_description}
-检测到的异常类型：{incident_type}
+【注意事项】
+1. 只输出 JSON，不要任何其他文字
+2. 推荐建议必须具体、可执行
+3. 标题要简洁醒目，8字以内"""
 
-请根据 SOP 处置规范，给出风险等级和处置建议。
-直接输出 JSON。"""
+    user_prompt = """请根据以上信息输出预警决策。"""
+
+    full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
+        "prompt": full_prompt,
         "stream": False,
+        "think": False,
+        "options": {"num_predict": 80},
     }
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/chat", json=payload)
+            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
             r.raise_for_status()
-            raw = r.json().get("message", {}).get("content", "").strip()
+            raw = r.json().get("response", "").strip()
+            print(f"[_rag_decide] 原始响应: {raw[:150]}...")
 
         # 解析 JSON
-        import re as _re
         clean_raw = raw.replace('```json', '').replace('```', '').strip()
         start = clean_raw.find("{")
         end = clean_raw.rfind("}") + 1
 
         if start != -1 and end > start:
             json_str = clean_raw[start:end]
-            try:
-                result = json.loads(json_str)
-                return {
-                    "risk_level": result.get("risk_level", "low"),
-                    "title": result.get("title", "正常通行"),
-                    "recommended_response": result.get("recommended_response", "持续监控"),
-                }
-            except (json.JSONDecodeError, ValueError):
-                pass
+            result = json.loads(json_str)
+            return {
+                "risk_level": result.get("risk_level", "low"),
+                "title": result.get("title", "道路通行正常"),
+                "recommended_response": result.get("recommended_response", "持续监控"),
+            }
 
-        # 回退
+        # 回退：无法解析 JSON
         return {
             "risk_level": "low",
             "title": "道路通行正常",
@@ -1440,19 +1499,11 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                     'query': scene_desc[:80],
                 })}\n\n".encode())
 
-                # Vision done
-                events.append(f"event: stage\ndata: {json.dumps({
-                    'stage': 'identify',
-                    'progress': idx * 33 + 25,
-                    'status': 'done',
-                    'summary': scene_desc[:60],
-                    'detail': scene_desc,
-                })}\n\n".encode())
-
                 # Decision: 使用新的 Pipeline - Gemma视觉分析 + RAG决策
                 # 检查 Ollama 是否可用
                 ollama_check = await _check_ollama()
                 gemma_model = ollama_check.get("gemma4")
+                print(f"[_demo_sse_stream] Ollama check: models={ollama_check}, gemma_model={gemma_model}")
 
                 # 默认结果
                 has_incident = False
@@ -1464,17 +1515,20 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 description = scene_desc
                 recommendation = "持续监控，暂无预警处置建议。"
                 rag_snippets: list[str] = []
+                scene_desc_vision = scene_desc
 
                 if gemma_model:
                     try:
                         # 步骤1: Gemma 视觉分析 - 判断场景类型
+                        print(f"[_demo_sse_stream] Calling _gemma4_vision_analyze with timeout=300.0")
                         vision_result = await _gemma4_vision_analyze(
                             frame_bgr,
                             model=gemma_model,
-                            timeout=60.0,
+                            timeout=300.0,  # Vision processing needs more time
                             yolo_detections=detection_details,
                         )
-                        print(f"[_demo_sse_stream] Gemma4 视觉分析: {vision_result.get('incident_type')}, has_event={vision_result.get('has_event')}")
+                        print(f"[_demo_sse_stream] Gemma4 视觉分析完成: incident_type={vision_result.get('incident_type')}, has_event={vision_result.get('has_event')}")
+                        print(f"[_demo_sse_stream] scene_description: {vision_result.get('scene_description', '')[:100]}")
 
                         has_incident = vision_result.get("has_event", False)
                         incident_type = vision_result.get("incident_type", "none")
@@ -1497,7 +1551,7 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                                 incident_type=incident_type,
                                 scene_description=scene_desc_vision,
                                 model=gemma_model,
-                                timeout=30.0,
+                                timeout=60.0,  # Increased for generate endpoint
                             )
                             risk_level = decision_result.get("risk_level", "low")
                             title = decision_result.get("title", "")
@@ -1516,6 +1570,16 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                         print(f"[_demo_sse_stream] Pipeline 执行失败: {e}")
                         import traceback
                         traceback.print_exc()
+
+                # Vision done - update identify stage with Gemma4 result
+                events.append(f"event: stage\ndata: {json.dumps({
+                    'stage': 'identify',
+                    'progress': idx * 33 + 25,
+                    'status': 'done',
+                    'summary': scene_desc_vision[:60],
+                    'detail': scene_desc_vision,
+                    'ai_model': 'gemma4:e2b',
+                })}\n\n".encode())
 
                 # 生成标题（如果没有从 RAG 获取）
                 if not title or title == "":
@@ -1721,90 +1785,62 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             })}\n\n".encode()
             await asyncio.sleep(0.1)
 
-            # ── Stage 2: RAG retrieval ─────────────────────────────────────────
-            # 先进行 RAG 检索，获取相关规范上下文
-            yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': frame_base + 15, 'status': 'running'})}\n\n".encode()
-            await asyncio.sleep(0.3)  # 等待前端渲染 rag running 状态
+            # ── Stage 2: 识别层 - Gemma4 视觉分析（纯看图，不带 RAG）────────────
+            yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': frame_base + 20, 'status': 'running'})}\n\n".encode()
+            await asyncio.sleep(0.3)  # 等待前端渲染 identify running 状态
 
             # 检查 Ollama 可用性
             ollama_status = await _check_ollama()
             gemma_model = ollama_status.get("gemma4") or "gemma4:e2b"
 
-            # 构建更语义化的 RAG 查询
+            # 获取检测结果
             detection_details = detection_result.get('detection_details', [])
-            mask_details = detection_result.get('mask_details', [])
 
-            # 根据检测结果构建语义查询
-            if detection_details:
-                labels = [d.get('label', '').lower() for d in detection_details]
-                if 'car' in labels or 'truck' in labels:
-                    rag_query = "高速公路车辆通行异常交通事件处置规范"
-                elif 'person' in labels:
-                    rag_query = "高速公路行人闯入道路安全异常处置规范"
-                elif 'boat' in labels:
-                    rag_query = "道路区域水域安全监控异常处置规范"
-                else:
-                    rag_query = "高速公路交通安全监控异常事件处置规范"
-            else:
-                rag_query = "高速公路道路通行安全监控正常状态处置流程"
-
-            # RAG retrieval
-            rag_context = ""
-            try:
-                rag_context = await _rag_retrieve(rag_query, top_k=3)
-            except Exception:
-                pass
-            rag_snippets = [
-                ln.strip()
-                for ln in rag_context.split("\n")
-                if ln.strip() and not ln.strip().startswith("-")
-            ]
-
-            # RAG done
-            yield f"event: stage\ndata: {json.dumps({
-                'stage': 'rag',
-                'progress': frame_base + 20,
-                'status': 'done',
-                'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
-                'query': rag_query[:80],
-            })}\n\n".encode()
-            await asyncio.sleep(0.3)  # 等待前端渲染 rag 完成
-
-            # ── Stage 3: Gemma4 视觉理解 ─────────────────────────────────────
-            yield f"event: stage\ndata: {json.dumps({'stage': 'identify', 'progress': frame_base + 30, 'status': 'running'})}\n\n".encode()
-            await asyncio.sleep(0.3)  # 等待前端渲染 identify running 状态
-
-            # 调用 Gemma4 E2B 进行视觉理解和决策
+            # 初始化默认值
             scene_desc = DJI_FRAME_SCENES[idx % len(DJI_FRAME_SCENES)]
             has_incident = False
-            risk_level = "low"
-            title = "道路通行正常"
-            description = scene_desc
-            recommendation = "持续监控，暂无预警处置建议。"
             incident_type = "none"
+            severity = "none"
+            vision_confidence = 85
 
+            # 调用识别层：Gemma4 纯视觉分析（不带 RAG）
             try:
-                gemma_result = await _gemma4_analyze(
+                print(f"[_demo_sse_stream] 调用识别层 _gemma4_vision_analyze，timeout=300s")
+                vision_result = await _gemma4_vision_analyze(
                     frame_bgr=frame_bgr,
                     model=gemma_model,
-                    rag_context=rag_context,
-                    timeout=60.0,
+                    timeout=300.0,  # 视觉分析需要更长时间
                     yolo_detections=detection_details
                 )
-                # 使用 Gemma 返回的结果
-                scene_desc = gemma_result.get("scene_description", scene_desc)
-                risk_level = gemma_result.get("risk_level", "low")
-                title = gemma_result.get("title", "道路通行正常")
-                description = gemma_result.get("description", scene_desc)
-                recommendation = gemma_result.get("recommendation", "持续监控，暂无预警处置建议。")
-                should_alert = gemma_result.get("should_alert", False)
-                has_incident = should_alert
-                if risk_level in ["high", "critical"]:
-                    incident_type = "safety_alert"
-                elif should_alert:
-                    incident_type = "anomaly"
+                print(f"[_demo_sse_stream] 识别层完成: incident_type={vision_result.get('incident_type')}, has_event={vision_result.get('has_event')}")
+
+                # 使用识别层结果
+                scene_desc = vision_result.get("scene_description", scene_desc)
+                has_incident = vision_result.get("has_event", False)
+                incident_type = vision_result.get("incident_type", "none")
+                severity = vision_result.get("severity", "none")
+                vision_confidence = vision_result.get("confidence", 85)
+
+                # Vision done - 发送识别层完成事件
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'identify',
+                    'progress': frame_base + 45,
+                    'status': 'done',
+                    'summary': scene_desc[:60],
+                    'detail': scene_desc,
+                    'incident_type': incident_type,
+                    'severity': severity,
+                    'confidence': vision_confidence,
+                    'ai_model': gemma_model,
+                })}\n\n".encode()
+                await asyncio.sleep(0.3)  # 等待前端渲染 identify 完成
+
             except Exception as e:
-                # Gemma 调用失败时使用备用描述
+                print(f"[_demo_sse_stream] 识别层异常: {type(e).__name__}: {e}")
+                import traceback
+                traceback.print_exc()
+
+                # 识别层失败时使用检测结果生成描述
                 if detection_details:
                     car_count = sum(1 for d in detection_details if 'car' in d.get('label', '').lower())
                     person_count = sum(1 for d in detection_details if 'person' in d.get('label', '').lower())
@@ -1816,51 +1852,147 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                         scene_desc += f"，{person_count} 名行人"
                     scene_desc += "。道路通行正常。"
 
-            # Vision done - Gemma4 分析完成
-            yield f"event: stage\ndata: {json.dumps({
-                'stage': 'identify',
-                'progress': frame_base + 50,
-                'status': 'done',
-                'summary': scene_desc[:60],
-                'detail': scene_desc,
-                'ai_model': gemma_model,
-            })}\n\n".encode()
-            await asyncio.sleep(0.3)  # 等待前端渲染 identify 完成
-
-            # Decision (uses Gemma result) - Stage 4
-            yield f"event: stage\ndata: {json.dumps({
-                'stage': 'decision',
-                'progress': frame_base + 60,
-                'status': 'running',
-            })}\n\n".encode()
-            await asyncio.sleep(0.3)  # 等待前端渲染 decision running 状态
-
-            gemma_confidence = gemma_result.get("confidence", 0.85) if 'gemma_result' in dir() else 0.85
-
-            yield f"event: stage\ndata: {json.dumps({
-                'stage': 'decision',
-                'progress': frame_base + 80,
-                'status': 'done',
-                'detail': {
-                    'has_incident': has_incident,
-                    'risk_level': risk_level,
-                    'title': title,
-                    'description': description,
-                    'recommendation': recommendation,
-                    'confidence': gemma_confidence,
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'identify',
+                    'progress': frame_base + 45,
+                    'status': 'done',
+                    'summary': scene_desc[:60],
+                    'detail': scene_desc,
                     'ai_model': gemma_model,
-                },
-            })}\n\n".encode()
-            await asyncio.sleep(0.05)
+                    'error': str(e),
+                })}\n\n".encode()
+                await asyncio.sleep(0.3)
 
-            # Alert event
+            # ── Stage 3: RAG 检索 + 决策层（仅异常场景触发）────────────────────
+
+            # 【方案D - 自适应路由】
+            # 识别层返回后，根据 incident_type 决定是否触发 RAG 和决策层
+            # • 正常（incident_type == "none"）：跳过 RAG + 决策层，直接输出
+            # • 异常（incident_type != "none"）：触发 RAG 检索 + 决策层
+
+            if incident_type and incident_type != "none":
+                # ── 异常场景：触发 RAG + 决策层 ───────────────────────────────
+                yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': frame_base + 55, 'status': 'running'})}\n\n".encode()
+                await asyncio.sleep(0.3)
+
+                # RAG 检索
+                rag_query = f"{incident_type}高速公路交通事件处置"
+                rag_context = ""
+                try:
+                    rag_context = chroma_get_rag_context(rag_query, top_k=3)
+                except Exception:
+                    pass
+
+                rag_snippets = [
+                    ln.strip()
+                    for ln in rag_context.split("\n")
+                    if ln.strip() and not ln.strip().startswith("-")
+                ]
+
+                # RAG done
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'rag',
+                    'progress': frame_base + 65,
+                    'status': 'done',
+                    'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
+                    'query': rag_query[:80],
+                })}\n\n".encode()
+                await asyncio.sleep(0.3)
+
+                # ── 决策层：基于 incident_type + RAG SOP 输出风险等级 ────────
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'decision',
+                    'progress': frame_base + 70,
+                    'status': 'running',
+                })}\n\n".encode()
+                await asyncio.sleep(0.3)
+
+                risk_level = "low"
+                title = "异常告警"
+                recommendation = "持续监控"
+
+                try:
+                    print(f"[_demo_sse_stream] 调用决策层 _rag_decide，incident_type={incident_type}")
+                    decision_result = await _rag_decide(
+                        incident_type=incident_type,
+                        scene_description=scene_desc,
+                        model=gemma_model,
+                        timeout=60.0,
+                    )
+                    print(f"[_demo_sse_stream] 决策层完成: risk_level={decision_result.get('risk_level')}, title={decision_result.get('title')}")
+
+                    risk_level = decision_result.get("risk_level", "medium")
+                    title = decision_result.get("title", "异常告警")
+                    recommendation = decision_result.get("recommended_response", "持续监控")
+
+                except Exception as e:
+                    print(f"[_demo_sse_stream] 决策层异常: {type(e).__name__}: {e}")
+                    # 决策层失败时使用识别层的 severity 映射
+                    severity_map = {"high": "high", "mid": "medium", "low": "low", "none": "low"}
+                    risk_level = severity_map.get(severity, "medium")
+                    title_map = {
+                        "collision": "碰撞事故告警",
+                        "pothole": "道路坑洼告警",
+                        "obstacle": "障碍物告警",
+                        "pedestrian": "行人异常告警",
+                        "congestion": "交通拥堵告警",
+                    }
+                    title = title_map.get(incident_type, "异常告警")
+
+                # Decision done
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'decision',
+                    'progress': frame_base + 85,
+                    'status': 'done',
+                    'detail': {
+                        'has_incident': has_incident,
+                        'incident_type': incident_type,
+                        'severity': severity,
+                        'risk_level': risk_level,
+                        'title': title,
+                        'description': scene_desc,
+                        'recommendation': recommendation,
+                        'confidence': vision_confidence,
+                        'ai_model': gemma_model,
+                    },
+                })}\n\n".encode()
+                await asyncio.sleep(0.05)
+
+            else:
+                # ── 正常场景：跳过 RAG + 决策层，直接输出 ─────────────────────
+                # SSE 展示 RAG 跳过
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'rag',
+                    'progress': frame_base + 55,
+                    'status': 'skipped',
+                    'reason': '正常场景，跳过 RAG 检索',
+                })}\n\n".encode()
+                await asyncio.sleep(0.2)
+
+                # SSE 展示决策跳过
+                yield f"event: stage\ndata: {json.dumps({
+                    'stage': 'decision',
+                    'progress': frame_base + 70,
+                    'status': 'skipped',
+                    'reason': '正常场景，跳过决策层',
+                })}\n\n".encode()
+                await asyncio.sleep(0.2)
+
+                # 正常场景的默认值
+                risk_level = "low"
+                title = "道路通行正常"
+                recommendation = "持续监控，暂无预警处置建议"
+
+            # Alert event - 发送预警
             alert_payload = {
                 'id': int(time.time() * 1000),
                 'title': title,
-                'description': description,
+                'description': scene_desc,
                 'risk_level': risk_level,
+                'incident_type': incident_type,
+                'severity': severity,
                 'recommendation': recommendation,
-                'confidence': gemma_confidence,
+                'confidence': vision_confidence,
                 'scene_description': scene_desc,
                 'source_type': 'demo',
                 'source_path': str(video_path.name),

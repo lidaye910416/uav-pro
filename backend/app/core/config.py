@@ -63,8 +63,21 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
     # ChromaDB
-    CHROMADB_PORT: int = 8001
-    CHROMADB_URL: str = "http://localhost:8001"
+    # 从环境变量读取，如果设置了 CHROMA_URL 则使用环境变量的值
+    # 容器内：CHROMA_URL=http://chromadb:8000（Docker 网络）
+    # 宿主机：CHROMADB_HOST=host.docker.internal, CHROMADB_PORT=9001
+    CHROMADB_HOST: str = "host.docker.internal"  # 使用 Docker 主机地址
+    CHROMADB_PORT: int = 9001  # 外部映射端口
+
+    @property
+    def CHROMADB_URL(self) -> str:
+        """动态构建 ChromaDB URL"""
+        # 优先使用环境变量 CHROMA_URL
+        env_url = os.getenv("CHROMA_URL")
+        if env_url:
+            return env_url
+        # 否则使用配置的 host 和 port
+        return f"http://{self.CHROMADB_HOST}:{self.CHROMADB_PORT}"
 
     # Pipeline 运行模式: "single" | "dual"
     PIPELINE_MODE: str = "single"

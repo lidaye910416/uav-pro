@@ -11,10 +11,10 @@ services:
       OLLAMA_HOST: 0.0.0.0:11434
     deploy:
       resources:
+        # No memory limit - Gemma4:e2b needs ~7GB+ for vision model
+        # Docker Desktop should be configured with 16GB+ in settings
         limits:
-          memory: 8g
-        reservations:
-          memory: 6g
+          memory: 16g
     # command is already set via CMD in the ollama image
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
