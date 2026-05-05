@@ -587,23 +587,23 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 120px;
+  height: 150px;
   background: linear-gradient(
     to top,
-    rgba(10, 10, 10, 0.95) 0%,
-    rgba(10, 10, 10, 0.8) 40%,
-    rgba(10, 10, 10, 0.4) 70%,
+    rgba(10, 10, 10, 1) 0%,
+    rgba(10, 10, 10, 0.9) 30%,
+    rgba(10, 10, 10, 0.6) 60%,
     transparent 100%
   );
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   pointer-events: none;
   z-index: 10;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.4s ease;
 }
 
-/* 当内容可以滚动且已滚动时显示渐变 */
+/* 当内容溢出时显示渐变 */
 .about-section.is-scrolled::after {
   opacity: 1;
 }

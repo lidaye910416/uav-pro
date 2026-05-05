@@ -359,19 +359,30 @@ export default function AboutPage() {
     }
   }, [])
 
-  // Track if sections have been scrolled (for gradient effect)
+  // Track if sections have overflow content (for gradient effect)
   useEffect(() => {
     const container = containerRef.current
     if (!container) return
 
-    const handleScroll = () => {
+    const checkOverflow = () => {
+      const containerRect = container.getBoundingClientRect()
+      const headerHeight = 68 + 3 // header + progress bar
+
       SECTIONS.forEach((s) => {
         const el = document.getElementById(s.id)
         if (el) {
-          // Check if section content is scrolled (has content overflow)
-          const isScrolled = el.scrollHeight > el.clientHeight && el.scrollTop > 20
-          if (isScrolled) {
-            el.classList.add("is-scrolled")
+          const rect = el.getBoundingClientRect()
+          // 检查 section 是否在可视区域内（至少部分可见）
+          const isVisible = rect.top < containerRect.bottom && rect.bottom > containerRect.top
+
+          if (isVisible) {
+            // 检查是否有溢出内容（内容高度 > 可见高度）
+            const hasOverflow = el.scrollHeight > el.clientHeight
+            if (hasOverflow) {
+              el.classList.add("is-scrolled")
+            } else {
+              el.classList.remove("is-scrolled")
+            }
           } else {
             el.classList.remove("is-scrolled")
           }
@@ -379,8 +390,19 @@ export default function AboutPage() {
       })
     }
 
-    container.addEventListener("scroll", handleScroll, { passive: true })
-    return () => container.removeEventListener("scroll", handleScroll)
+    // 初始检查
+    checkOverflow()
+
+    // 滚动时检查
+    container.addEventListener("scroll", checkOverflow, { passive: true })
+
+    // 窗口大小变化时检查
+    window.addEventListener("resize", checkOverflow)
+
+    return () => {
+      container.removeEventListener("scroll", checkOverflow)
+      window.removeEventListener("resize", checkOverflow)
+    }
   }, [])
 
   // Handle wheel events for smooth section-by-section scrolling
