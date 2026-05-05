@@ -2926,18 +2926,17 @@
 
 .about-header-title {
   font-family: var(--font-mono);
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: 0.02em;
-}
-
-.about-header-sub {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--accent-amber);
   letter-spacing: 0.02em;
   text-shadow: 0 0 20px rgba(255,184,0,0.3);
+}
+
+.about-header-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
 }
 
 .about-header-nav {

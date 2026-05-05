@@ -503,7 +503,7 @@ export default function AboutPage() {
         <div className="about-header-brand">
           <div className="about-header-logo">AI</div>
           <div>
-            <div className="about-header-title">无人机低空检测</div>
+            <div className="about-header-title">时空数据要素驱动的低空经济多场景应用</div>
             <div className="about-header-sub">智能安全预警系统</div>
           </div>
         </div>
