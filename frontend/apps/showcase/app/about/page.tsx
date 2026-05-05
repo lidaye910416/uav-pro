@@ -256,6 +256,7 @@ export default function AboutPage() {
   const sectionRefs = useRef<Map<SectionId, HTMLElement>>(new Map())
   const scrollTimeoutRef = useRef<number>(0)
   const thumbnailTrackRef = useRef<HTMLDivElement>(null)
+  const expandedScrollRef = useRef<number>(0) // 记录进入全屏时的滚动位置
 
   // Close nav dropdown when clicking outside
   useEffect(() => {
@@ -290,10 +291,27 @@ export default function AboutPage() {
 
   // Toggle expanded mode for current section
   const toggleExpanded = () => {
+    const container = containerRef.current
+    const currentActive = activeSection
+
     if (isExpanded) {
-      // 退出全屏时，先关闭全屏
+      // 退出全屏：记录当前滚动位置
+      if (container) {
+        expandedScrollRef.current = container.scrollTop
+      }
       setIsExpanded(false)
+      // 等待 DOM 更新完成后，滚动到当前 section
+      setTimeout(() => {
+        const sectionEl = document.getElementById(currentActive)
+        if (sectionEl && container) {
+          sectionEl.scrollIntoView({ behavior: "instant", block: "start" })
+        }
+      }, 150)
     } else {
+      // 进入全屏：记录当前滚动位置
+      if (container) {
+        expandedScrollRef.current = container.scrollTop
+      }
       setIsExpanded(true)
     }
   }
