@@ -773,11 +773,11 @@ export default function HomePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="font-mono text-xs font-bold tracking-widest" style={{ color: "var(--accent-amber)" }}>
-                  UAV-SAFETY SYSTEM
+                  时空数据要素驱动的低空经济多场景应用
                 </div>
                 <div className="h-3 w-px" style={{ background: "var(--border)" }} />
                 <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                  © 2026 无人机低空检测智能安全预警系统
+                  © 2026 智能安全预警系统
                 </p>
               </div>
               <div className="flex items-center gap-2 font-mono text-xs" style={{ color: "var(--text-muted)" }}>
