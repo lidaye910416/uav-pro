@@ -1,33 +1,72 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Scenarios Section — 应用场景
+// 基于《时空数据要素驱动的低空经济多场景应用研究》中期检查报告
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface ScenariosSectionProps {
   inView: boolean
 }
 
+// 五大应用领域（来源：中期检查报告）
+const SCENARIOS = [
+  {
+    id: "smart-city",
+    icon: "🏙",
+    label: "低空+智慧城市",
+    desc: "城市空间管理与规划",
+    color: "var(--accent-amber)",
+    details: "城市三维建模、违章建筑监测、市容环境巡查"
+  },
+  {
+    id: "emergency",
+    icon: "🚨",
+    label: "低空+应急监测",
+    desc: "灾害预警与响应",
+    color: "var(--accent-green)",
+    details: "自然灾害监测、应急救援指挥、灾后评估"
+  },
+  {
+    id: "logistics",
+    icon: "📦",
+    label: "低空+物流配送",
+    desc: "末端物流效率提升",
+    color: "var(--accent-blue)",
+    details: "无人机配送路径规划、末端配送监控"
+  },
+  {
+    id: "energy",
+    icon: "⚡",
+    label: "低空+能源安全",
+    desc: "能源设施巡检监测",
+    color: "var(--accent-purple)",
+    details: "输电线路巡检、油气管道监测、光伏电站检查"
+  },
+  {
+    id: "beidou",
+    icon: "🛰",
+    label: "低空+北斗应用",
+    desc: "精准定位与服务",
+    color: "var(--accent-amber)",
+    details: "高精度定位服务、北斗+无人机融合应用"
+  },
+]
+
 export default function ScenariosSection({ inView }: ScenariosSectionProps) {
-  const scenarios = [
-    { label: "高速公路", desc: "应急车道监测 · 障碍物检测 · 事故预警", color: "var(--accent-amber)" },
-    { label: "桥梁隧道", desc: "结构巡检 · 异常振动 · 人车流监控", color: "var(--accent-green)" },
-    { label: "园区厂区", desc: "周界安防 · 人员闯入 · 设备监测", color: "var(--accent-blue)" },
-    { label: "铁路沿线", desc: "异物入侵检测 · 接触网状态监测", color: "var(--accent-purple)" },
-    { label: "机场周边", desc: "无人机黑飞监测 · 净空区保护", color: "var(--accent-red)" },
-    { label: "景区管理", desc: "低空旅游监管 · 游客安全保障", color: "var(--accent-green)" },
-    { label: "物流配送", desc: "无人机物流监控 · 路径规划辅助", color: "var(--accent-amber)" },
-    { label: "大型活动", desc: "禁飞区管控 · 人群安全监测", color: "var(--accent-blue)" },
-  ]
   return (
     <section id="scenarios" className={`about-section${inView ? " in-view" : ""}`}>
       <div className="about-tag">SCENARIOS</div>
-      <h2 className="about-title">应用场景</h2>
+      <h2 className="about-title">五大应用场景</h2>
       <div className="about-bar" style={{ background: "var(--accent-purple)" }} />
+      <p className="about-desc">
+        围绕五大应用领域，完成了场景应用的技术需求分析。无人机泛在定位终端已完成方案设计和核心算法研发。
+      </p>
       <div className="about-scenarios-grid">
-        {scenarios.map((s) => (
-          <div key={s.label} className="about-scenario-card">
-            <div className="about-scenario-dot" style={{ background: s.color }} />
+        {SCENARIOS.map((s) => (
+          <div key={s.id} className="about-scenario-card">
+            <div className="about-scenario-icon">{s.icon}</div>
             <div className="about-scenario-label" style={{ color: s.color }}>{s.label}</div>
             <div className="about-scenario-desc">{s.desc}</div>
+            <div className="about-scenario-details">{s.details}</div>
           </div>
         ))}
       </div>
