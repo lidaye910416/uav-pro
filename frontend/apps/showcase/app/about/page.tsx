@@ -22,8 +22,8 @@ const SECTIONS = [
   { id: "perception",          label: "感知层" },
   { id: "data-platform",        label: "数据平台" },
   { id: "capabilities",        label: "核心能力" },
-  { id: "scenarios",           label: "应用场景" },
   { id: "results",             label: "成果展示" },
+  { id: "future-plan",         label: "问题与计划" },
   { id: "partners",            label: "合作伙伴" },
   // ─── Add new sections below ───────────────────────────────────────────────
 ] as const
@@ -46,8 +46,8 @@ import ArchitectureSection from "./sections/ArchitectureSection"
 import PerceptionSection from "./sections/PerceptionSection"
 import DataPlatformSection from "./sections/DataPlatformSection"
 import CapabilitiesSection from "./sections/CapabilitiesSection"
-import ScenariosSection from "./sections/ScenariosSection"
 import ResultsSection from "./sections/ResultsSection"
+import FuturePlanSection from "./sections/FuturePlanSection"
 import PartnersSection from "./sections/PartnersSection"
 // ─── Import new section components below ────────────────────────────────────
 
@@ -64,8 +64,8 @@ const SECTION_COMPONENTS: Record<SectionId, React.ComponentType<{ inView: boolea
   perception: PerceptionSection,
   "data-platform": DataPlatformSection,
   capabilities: CapabilitiesSection,
-  scenarios: ScenariosSection,
   results: ResultsSection,
+  "future-plan": FuturePlanSection,
   partners: PartnersSection,
   // ─── Add new section components below ─────────────────────────────────────
 }

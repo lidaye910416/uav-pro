@@ -3585,3 +3585,118 @@
   .risk-medium   { border-left: 3px solid var(--accent-blue); }
   .risk-low      { border-left: 3px solid var(--accent-green); }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   FuturePlan Section — 问题与计划
+═══════════════════════════════════════════════════════════════════════════ */
+
+.about-future-section {
+  margin-bottom: 32px;
+}
+
+.about-future-section-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* 存在的问题 */
+.about-future-problems {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.about-future-problem-card {
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border-left: 3px solid;
+}
+
+.about-future-problem-num {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 700;
+  flex-shrink: 0;
+  width: 30px;
+}
+
+.about-future-problem-content {
+  flex: 1;
+}
+
+.about-future-problem-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.about-future-problem-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+/* 下一步工作计划 */
+.about-future-steps {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.about-future-step-card {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.about-future-step-card:hover {
+  border-color: var(--accent-amber);
+  transform: translateY(-2px);
+}
+
+.about-future-step-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.about-future-step-period {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+}
+
+.about-future-step-connector {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.about-future-step-content {
+  flex: 1;
+}
+
+.about-future-step-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.about-future-step-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
