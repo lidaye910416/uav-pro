@@ -580,6 +580,39 @@
   scroll-margin-top: 80px;
 }
 
+/* 底部渐变毛玻璃效果 - 当内容超出时显示 */
+.about-section::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(
+    to top,
+    rgba(10, 10, 10, 0.95) 0%,
+    rgba(10, 10, 10, 0.8) 40%,
+    rgba(10, 10, 10, 0.4) 70%,
+    transparent 100%
+  );
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  pointer-events: none;
+  z-index: 10;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+/* 当内容可以滚动且已滚动时显示渐变 */
+.about-section.is-scrolled::after {
+  opacity: 1;
+}
+
+/* 全屏模式下隐藏渐变 */
+.about-root-expanded .about-section-expanded::after {
+  display: none;
+}
+
 /* ── Home two-scroll ─────────────────────────────────────────── */
 .home-root {
   width: 100%;

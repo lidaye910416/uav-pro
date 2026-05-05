@@ -359,6 +359,30 @@ export default function AboutPage() {
     }
   }, [])
 
+  // Track if sections have been scrolled (for gradient effect)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const handleScroll = () => {
+      SECTIONS.forEach((s) => {
+        const el = document.getElementById(s.id)
+        if (el) {
+          // Check if section content is scrolled (has content overflow)
+          const isScrolled = el.scrollHeight > el.clientHeight && el.scrollTop > 20
+          if (isScrolled) {
+            el.classList.add("is-scrolled")
+          } else {
+            el.classList.remove("is-scrolled")
+          }
+        }
+      })
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+    return () => container.removeEventListener("scroll", handleScroll)
+  }, [])
+
   // Handle wheel events for smooth section-by-section scrolling
   useEffect(() => {
     const container = containerRef.current
