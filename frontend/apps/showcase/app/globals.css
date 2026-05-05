@@ -33,30 +33,6 @@
   overflow: hidden;
 }
 
-.about-root-expanded .about-scroll-container-expanded {
-  height: 100vh !important;
-  overflow-y: auto !important;
-}
-
-/* 全屏模式下单独显示的 section */
-.about-root-expanded .about-section-expanded {
-  height: 100vh !important;
-  min-height: 100vh !important;
-  max-height: 100vh !important;
-  display: flex !important;
-  flex-direction: column !important;
-  justify-content: center !important;
-  padding: 80px 10% !important;
-  overflow-y: auto !important;
-  box-sizing: border-box !important;
-}
-
-.about-root-expanded .about-section-expanded > * {
-  max-width: 1200px;
-  margin: 0 auto;
-  width: 100%;
-}
-
 .about-header-expanded {
   position: fixed;
   top: 0;
@@ -68,21 +44,46 @@
 }
 
 /* ── 确保退出全屏后恢复正常 ───────────────────────────────── */
-/* 恢复 section 的固定高度 */
+
+/* 全屏模式下滚动容器占满视窗 */
+.about-root-expanded .about-scroll-container-expanded {
+  flex: none !important;
+  height: 100vh !important;
+  overflow-y: auto !important;
+}
+
+/* 确保退出全屏后 section 恢复正常高度 */
 .about-scroll-container .about-section {
   height: calc(100vh - 68px - 3px - 40px) !important;
   min-height: calc(100vh - 68px - 3px - 40px) !important;
   max-height: calc(100vh - 68px - 3px - 40px) !important;
+}
+
+/* 全屏模式下当前 section 占满视窗 */
+.about-root-expanded .about-scroll-container-expanded .about-section-expanded {
+  height: 100vh !important;
+  min-height: 100vh !important;
+  max-height: 100vh !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: center !important;
+  padding: 80px 10% !important;
   overflow-y: auto !important;
 }
 
-/* 确保滚动容器恢复正常 */
-.about-scroll-container {
-  height: calc(100vh - 68px - 3px - 40px) !important;
+.about-root-expanded .about-scroll-container-expanded .about-section-expanded > * {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
 }
 
-.about-scroll-container.about-scroll-container-expanded {
-  height: 100vh !important;
+/* 全屏模式下隐藏其他 section */
+.about-root-expanded .about-scroll-container-expanded .about-section-hidden {
+  display: none !important;
+  height: 0 !important;
+  min-height: 0 !important;
+  max-height: 0 !important;
+  overflow: hidden !important;
 }
 
 /* ── 左侧展开控制按钮 ─────────────────────────────────────── */

@@ -293,13 +293,6 @@ export default function AboutPage() {
     if (isExpanded) {
       // 退出全屏时，先关闭全屏
       setIsExpanded(false)
-      // 然后滚动到当前 section
-      setTimeout(() => {
-        const sectionEl = sectionRefs.current.get(activeSection) || document.getElementById(activeSection)
-        if (sectionEl) {
-          sectionEl.scrollIntoView({ behavior: "smooth", block: "start" })
-        }
-      }, 100)
     } else {
       setIsExpanded(true)
     }
@@ -488,12 +481,10 @@ export default function AboutPage() {
         {SECTIONS.map((s) => {
           const Component = SECTION_COMPONENTS[s.id]
           if (!Component) return null
-          // In expanded mode, only show current section
-          if (isExpanded && s.id !== activeSection) return null
           return (
             <div
               key={s.id}
-              className={isExpanded ? "about-section-expanded" : ""}
+              className={`about-section ${isExpanded && s.id === activeSection ? "about-section-expanded" : ""} ${isExpanded && s.id !== activeSection ? "about-section-hidden" : ""}`}
             >
               <Component inView={inViewSections.has(s.id) || isExpanded} />
             </div>
