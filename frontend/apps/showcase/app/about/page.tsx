@@ -295,24 +295,39 @@ export default function AboutPage() {
     const currentActive = activeSection
 
     if (isExpanded) {
-      // 退出全屏：记录当前滚动位置
+      // 退出全屏：移除展开遮罩动画类
+      const sectionEl = document.getElementById(currentActive)
+      if (sectionEl) {
+        sectionEl.classList.remove("is-expanding")
+      }
+      // 记录当前滚动位置
       if (container) {
         expandedScrollRef.current = container.scrollTop
       }
       setIsExpanded(false)
       // 等待 DOM 更新完成后，滚动到当前 section
       setTimeout(() => {
-        const sectionEl = document.getElementById(currentActive)
-        if (sectionEl && container) {
-          sectionEl.scrollIntoView({ behavior: "instant", block: "start" })
+        const el = document.getElementById(currentActive)
+        if (el && container) {
+          el.scrollIntoView({ behavior: "instant", block: "start" })
         }
       }, 150)
     } else {
-      // 进入全屏：记录当前滚动位置
+      // 进入全屏：先添加展开遮罩动画类，让渐变消失
+      const sectionEl = document.getElementById(currentActive)
+      if (sectionEl) {
+        sectionEl.classList.add("is-expanding")
+        // 短暂延迟后切换到全屏
+        setTimeout(() => {
+          setIsExpanded(true)
+        }, 200) // 等渐变动画完成
+      } else {
+        setIsExpanded(true)
+      }
+      // 记录当前滚动位置
       if (container) {
         expandedScrollRef.current = container.scrollTop
       }
-      setIsExpanded(true)
     }
   }
 

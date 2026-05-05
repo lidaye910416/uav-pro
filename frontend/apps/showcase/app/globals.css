@@ -600,12 +600,20 @@
   pointer-events: none;
   z-index: 10;
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+  transform: translateY(0);
 }
 
 /* 当内容溢出时显示渐变 */
 .about-section.is-scrolled::after {
   opacity: 1;
+}
+
+/* 进入全屏时的渐变消失动画 */
+.about-section.is-expanding::after {
+  opacity: 0 !important;
+  transform: translateY(20px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
 /* 全屏模式下隐藏渐变 */
