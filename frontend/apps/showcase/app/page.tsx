@@ -544,21 +544,33 @@ export default function HomePage() {
                   <h1
                     className="font-bold leading-tight"
                     style={{
-                      color: "var(--text-primary)",
-                      fontSize: "clamp(2rem, 4vw, 3.8rem)",
+                      color: "var(--accent-amber)",
+                      fontSize: "clamp(1.8rem, 3.5vw, 3.2rem)",
                       letterSpacing: "-0.02em",
+                      textShadow: "0 0 40px rgba(255,184,0,0.35)",
                       marginBottom: 8,
                     }}
                   >
-                    无人机低空检测
+                    时空数据要素驱动的
                   </h1>
                   <h1
                     className="font-bold leading-tight"
                     style={{
                       color: "var(--accent-amber)",
-                      fontSize: "clamp(2rem, 4vw, 3.8rem)",
+                      fontSize: "clamp(1.8rem, 3.5vw, 3.2rem)",
                       letterSpacing: "-0.02em",
                       textShadow: "0 0 40px rgba(255,184,0,0.35)",
+                      marginBottom: 8,
+                    }}
+                  >
+                    低空经济多场景应用
+                  </h1>
+                  <h1
+                    className="font-bold leading-tight"
+                    style={{
+                      color: "var(--text-primary)",
+                      fontSize: "clamp(1.5rem, 2.5vw, 2.4rem)",
+                      letterSpacing: "-0.02em",
                     }}
                   >
                     智能安全预警系统
@@ -579,7 +591,8 @@ export default function HomePage() {
                     animation: "fadeIn 0.6s ease-out 0.4s both",
                   }}
                 >
-                  基于空天地一体化和生成式 AI 驱动的高速公路智能安全预警决策关键技术研究
+                  基于空天地一体化感知网络与生成式 AI 决策引擎，<br />
+                  构建低空安全监测与智能决策系统，服务低空经济高质量发展
                 </p>
 
                 {/* CTA */}
@@ -760,11 +773,11 @@ export default function HomePage() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="font-mono text-xs font-bold tracking-widest" style={{ color: "var(--accent-amber)" }}>
-                  UAV-SAFETY SYSTEM
+                  时空数据要素驱动的低空经济多场景应用
                 </div>
                 <div className="h-3 w-px" style={{ background: "var(--border)" }} />
                 <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                  © 2026 无人机低空检测智能安全预警系统
+                  © 2026 智能安全预警系统
                 </p>
               </div>
               <div className="flex items-center gap-2 font-mono text-xs" style={{ color: "var(--text-muted)" }}>

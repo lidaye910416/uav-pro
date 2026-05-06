@@ -1,5 +1,6 @@
 // ═══════════════════════════════════════════════════════════════════════════
-// Overview Section — 项目概览
+// Overview Section — 项目概览（系统技术概览）
+// 详细内容请查看其他页面：项目背景 / 应用场景 / 成果展示 / 合作伙伴
 // ═══════════════════════════════════════════════════════════════════════════
 
 import { useState, useEffect } from "react"
@@ -149,26 +150,6 @@ export default function OverviewSection({ inView }: OverviewSectionProps) {
             <div className="about-overview-feature-desc">{f.desc}</div>
           </div>
         ))}
-      </div>
-
-      {/* 性能指标 */}
-      <div className="about-metrics">
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-green)" }}>94.2%</div>
-          <div className="about-metric-label">预警准确率</div>
-        </div>
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-amber)" }}>25 FPS</div>
-          <div className="about-metric-label">帧处理速率</div>
-        </div>
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-blue)" }}>1,423</div>
-          <div className="about-metric-label">知识库规模</div>
-        </div>
-        <div className="about-metric">
-          <div className="about-metric-value" style={{ color: "var(--accent-purple)" }}>230ms</div>
-          <div className="about-metric-label">端到端延迟</div>
-        </div>
       </div>
 
       {/* Pipeline 全屏覆盖层 */}

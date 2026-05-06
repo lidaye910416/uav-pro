@@ -1,53 +1,75 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // Partners Section — 合作伙伴
+// 基于《时空数据要素驱动的低空经济多场景应用研究》中期检查报告
 // ═══════════════════════════════════════════════════════════════════════════
 
 interface PartnersSectionProps {
   inView: boolean
 }
 
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+// 合作单位（来源：中期检查报告）
+const PARTNERS = {
+  lead: {
+    name: "湖北省数字产业发展集团有限公司",
+    role: "项目牵头单位",
+    desc: "负责项目整体统筹管理与成果转化",
+  },
+  research: [
+    { name: "武汉大学", role: "参研单位", desc: "提供时空数据分析与GIS技术支持" },
+    { name: "武汉理工大学", role: "参研单位", desc: "提供人工智能与计算机视觉技术支持" },
+  ],
+  leaders: [
+    { name: "李晓宇", role: "项目负责人", contact: "15629082897" },
+  ],
+}
 
 export default function PartnersSection({ inView }: PartnersSectionProps) {
-  const partners = [
-    "某省交通运输厅",
-    "某市交警支队",
-    "某高速公路集团",
-    "某智能交通研究院",
-    "某无人机科技公司",
-    "某通信设备厂商",
-    "某地理信息企业",
-    "某高校科研团队",
-  ]
-  const models = [
-    { name: "联投集团", role: "项目牵头单位" },
-    { name: "合作企业 A", role: "技术支撑单位" },
-    { name: "合作企业 B", role: "应用落地单位" },
-    { name: "高校院所", role: "科研合作单位" },
-  ]
   return (
     <section id="partners" className={`about-section${inView ? " in-view" : ""}`}>
       <div className="about-tag">PARTNERS</div>
       <h2 className="about-title">合作伙伴</h2>
       <div className="about-bar" style={{ background: "var(--accent-purple)" }} />
-      <div className="about-section-title">合作单位</div>
-      <div className="about-partners-grid">
-        {partners.map((p) => (
-          <div key={p} className="about-partner">{p}</div>
-        ))}
+
+      {/* 牵头单位 */}
+      <div className="about-partner-lead">
+        <div className="about-partner-lead-badge">项目牵头单位</div>
+        <div className="about-partner-lead-name">{PARTNERS.lead.name}</div>
+        <div className="about-partner-lead-desc">{PARTNERS.lead.desc}</div>
       </div>
-      <div className="about-section-title">合作模式</div>
-      <div className="about-models">
-        {models.map((m) => (
-          <div key={m.name} className="about-model">
-            <div className="about-model-name">{m.name}</div>
-            <div className="about-model-role">{m.role}</div>
-          </div>
-        ))}
+
+      {/* 参研单位 */}
+      <div className="about-partners-section">
+        <div className="about-section-title">参研单位</div>
+        <div className="about-partners-grid">
+          {PARTNERS.research.map((p) => (
+            <div key={p.name} className="about-partner-card">
+              <div className="about-partner-card-role">{p.role}</div>
+              <div className="about-partner-card-name">{p.name}</div>
+              <div className="about-partner-card-desc">{p.desc}</div>
+            </div>
+          ))}
+        </div>
       </div>
+
+      {/* 项目负责人 */}
+      <div className="about-partners-section">
+        <div className="about-section-title">项目负责人</div>
+        <div className="about-leader-info">
+          {PARTNERS.leaders.map((l) => (
+            <div key={l.name} className="about-leader-card">
+              <div className="about-leader-avatar">👤</div>
+              <div className="about-leader-details">
+                <div className="about-leader-name">{l.name}</div>
+                <div className="about-leader-role">{l.role}</div>
+                <div className="about-leader-contact">📞 {l.contact}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="about-cta">
         <a href="/" className="about-btn-primary">← 返回首页演示</a>
-        <a href={ADMIN_URL} target="_blank" rel="noopener noreferrer" className="about-btn-secondary">⚙ 管理后台 →</a>
       </div>
     </section>
   )

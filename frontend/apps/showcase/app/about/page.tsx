@@ -22,8 +22,8 @@ const SECTIONS = [
   { id: "perception",          label: "感知层" },
   { id: "data-platform",        label: "数据平台" },
   { id: "capabilities",        label: "核心能力" },
-  { id: "scenarios",           label: "应用场景" },
   { id: "results",             label: "成果展示" },
+  { id: "future-plan",         label: "问题与计划" },
   { id: "partners",            label: "合作伙伴" },
   // ─── Add new sections below ───────────────────────────────────────────────
 ] as const
@@ -46,8 +46,8 @@ import ArchitectureSection from "./sections/ArchitectureSection"
 import PerceptionSection from "./sections/PerceptionSection"
 import DataPlatformSection from "./sections/DataPlatformSection"
 import CapabilitiesSection from "./sections/CapabilitiesSection"
-import ScenariosSection from "./sections/ScenariosSection"
 import ResultsSection from "./sections/ResultsSection"
+import FuturePlanSection from "./sections/FuturePlanSection"
 import PartnersSection from "./sections/PartnersSection"
 // ─── Import new section components below ────────────────────────────────────
 
@@ -64,8 +64,8 @@ const SECTION_COMPONENTS: Record<SectionId, React.ComponentType<{ inView: boolea
   perception: PerceptionSection,
   "data-platform": DataPlatformSection,
   capabilities: CapabilitiesSection,
-  scenarios: ScenariosSection,
   results: ResultsSection,
+  "future-plan": FuturePlanSection,
   partners: PartnersSection,
   // ─── Add new section components below ─────────────────────────────────────
 }
@@ -251,10 +251,13 @@ export default function AboutPage() {
   const [inViewSections, setInViewSections] = useState<Set<SectionId>>(new Set(["hero"]))
   const [isNavExpanded, setIsNavExpanded] = useState(false)
   const [isScrolling, setIsScrolling] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false) // 全屏展开状态
+  const [isOverflow, setIsOverflow] = useState(false) // 当前 section 是否有溢出
   const containerRef = useRef<HTMLDivElement>(null)
   const sectionRefs = useRef<Map<SectionId, HTMLElement>>(new Map())
   const scrollTimeoutRef = useRef<number>(0)
   const thumbnailTrackRef = useRef<HTMLDivElement>(null)
+  const expandedScrollRef = useRef<number>(0) // 记录进入全屏时的滚动位置
 
   // Close nav dropdown when clicking outside
   useEffect(() => {
@@ -284,6 +287,41 @@ export default function AboutPage() {
       scrollTimeoutRef.current = window.setTimeout(() => {
         setIsScrolling(false)
       }, 600)
+    }
+  }
+
+  // Toggle expanded mode for current section
+  const toggleExpanded = () => {
+    const container = containerRef.current
+    const currentActive = activeSection
+
+    if (isExpanded) {
+      // 退出全屏：先隐藏遮罩
+      setIsOverflow(false)
+      // 记录当前滚动位置
+      if (container) {
+        expandedScrollRef.current = container.scrollTop
+      }
+      setIsExpanded(false)
+      // 等待 DOM 更新完成后，滚动到当前 section
+      setTimeout(() => {
+        const el = document.getElementById(currentActive)
+        if (el && container) {
+          el.scrollIntoView({ behavior: "instant", block: "start" })
+        }
+        // 重新检查溢出状态（带延迟确保布局稳定）
+        setTimeout(() => {
+          checkCurrentSectionOverflow()
+        }, 100)
+      }, 150)
+    } else {
+      // 进入全屏：先移除遮罩
+      setIsOverflow(false)
+      // 记录当前滚动位置
+      if (container) {
+        expandedScrollRef.current = container.scrollTop
+      }
+      setIsExpanded(true)
     }
   }
 
@@ -329,6 +367,52 @@ export default function AboutPage() {
       clearTimeout(timer)
     }
   }, [])
+
+  // 检查当前可视 section 是否有溢出内容
+  const checkCurrentSectionOverflow = () => {
+    const container = containerRef.current
+    if (!container) return
+
+    const el = document.getElementById(activeSection)
+    if (el) {
+      // 检查是否有溢出内容（内容高度 > 可见高度）
+      const hasOverflow = el.scrollHeight > el.clientHeight
+      setIsOverflow(hasOverflow)
+    }
+  }
+
+  // Track if current section has overflow content (for gradient effect)
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || isExpanded) return
+
+    // 初始检查
+    checkCurrentSectionOverflow()
+
+    // 滚动时检查（节流）
+    let scrollTimeout: number
+    const handleScroll = () => {
+      if (scrollTimeout) return
+      scrollTimeout = window.setTimeout(() => {
+        checkCurrentSectionOverflow()
+        scrollTimeout = 0
+      }, 100)
+    }
+
+    container.addEventListener("scroll", handleScroll, { passive: true })
+
+    // 窗口大小变化时检查
+    const handleResize = () => {
+      checkCurrentSectionOverflow()
+    }
+    window.addEventListener("resize", handleResize)
+
+    return () => {
+      container.removeEventListener("scroll", handleScroll)
+      window.removeEventListener("resize", handleResize)
+      if (scrollTimeout) clearTimeout(scrollTimeout)
+    }
+  }, [activeSection, isExpanded])
 
   // Handle wheel events for smooth section-by-section scrolling
   useEffect(() => {
@@ -382,12 +466,14 @@ export default function AboutPage() {
       } else if (e.key === "End") {
         e.preventDefault()
         scrollToSection(SECTIONS.length - 1)
+      } else if (e.key === "Escape" && isExpanded) {
+        setIsExpanded(false)
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [activeSection])
+  }, [activeSection, isExpanded])
 
   // Auto-scroll thumbnail track to center active item
   useEffect(() => {
@@ -408,17 +494,17 @@ export default function AboutPage() {
   }, [activeSection])
 
   return (
-    <div className="about-root">
+    <div className={`about-root ${isExpanded ? "about-root-expanded" : ""}`}>
       {/* Animated background */}
-      <StarCanvas />
-      <GlowCanvas />
+      {!isExpanded && <StarCanvas />}
+      {!isExpanded && <GlowCanvas />}
       {/* Top nav - Simplified */}
-      <header className="about-header">
+      <header className={`about-header ${isExpanded ? "about-header-expanded" : ""}`}>
         <div className="about-header-brand">
           <div className="about-header-logo">AI</div>
           <div>
-            <div className="about-header-title">UAV 安全预警系统</div>
-            <div className="about-header-sub">空天地一体化 · 生成式 AI</div>
+            <div className="about-header-title">时空数据要素驱动的低空经济多场景应用</div>
+            <div className="about-header-sub">智能安全预警系统</div>
           </div>
         </div>
         <nav className="about-header-nav">
@@ -427,37 +513,75 @@ export default function AboutPage() {
       </header>
 
       {/* YouTube-style progress bar */}
-      <div className="about-progress-bar">
-        <div
-          className="about-progress-bar-fill"
-          style={{
-            width: `${((SECTIONS.findIndex(s => s.id === activeSection) + 1) / SECTIONS.length) * 100}%`
-          }}
-        />
+      {!isExpanded && (
+        <div className="about-progress-bar">
+          <div
+            className="about-progress-bar-fill"
+            style={{
+              width: `${((SECTIONS.findIndex(s => s.id === activeSection) + 1) / SECTIONS.length) * 100}%`
+            }}
+          />
+        </div>
+      )}
+
+      {/* Right-side progress track - hide in expanded mode */}
+      {!isExpanded && <ProgressTrack active={activeSection} onNavigate={scrollToSection} />}
+
+      {/* 固定底部渐变遮罩 - 始终固定在视窗底部 */}
+      <div
+        className={`about-bottom-gradient ${isExpanded || !isOverflow ? "about-bottom-gradient-hidden" : ""}`}
+      />
+
+      {/* Left-side expand control */}
+      <div className={`about-expand-control ${isExpanded ? "expanded" : ""}`}>
+        <button
+          className="about-expand-btn"
+          onClick={toggleExpanded}
+          title={isExpanded ? "退出全屏" : "全屏展开当前板块"}
+        >
+          <span className="about-expand-icon">
+            {isExpanded ? "⤓" : "⤒"}
+          </span>
+          <span className="about-expand-label">
+            {isExpanded ? "退出全屏" : "全屏展开"}
+          </span>
+        </button>
+        <div className="about-expand-hint">
+          {isExpanded ? "点击按钮或按 ESC 退出" : "点击展开查看完整内容"}
+        </div>
       </div>
 
-      {/* Right-side progress track */}
-      <ProgressTrack active={activeSection} onNavigate={scrollToSection} />
-
       {/* Scroll container */}
-      <main ref={containerRef} className="about-scroll-container">
+      <main
+        ref={containerRef}
+        className={`about-scroll-container ${isExpanded ? "about-scroll-container-expanded" : ""}`}
+      >
         {SECTIONS.map((s) => {
           const Component = SECTION_COMPONENTS[s.id]
           if (!Component) return null
-          return <Component key={s.id} inView={inViewSections.has(s.id)} />
+          return (
+            <div
+              key={s.id}
+              className={`about-section ${isExpanded && s.id === activeSection ? "about-section-expanded" : ""} ${isExpanded && s.id !== activeSection ? "about-section-hidden" : ""}`}
+            >
+              <Component inView={inViewSections.has(s.id) || isExpanded} />
+            </div>
+          )
         })}
       </main>
 
       {/* Footer */}
-      <footer className="about-footer">
-        <div className="about-footer-left">
-          © 2026 时空数据要素驱动的低空经济多场景应用 · 空天地一体化 + 生成式AI驱动
-        </div>
-        <div className="about-footer-right">
-          <span className="about-status-dot" />
-          SYSTEM ONLINE
-        </div>
-      </footer>
+      {!isExpanded && (
+        <footer className="about-footer">
+          <div className="about-footer-left">
+            © 2026 时空数据要素驱动的低空经济多场景应用 · 空天地一体化 + 生成式AI驱动
+          </div>
+          <div className="about-footer-right">
+            <span className="about-status-dot" />
+            SYSTEM ONLINE
+          </div>
+        </footer>
+      )}
     </div>
   )
 }
