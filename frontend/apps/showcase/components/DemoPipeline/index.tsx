@@ -317,7 +317,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
   // ── Stop / Reset ─────────────────────────────────────────────────────────────────
 
   async function handleStop() {
-    setStopConfirm(false)
+    closeStopConfirm()  // 关闭弹窗并同步重置父组件状态
     setIsStopping(true)
     console.log("[Pipeline] handleStop called")
 
@@ -361,6 +361,12 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
   }
 
   function cancelStop() {
+    setStopConfirm(false)
+    onStopConfirmChange?.(false)
+  }
+
+  // 关闭弹窗时同步重置父组件的 showStopConfirm
+  function closeStopConfirm() {
     setStopConfirm(false)
     onStopConfirmChange?.(false)
   }
