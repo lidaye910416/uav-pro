@@ -18,6 +18,27 @@ from app.models.user import User                          # noqa: F401
 from app.models.data_record import DataRecord            # noqa: F401
 from app.models.device import Device                     # noqa: F401
 
+# 后端启动入口 - 支持从环境变量读取端口
+import os
+
+
+def get_backend_port() -> int:
+    """从环境变量获取后端端口，默认使用 settings.BACKEND_PORT"""
+    env_port = os.getenv("BACKEND_PORT")
+    if env_port:
+        try:
+            return int(env_port)
+        except ValueError:
+            pass
+    return settings.BACKEND_PORT
+
+
+if __name__ == "__main__":
+    import uvicorn
+    port = get_backend_port()
+    print(f"[启动] 后端服务端口: {port}")
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

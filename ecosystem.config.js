@@ -40,9 +40,9 @@ module.exports = {
       name: 'uav-backend',
       script: 'python3',
       args: `-m uvicorn main:app --host ${backendHost} --port ${backendPort} --reload`,
-      cwd: './backend',
+      cwd: path.join(__dirname, 'backend'),
       env: {
-        PYTHONPATH: './backend',
+        PYTHONPATH: path.join(__dirname, 'backend'),
         BACKEND_HOST: backendHost,
         BACKEND_PORT: backendPort,
         // 传递给前端的环境变量
@@ -50,13 +50,13 @@ module.exports = {
       },
       autorestart: true,
       max_restarts: 10,
-      watch: ['./backend/app'],
+      watch: [path.join(__dirname, 'backend', 'app')],
     },
     {
       name: 'uav-showcase',
       script: 'npm',
       args: 'run dev',
-      cwd: './frontend/apps/showcase',
+      cwd: path.join(__dirname, 'frontend', 'apps', 'showcase'),
       env: {
         NODE_ENV: 'development',
         PORT: showcasePort,
@@ -72,7 +72,7 @@ module.exports = {
       name: 'uav-dashboard',
       script: 'npm',
       args: 'run dev',
-      cwd: './frontend/apps/dashboard',
+      cwd: path.join(__dirname, 'frontend', 'apps', 'dashboard'),
       env: {
         NODE_ENV: 'development',
         PORT: dashboardPort,
@@ -88,7 +88,7 @@ module.exports = {
       name: 'uav-admin',
       script: 'npm',
       args: 'run dev',
-      cwd: './frontend/apps/admin',
+      cwd: path.join(__dirname, 'frontend', 'apps', 'admin'),
       env: {
         NODE_ENV: 'development',
         PORT: adminPort,

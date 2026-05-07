@@ -42,36 +42,38 @@ init_database() {
 from sqlalchemy import create_engine, text
 import os
 
-db_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'backend', 'uav.db')
+db_path = os.path.join(os.getcwd(), 'uav.db')
 engine = create_engine(f'sqlite:///{db_path}')
 
-with engine.connect() as conn:
-    try:
+try:
+    with engine.connect() as conn:
         conn.execute(text('SELECT 1 FROM alerts LIMIT 1'))
         print('✓ alerts 表存在')
-    except:
-        print('⚠ alerts 表不存在，创建中...')
-        conn.execute(text('''
-            CREATE TABLE IF NOT EXISTS alerts (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                title TEXT NOT NULL,
-                description TEXT,
-                risk_level TEXT,
-                recommendation TEXT,
-                confidence REAL,
-                scene_description TEXT,
-                source_type TEXT,
-                source_path TEXT,
-                pipeline_mode TEXT,
-                ai_model TEXT,
-                detection_details TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        '''))
-        conn.commit()
-        print('✓ alerts 表创建完成')
 except Exception as e:
-    print(f'数据库检查失败: {e}')
+    print('⚠ alerts 表不存在，创建中...')
+    try:
+        with engine.connect() as conn:
+            conn.execute(text('''
+                CREATE TABLE IF NOT EXISTS alerts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    description TEXT,
+                    risk_level TEXT,
+                    recommendation TEXT,
+                    confidence REAL,
+                    scene_description TEXT,
+                    source_type TEXT,
+                    source_path TEXT,
+                    pipeline_mode TEXT,
+                    ai_model TEXT,
+                    detection_details TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            '''))
+            conn.commit()
+            print('✓ alerts 表创建完成')
+    except Exception as e2:
+        print(f'数据库创建失败: {e2}')
 "
     cd "$PROJECT_ROOT"
 }
@@ -93,9 +95,8 @@ stop_all() {
 
 # ==================== Ollama 模型配置 ====================
 # 需要下载的 Ollama 模型列表
-# 注意：gemma4:e2b 需要最新版本 Ollama，如下载失败会自动回退到 qwen2.5:latest
 REQUIRED_MODELS=(
-    "qwen2.5:latest"
+    "gemma4:e2b"
     "nomic-embed-text"
 )
 
@@ -153,11 +154,7 @@ start_backend() {
     cd "$PROJECT_ROOT/backend"
     export PYTHONPATH="$PROJECT_ROOT/backend"
 
-    pm2 start \
-        --name "uav-backend" \
-        --no-autorestart \
-        -- \
-        python3 -m uvicorn main:app --host $BACKEND_HOST --port $BACKEND_PORT
+    pm2 start "$PROJECT_ROOT/ecosystem.config.js" --only uav-backend
 
     cd "$PROJECT_ROOT"
     sleep 4
@@ -174,15 +171,10 @@ start_backend() {
 start_frontend() {
     echo -e "${YELLOW}启动前端服务 (PM2 守护)...${NC}"
 
-    cd "$PROJECT_ROOT/frontend"
+    cd "$PROJECT_ROOT"
 
-    # 使用 Turbo 启动前端应用
-    # Turbo 会同时启动 showcase, dashboard, admin
-    pm2 start \
-        --name "uav-frontend" \
-        --no-autorestart \
-        -- \
-        pnpm dev
+    # 使用 ecosystem.config.js 启动所有前端服务
+    pm2 start ecosystem.config.js --only uav-showcase,uav-dashboard,uav-admin
 
     sleep 10
 
