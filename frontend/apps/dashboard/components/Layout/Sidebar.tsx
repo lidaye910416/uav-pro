@@ -1,14 +1,15 @@
 "use client"
 import Link from "next/link"
 
-const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:4000"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:4002"
+const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
+const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
 
 const navItems = [
   { href: "/", label: "◉ 控制台", icon: "◉" },
   { href: "/monitor", label: "感知中心", icon: "◉" },
   { href: "/alerts", label: "预警列表", icon: "◆" },
   { href: "/flight", label: "飞控平台", icon: "▲" },
+  { href: "/brain", label: "智能决策", icon: "◈" },
 ]
 
 export default function Sidebar() {

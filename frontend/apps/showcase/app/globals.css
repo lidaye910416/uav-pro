@@ -3700,3 +3700,200 @@
   color: var(--text-muted);
   line-height: 1.6;
 }
+
+/* ── 社会效益与意义 ─────────────────────────────────────────── */
+.about-benefits-highlight {
+  padding: 20px 24px;
+  background: linear-gradient(135deg, rgba(168, 85, 247, 0.08) 0%, rgba(236, 72, 153, 0.08) 100%);
+  border: 1px solid rgba(168, 85, 247, 0.2);
+  border-radius: 16px;
+  margin-bottom: 24px;
+}
+
+.about-benefits-highlight p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.about-application-fields {
+  margin-bottom: 24px;
+}
+
+.about-application-fields-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.about-application-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.about-application-card {
+  padding: 16px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.about-application-card:hover {
+  border-color: var(--accent-purple);
+  transform: translateY(-2px);
+  background: rgba(168, 85, 247, 0.05);
+}
+
+.about-application-icon {
+  font-size: 28px;
+  margin-bottom: 10px;
+}
+
+.about-application-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-amber);
+  margin-bottom: 6px;
+}
+
+.about-application-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.about-benefits-goal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  background: rgba(255, 184, 0, 0.08);
+  border: 1px solid rgba(255, 184, 0, 0.2);
+  border-radius: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.about-benefits-goal-icon {
+  font-size: 20px;
+}
+
+.about-benefits-goal strong {
+  color: var(--accent-amber);
+}
+
+.about-benefits-company {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  margin-bottom: 20px;
+}
+
+.about-benefits-company-intro {
+  font-size: 14px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.about-benefits-company-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.about-benefits-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+.about-benefits-item-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.about-benefits-item strong {
+  color: var(--text-primary);
+}
+
+.about-talent-section {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.about-talent-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.about-talent-cards {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.about-talent-card {
+  flex: 1;
+  padding: 20px;
+  background: rgba(59, 130, 246, 0.08);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.about-talent-value {
+  font-size: 28px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  margin-bottom: 6px;
+}
+
+.about-talent-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.about-talent-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.about-talent-desc strong {
+  color: var(--accent-green);
+}
+
+@media (max-width: 768px) {
+  .about-application-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .about-targets-header {
+    grid-template-columns: 1fr 1fr;
+  }
+  
+  .about-targets-header span:nth-child(3),
+  .about-targets-header span:nth-child(4) {
+    display: none;
+  }
+  
+  .about-targets-row span:nth-child(3),
+  .about-targets-row span:nth-child(4) {
+    display: none;
+  }
+}

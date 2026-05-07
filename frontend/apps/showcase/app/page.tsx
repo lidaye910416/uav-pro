@@ -2,6 +2,9 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import PipelinePanel from "../components/DemoPipeline"
 
+// 统一使用环境变量配置
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"
+
 /* ── Interactive Particle Globe ────────────────────────────── */
 function Globe3D() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -458,6 +461,7 @@ export default function HomePage() {
   const [activeSection, setActiveSection] = useState(0)
   const [pipelineRunning, setPipelineRunning] = useState(false)
   const [showFooter, setShowFooter] = useState(false)
+  const [showStopConfirm, setShowStopConfirm] = useState(false)
   const lastScrollTop = useRef(0)
 
   useEffect(() => {
@@ -598,25 +602,25 @@ export default function HomePage() {
                 {/* CTA */}
                 <div className="flex items-center gap-3 flex-wrap mb-8" style={{ animation: "fadeIn 0.6s ease-out 0.5s both" }}>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"}/monitor`}
+                    href={`${DASHBOARD_URL}/monitor`}
                     className="px-7 py-3 rounded-xl font-mono text-sm font-medium tracking-wider transition-all hover:brightness-110"
                     style={{ background: "var(--accent-amber)", color: "#000", boxShadow: "0 0 24px rgba(255,184,0,0.3)" }}
                   >
                     感知中心 →
                   </a>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"}/brain`}
+                    href={`${DASHBOARD_URL}/flight`}
                     className="px-7 py-3 rounded-xl font-mono text-sm font-medium tracking-wider transition-all hover:brightness-110"
                     style={{ background: "rgba(0,229,160,0.1)", color: "var(--accent-green)", border: "1px solid rgba(0,229,160,0.3)" }}
                   >
-                    视觉大脑 →
+                    飞控平台 →
                   </a>
                   <a
-                    href={`${process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:4001"}/knowledge`}
+                    href={`${DASHBOARD_URL}/brain`}
                     className="px-7 py-3 rounded-xl font-mono text-sm font-medium tracking-wider transition-all hover:brightness-110"
                     style={{ background: "rgba(74,158,255,0.08)", color: "var(--accent-blue)", border: "1px solid rgba(74,158,255,0.25)" }}
                   >
-                    知识库 →
+                    智能决策 →
                   </a>
                 </div>
 
@@ -666,17 +670,18 @@ export default function HomePage() {
               >
                 <PipelinePanel
                   onRunningChange={(r: boolean) => setPipelineRunning(r)}
+                  onStopConfirmChange={(show: boolean) => setShowStopConfirm(show)}
                 />
               </div>
 
               {/* Right: Feature cards stacked (takes ~42%) */}
+              {!(pipelineRunning || showStopConfirm) && (
               <div
                 className="flex flex-col gap-5 transition-all duration-700"
                 style={{
-                  animation: pipelineRunning ? "none" : "fadeIn 0.7s ease-out 0.3s both",
-                  flexBasis: pipelineRunning ? "0%" : "42%",
-                  maxWidth: pipelineRunning ? "0%" : "42%",
-                  opacity: pipelineRunning ? 0 : 1,
+                  animation: "fadeIn 0.7s ease-out 0.3s both",
+                  flexBasis: "42%",
+                  maxWidth: "42%",
                   overflow: "hidden",
                   minWidth: 0,
                 }}
@@ -751,6 +756,7 @@ export default function HomePage() {
 </div>
                 ))}
               </div>
+              )}
             </div>
           </div>
         </section>

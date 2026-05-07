@@ -1,5 +1,5 @@
 "use client"
-import { useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 
 interface ROIBox {
   x1: number; y1: number; x2: number; y2: number; confidence: number
@@ -10,13 +10,22 @@ interface VideoPlayerProps {
   onPause?: () => void
   rois?: ROIBox[]
   showROIBadge?: boolean
+  annotatedFrameUrl?: string  // 标注帧图片 URL
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
 
-export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge = false }: VideoPlayerProps) {
+export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge = false, annotatedFrameUrl }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [showAnnotated, setShowAnnotated] = useState(false)
+
+  // 切换到标注帧显示
+  useEffect(() => {
+    if (annotatedFrameUrl) {
+      setShowAnnotated(true)
+    }
+  }, [annotatedFrameUrl])
 
   function pause() {
     videoRef.current?.pause()
@@ -43,22 +52,32 @@ export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge =
       className="relative w-full rounded-xl overflow-hidden"
       style={{ aspectRatio: "16/7", background: "var(--bg-primary)" }}
     >
-      <video
-        ref={videoRef}
-        src={`${API_BASE}/api/v1/demo/video?video_id=gal_1`}
-        autoPlay
-        muted
-        loop
-        playsInline
-        controls
-        controlsList="nodownload nofullscreen"
-        style={{ width: "100%", height: "100%", objectFit: "cover" }}
-        onPlay={onPlay}
-        onPause={onPause}
-      />
+      {showAnnotated && annotatedFrameUrl ? (
+        /* 标注帧图片 */
+        <img
+          src={annotatedFrameUrl}
+          alt="检测帧"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+        />
+      ) : (
+        /* 原始视频 */
+        <video
+          ref={videoRef}
+          src={`${API_BASE}/api/v1/demo/video?video_id=gal_1`}
+          autoPlay
+          muted
+          loop
+          playsInline
+          controls
+          controlsList="nodownload nofullscreen"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          onPlay={onPlay}
+          onPause={onPause}
+        />
+      )}
 
-      {/* ROI overlay boxes */}
-      {showROIBadge && rois.map((roi, i) => (
+      {/* ROI overlay boxes - 仅在显示原始视频时显示 */}
+      {showROIBadge && !showAnnotated && rois.map((roi, i) => (
         <div
           key={i}
           className="absolute border-2 rounded pointer-events-none"
@@ -81,6 +100,16 @@ export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge =
         <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "var(--accent-amber)" }} />
         T1-D2 · MiTra航拍
       </div>
+
+      {/* 标注帧标签 */}
+      {showAnnotated && annotatedFrameUrl && (
+        <div
+          className="absolute top-3 right-3 px-2 py-1 rounded text-xs font-mono"
+          style={{ background: "rgba(0,229,160,0.2)", color: "var(--accent-green)", border: "1px solid var(--accent-green)" }}
+        >
+          ◉ 检测帧
+        </div>
+      )}
 
       {/* Scan line effect overlay */}
       <div

@@ -1,8 +1,7 @@
 "use client"
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef, memo } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
-import { useAlertStream, StreamAlert } from "../../hooks/useAlertStream"
-import { PipelineStageCard } from "../../components/PipelineStageCard"
+import { useAlertStream, StreamAlert, closeAlertStream } from "../../hooks/useAlertStream"
 import { SOPPanel } from "../../components/SOPPanel"
 
 type VideoId = "d1" | "d2" | "d3" | "d4" | "d5" | "d6" | "default"
@@ -93,11 +92,12 @@ function createEmptyPipelineState(): PipelineState {
 
 // ── Video Card with Pipeline Stage Progress ──────────────────────────────────
 
-function VideoCard({ config, pipelineState, alerts, yoloParams }: {
+const VideoCard = memo(function VideoCard({ config, pipelineState, alerts, yoloParams, videoEnabled = false }: {
   config: VideoConfig
   pipelineState: PipelineState
   alerts: StreamAlert[]
   yoloParams: YOLOParams
+  videoEnabled?: boolean
 }) {
   const [failed, setFailed] = useState(false)
   
@@ -156,6 +156,11 @@ function VideoCard({ config, pipelineState, alerts, yoloParams }: {
         {!config.active ? (
           <div className="absolute inset-0 flex flex-col items-center justify-center">
             <div className="text-xs" style={{ color: "var(--text-muted)" }}>未启用感知</div>
+            <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{config.label}</div>
+          </div>
+        ) : !videoEnabled ? (
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <div className="text-xs" style={{ color: "var(--text-muted)" }}>点击启用视频</div>
             <div className="text-xs mt-1" style={{ color: "var(--text-muted)" }}>{config.label}</div>
           </div>
         ) : failed ? (
@@ -256,19 +261,20 @@ function VideoCard({ config, pipelineState, alerts, yoloParams }: {
       </div>
     </div>
   )
-}
+})
 
 // ── Collapsible Right Panel (Tab-based) ──────────────────────────────────────
 
 type RightTab = "pipeline" | "params" | "sop" | "alerts"
 
-function CollapsibleRightPanel({ pipelineState, yoloParams, onYoloChange, alerts }: {
+const CollapsibleRightPanel = memo(function CollapsibleRightPanel({ pipelineState, yoloParams, onYoloChange, alerts, defaultTab = "pipeline" }: {
   pipelineState: PipelineState
   yoloParams: YOLOParams
   onYoloChange: (p: YOLOParams) => void
   alerts: StreamAlert[]
+  defaultTab?: RightTab
 }) {
-  const [activeTab, setActiveTab] = useState<RightTab>("pipeline")
+  const [activeTab, setActiveTab] = useState<RightTab>(defaultTab)
 
   const tabs: { key: RightTab; label: string; icon: string; count?: number }[] = [
     { key: "pipeline", label: "Pipeline", icon: "◉" },
@@ -312,7 +318,7 @@ function CollapsibleRightPanel({ pipelineState, yoloParams, onYoloChange, alerts
           <YOLOParamsPanel params={yoloParams} onChange={onYoloChange} compact />
         )}
         {activeTab === "sop" && (
-          <SOPPanel compact />
+          <SOPPanel />
         )}
         {activeTab === "alerts" && (
           <AlertStreamPanelInternal alerts={alerts} />
@@ -320,11 +326,11 @@ function CollapsibleRightPanel({ pipelineState, yoloParams, onYoloChange, alerts
       </div>
     </div>
   )
-}
+})
 
 // ── Pipeline Progress Panel (Internal) ──────────────────────────────────────
 
-function PipelineProgressPanelInternal({ pipelineState }: { pipelineState: PipelineState }) {
+const PipelineProgressPanelInternal = memo(function PipelineProgressPanelInternal({ pipelineState }: { pipelineState: PipelineState }) {
   return (
     <div className="space-y-2">
       {PIPELINE_STAGES.map((stage) => {
@@ -379,11 +385,11 @@ function PipelineProgressPanelInternal({ pipelineState }: { pipelineState: Pipel
       })}
     </div>
   )
-}
+})
 
 // ── Alert Stream Panel (Internal) ───────────────────────────────────────────
 
-function AlertStreamPanelInternal({ alerts }: { alerts: StreamAlert[] }) {
+const AlertStreamPanelInternal = memo(function AlertStreamPanelInternal({ alerts }: { alerts: StreamAlert[] }) {
   return (
     <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 480px)" }}>
       {alerts.length === 0 ? (
@@ -406,7 +412,7 @@ function AlertStreamPanelInternal({ alerts }: { alerts: StreamAlert[] }) {
       })}
     </div>
   )
-}
+})
 
 // ── YOLO Params Panel (Compact) ──────────────────────────────────────────────
 
@@ -655,24 +661,71 @@ export default function MonitorPage() {
   const [alerts, setAlerts] = useState<StreamAlert[]>([])
   const [yoloParams, setYoloParams] = useState<YOLOParams>(DEFAULT_YOLO_PARAMS)
   const [pipelineState, setPipelineState] = useState<PipelineState>(createEmptyPipelineState())
+  const [pipelineRunning, setPipelineRunning] = useState(false) // 控制 Pipeline 模拟是否运行
+  const pipelineTimerRef = useRef<NodeJS.Timeout | null>(null)
+  // 从 URL 获取默认 tab 参数 - 使用 useState 避免 SSR 问题
+  const [defaultTab, setDefaultTab] = useState<RightTab>("pipeline")
+  // 释放内存状态
+  const [isReleasing, setIsReleasing] = useState(false)
+  const [releaseStatus, setReleaseStatus] = useState<{ ok: boolean; message: string; models: string[] } | null>(null)
+  // SSE 连接状态 - 默认关闭
+  const [sseEnabled, setSseEnabled] = useState(false)
+  // 视频加载状态 - 默认关闭
+  const [videoEnabled, setVideoEnabled] = useState(false)
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get("tab")
+    if (tabParam && ["pipeline", "params", "sop", "alerts"].includes(tabParam)) {
+      setDefaultTab(tabParam as RightTab)
+    }
+  }, [])
 
   const onAlert = useCallback((alert: StreamAlert) => {
     setAlerts((prev) => [alert, ...prev].slice(0, 50))
   }, [])
 
-  const { connected } = useAlertStream(onAlert)
+  // SSE 连接 - 通过 enabled 参数控制
+  const { connected } = useAlertStream(onAlert, sseEnabled)
 
-  // 模拟 Pipeline 运行
-  useEffect(() => {
-    if (!connected) {
-      setPipelineState(createEmptyPipelineState())
-      return
+  // 清理 Pipeline 定时器
+  const clearPipelineTimer = useCallback(() => {
+    if (pipelineTimerRef.current) {
+      clearTimeout(pipelineTimerRef.current)
+      pipelineTimerRef.current = null
     }
+  }, [])
+
+  // 停止 Pipeline 模拟并释放 Ollama 内存
+  const stopPipeline = useCallback(async () => {
+    setPipelineRunning(false)
+    clearPipelineTimer()
+    setPipelineState(createEmptyPipelineState())
+
+    // 释放 Ollama 模型内存
+    try {
+      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
+      const data = await res.json()
+      if (data.ok) {
+        console.log("[Monitor] Ollama models stopped:", data.stopped_models)
+      }
+    } catch (e) {
+      console.warn("[Monitor] Failed to stop Ollama:", e)
+    }
+  }, [clearPipelineTimer])
+
+  // 启动 Pipeline 模拟
+  const startPipeline = useCallback(() => {
+    if (pipelineRunning) return
+    setPipelineRunning(true)
 
     // 模拟 4 阶段 Pipeline
-    let timer: NodeJS.Timeout
-    
+    let currentTimer: NodeJS.Timeout | null = null
+
     const runPipeline = () => {
+      if (!pipelineRunning) return
+
       // Stage 1: Detection
       setPipelineState(prev => ({
         ...prev,
@@ -680,10 +733,10 @@ export default function MonitorPage() {
       }))
       
       let progress = 0
-      timer = setInterval(() => {
+      currentTimer = setInterval(() => {
         progress += 10
         if (progress >= 100) {
-          clearInterval(timer)
+          clearInterval(currentTimer!)
           setPipelineState(prev => ({
             ...prev,
             detection: { status: "done", progress: 100, summary: "检测到 2 个目标（car, person）" }
@@ -697,10 +750,10 @@ export default function MonitorPage() {
             }))
             
             let idProgress = 0
-            timer = setInterval(() => {
+            currentTimer = setInterval(() => {
               idProgress += 15
               if (idProgress >= 100) {
-                clearInterval(timer)
+                clearInterval(currentTimer!)
                 setPipelineState(prev => ({
                   ...prev,
                   identify: { status: "done", progress: 100, summary: "道路通行正常，未检测到异常" }
@@ -714,10 +767,10 @@ export default function MonitorPage() {
                   }))
                   
                   let ragProgress = 0
-                  timer = setInterval(() => {
+                  currentTimer = setInterval(() => {
                     ragProgress += 20
                     if (ragProgress >= 100) {
-                      clearInterval(timer)
+                      clearInterval(currentTimer!)
                       setPipelineState(prev => ({
                         ...prev,
                         rag: { status: "done", progress: 100, summary: "检索到 3 条相关知识" }
@@ -731,10 +784,10 @@ export default function MonitorPage() {
                         }))
                         
                         let decProgress = 0
-                        timer = setInterval(() => {
+                        currentTimer = setInterval(() => {
                           decProgress += 25
                           if (decProgress >= 100) {
-                            clearInterval(timer)
+                            clearInterval(currentTimer!)
                             setPipelineState(prev => ({
                               ...prev,
                               decision: { status: "done", progress: 100, summary: "风险等级: 低 · 无预警" }
@@ -776,12 +829,12 @@ export default function MonitorPage() {
     }
     
     // 延迟开始
-    setTimeout(runPipeline, 1000)
-    
+    pipelineTimerRef.current = setTimeout(runPipeline, 1000)
+
     return () => {
-      if (timer) clearInterval(timer)
+      if (currentTimer) clearInterval(currentTimer!)
     }
-  }, [connected])
+  }, [connected, pipelineRunning])
 
   // Load YOLO params from backend
   useEffect(() => {
@@ -828,15 +881,115 @@ export default function MonitorPage() {
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <div
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
-              style={{ background: "var(--bg-card)", border: `1px solid ${connected ? "var(--accent-green)" : "var(--accent-red)"}` }}
+            {/* SSE 开关按钮 - 默认关闭 */}
+            <button
+              onClick={() => {
+                if (sseEnabled) {
+                  closeAlertStream()
+                  setSseEnabled(false)
+                } else {
+                  // 重新连接 SSE
+                  window.location.reload()
+                }
+              }}
+              className="px-3 py-2 rounded-lg text-xs font-mono transition-all"
+              style={{
+                background: sseEnabled ? "rgba(0,229,160,0.15)" : "rgba(255,255,255,0.05)",
+                color: sseEnabled ? "var(--accent-green)" : "var(--text-muted)",
+                border: `1px solid ${sseEnabled ? "var(--accent-green)" : "var(--border)"}`,
+              }}
             >
-              <span className="w-2 h-2 rounded-full" style={{ background: connected ? "var(--accent-green)" : "var(--accent-red)", boxShadow: connected ? "0 0 6px var(--accent-green)" : "none" }} />
-              <span style={{ color: connected ? "var(--accent-green)" : "var(--accent-red)" }}>
-                {connected ? "◈ 实时感知" : "OFFLINE"}
-              </span>
-            </div>
+              {sseEnabled ? "📡 实时预警 ON" : "📡 实时预警 OFF"}
+            </button>
+
+            {/* 释放内存并中断 SSE 按钮 */}
+            <button
+              onClick={async () => {
+                setIsReleasing(true)
+                setReleaseStatus(null)
+
+                // 1. 中断 SSE 连接
+                closeAlertStream()
+                setSseEnabled(false)
+
+                // 2. 停止 Pipeline 模拟
+                setPipelineRunning(false)
+                clearPipelineTimer()
+                setPipelineState(createEmptyPipelineState())
+
+                // 3. 释放 Ollama 模型内存
+                try {
+                  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+                  const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
+                  const data = await res.json()
+                  if (data.ok) {
+                    setReleaseStatus({
+                      ok: true,
+                      message: data.message,
+                      models: data.stopped_models || []
+                    })
+                  }
+                } catch (e) {
+                  setReleaseStatus({
+                    ok: false,
+                    message: "释放失败",
+                    models: []
+                  })
+                }
+
+                setIsReleasing(false)
+
+                // 3秒后自动隐藏状态
+                setTimeout(() => setReleaseStatus(null), 3000)
+              }}
+              disabled={isReleasing}
+              className="px-3 py-2 rounded-lg text-xs font-mono transition-all flex items-center gap-2"
+              style={{
+                background: isReleasing ? "rgba(255,184,0,0.2)" : "rgba(255,59,59,0.1)",
+                color: isReleasing ? "var(--accent-amber)" : "var(--accent-red)",
+                border: `1px solid ${isReleasing ? "var(--accent-amber)" : "rgba(255,59,59,0.3)"}`,
+              }}
+            >
+              {isReleasing ? (
+                <>
+                  <span className="animate-spin">⟳</span>
+                  <span>释放中...</span>
+                </>
+              ) : (
+                <>
+                  🗑 释放内存
+                </>
+              )}
+            </button>
+
+            {/* 释放状态提示 */}
+            {releaseStatus && (
+              <div
+                className="px-3 py-2 rounded-lg text-xs font-mono animate-fade-in"
+                style={{
+                  background: releaseStatus.ok ? "rgba(0,229,160,0.15)" : "rgba(255,59,59,0.15)",
+                  border: `1px solid ${releaseStatus.ok ? "var(--accent-green)" : "var(--accent-red)"}`,
+                  color: releaseStatus.ok ? "var(--accent-green)" : "var(--accent-red)",
+                }}
+              >
+                {releaseStatus.ok ? "✓ " : "✗ "}
+                {releaseStatus.message}
+                {releaseStatus.models.length > 0 && ` (${releaseStatus.models.join(", ")})`}
+              </div>
+            )}
+
+            {/* Pipeline 启动/停止按钮 */}
+            <button
+              onClick={pipelineRunning ? stopPipeline : startPipeline}
+              className="px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all"
+              style={{
+                background: pipelineRunning ? "var(--accent-red)" : "var(--accent-amber)",
+                color: pipelineRunning ? "#fff" : "#000",
+                boxShadow: pipelineRunning ? "0 0 12px rgba(255,59,59,0.3)" : "0 0 12px rgba(255,184,0,0.3)",
+              }}
+            >
+              {pipelineRunning ? "⏹ 停止演示" : "▶ 启动演示"}
+            </button>
           </div>
         </div>
 
@@ -849,6 +1002,24 @@ export default function MonitorPage() {
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* 6-video concurrent grid */}
           <div className="lg:col-span-3">
+            {/* 视频开关按钮 */}
+            <div className="flex items-center gap-3 mb-4">
+              <button
+                onClick={() => setVideoEnabled(!videoEnabled)}
+                className="px-4 py-2 rounded-lg text-xs font-mono font-bold transition-all"
+                style={{
+                  background: videoEnabled ? "var(--accent-amber)" : "rgba(255,255,255,0.05)",
+                  color: videoEnabled ? "#000" : "var(--text-muted)",
+                  border: `1px solid ${videoEnabled ? "var(--accent-amber)" : "var(--border)"}`,
+                }}
+              >
+                {videoEnabled ? "◉ 关闭视频" : "▶ 启用视频"}
+              </button>
+              <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                视频默认关闭，开启后会消耗资源
+              </span>
+            </div>
+
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {VIDEOS_WITH_URLS.map((v, i) => (
                 <VideoCard
@@ -857,6 +1028,7 @@ export default function MonitorPage() {
                   pipelineState={pipelineState}
                   alerts={alerts}
                   yoloParams={yoloParams}
+                  videoEnabled={videoEnabled}
                 />
               ))}
             </div>
@@ -878,6 +1050,7 @@ export default function MonitorPage() {
               yoloParams={yoloParams}
               onYoloChange={handleYoloParamsChange}
               alerts={alerts}
+              defaultTab={defaultTab}
             />
           </div>
         </div>

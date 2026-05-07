@@ -140,7 +140,7 @@ export function SOPPanel() {
   const [searchQuery, setSearchQuery] = useState("")
 
   // 按分类分组
-  const categories = ["全部", ...new Set(sops.map(s => s.category))]
+  const categories = ["全部", ...Array.from(new Set(sops.map(s => s.category)))]
 
   // 过滤后的 SOP
   const filteredSOPs = sops.filter(sop => {

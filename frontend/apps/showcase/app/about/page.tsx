@@ -23,6 +23,7 @@ const SECTIONS = [
   { id: "data-platform",        label: "数据平台" },
   { id: "capabilities",        label: "核心能力" },
   { id: "results",             label: "成果展示" },
+  { id: "social-benefits",     label: "社会效益" },
   { id: "future-plan",         label: "问题与计划" },
   { id: "partners",            label: "合作伙伴" },
   // ─── Add new sections below ───────────────────────────────────────────────
@@ -47,6 +48,7 @@ import PerceptionSection from "./sections/PerceptionSection"
 import DataPlatformSection from "./sections/DataPlatformSection"
 import CapabilitiesSection from "./sections/CapabilitiesSection"
 import ResultsSection from "./sections/ResultsSection"
+import SocialBenefitsSection from "./sections/SocialBenefitsSection"
 import FuturePlanSection from "./sections/FuturePlanSection"
 import PartnersSection from "./sections/PartnersSection"
 // ─── Import new section components below ────────────────────────────────────
@@ -65,6 +67,7 @@ const SECTION_COMPONENTS: Record<SectionId, React.ComponentType<{ inView: boolea
   "data-platform": DataPlatformSection,
   capabilities: CapabilitiesSection,
   results: ResultsSection,
+  "social-benefits": SocialBenefitsSection,
   "future-plan": FuturePlanSection,
   partners: PartnersSection,
   // ─── Add new section components below ─────────────────────────────────────
@@ -83,54 +86,56 @@ function GlowCanvas() {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
+    const c = canvas  // Use local alias for closures
+    const cx = ctx  // Alias for nested functions
     function resize() {
-      canvas.width = canvas.offsetWidth
-      canvas.height = canvas.offsetHeight
+      c.width = c.offsetWidth
+      c.height = c.offsetHeight
     }
     resize()
     window.addEventListener("resize", resize)
 
     function onMove(e: MouseEvent) {
-      const rect = canvas.getBoundingClientRect()
+      const rect = c.getBoundingClientRect()
       mouseRef.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
     }
     window.addEventListener("mousemove", onMove)
 
     function draw() {
-      const { width, height } = canvas
-      ctx.clearRect(0, 0, width, height)
+      const { width, height } = c
+      cx.clearRect(0, 0, width, height)
 
       // Subtle grid
-      ctx.strokeStyle = "rgba(255,255,255,0.02)"
-      ctx.lineWidth = 1
+      cx.strokeStyle = "rgba(255,255,255,0.02)"
+      cx.lineWidth = 1
       const step = 48
       for (let x = 0; x <= width; x += step) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, height); ctx.stroke()
+        cx.beginPath(); cx.moveTo(x, 0); cx.lineTo(x, height); cx.stroke()
       }
       for (let y = 0; y <= height; y += step) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
+        cx.beginPath(); cx.moveTo(0, y); cx.lineTo(width, y); cx.stroke()
       }
 
       // Mouse glow halo
       const mx = mouseRef.current.x
       const my = mouseRef.current.y
-      const halo = ctx.createRadialGradient(mx, my, 0, mx, my, 280)
+      const halo = cx.createRadialGradient(mx, my, 0, mx, my, 280)
       halo.addColorStop(0, "rgba(255,184,0,0.1)")
       halo.addColorStop(0.45, "rgba(180,122,255,0.04)")
       halo.addColorStop(1, "transparent")
-      ctx.fillStyle = halo
-      ctx.fillRect(0, 0, width, height)
+      cx.fillStyle = halo
+      cx.fillRect(0, 0, width, height)
 
       // Ripple rings
       const t = Date.now() / 1000
       for (let i = 0; i < 3; i++) {
         const phase = ((t * 0.65 + i * 0.33) % 1)
         const r = phase * 150
-        ctx.beginPath()
-        ctx.arc(mx, my, r, 0, Math.PI * 2)
-        ctx.strokeStyle = `rgba(255,184,0,${(1 - phase) * 0.15})`
-        ctx.lineWidth = 1.5
-        ctx.stroke()
+        cx.beginPath()
+        cx.arc(mx, my, r, 0, Math.PI * 2)
+        cx.strokeStyle = `rgba(255,184,0,${(1 - phase) * 0.15})`
+        cx.lineWidth = 1.5
+        cx.stroke()
       }
 
       // Trail particles
@@ -147,10 +152,10 @@ function GlowCanvas() {
       trailRef.current = trailRef.current.filter(p => p.life > 0.01)
       for (const p of trailRef.current) {
         p.x += p.vx; p.y += p.vy; p.life -= 0.015
-        ctx.beginPath()
-        ctx.arc(p.x, p.y, 2, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(255,184,0,${p.life * 0.5})`
-        ctx.fill()
+        cx.beginPath()
+        cx.arc(p.x, p.y, 2, 0, Math.PI * 2)
+        cx.fillStyle = `rgba(255,184,0,${p.life * 0.5})`
+        cx.fill()
       }
 
       rafRef.current = requestAnimationFrame(draw)
@@ -179,12 +184,14 @@ function StarCanvas() {
     const ctx = canvas.getContext("2d")
     if (!ctx) return
 
+    const c = canvas
+    const cx = ctx
     function resize() {
-      canvas.width = canvas.offsetWidth
-      canvas.height = canvas.offsetHeight
+      c.width = c.offsetWidth
+      c.height = c.offsetHeight
       starsRef.current = Array.from({ length: 90 }, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
+        x: Math.random() * c.width,
+        y: Math.random() * c.height,
         size: 0.5 + Math.random() * 1.5,
         speed: 0.06 + Math.random() * 0.25,
         opacity: 0.08 + Math.random() * 0.22,
@@ -194,15 +201,15 @@ function StarCanvas() {
     window.addEventListener("resize", resize)
 
     function draw() {
-      const { width, height } = canvas
-      ctx.clearRect(0, 0, width, height)
+      const { width, height } = c
+      cx.clearRect(0, 0, width, height)
       for (const s of starsRef.current) {
         s.y += s.speed
-        if (s.y > height) { s.y = 0; s.x = Math.random() * canvas.width }
-        ctx.beginPath()
-        ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2)
-        ctx.fillStyle = `rgba(255,255,255,${s.opacity})`
-        ctx.fill()
+        if (s.y > height) { s.y = 0; s.x = Math.random() * c.width }
+        cx.beginPath()
+        cx.arc(s.x, s.y, s.size, 0, Math.PI * 2)
+        cx.fillStyle = `rgba(255,255,255,${s.opacity})`
+        cx.fill()
       }
       rafRef.current = requestAnimationFrame(draw)
     }
@@ -248,7 +255,7 @@ function ProgressTrack({ active, onNavigate }: { active: SectionId; onNavigate: 
 
 export default function AboutPage() {
   const [activeSection, setActiveSection] = useState<SectionId>("hero")
-  const [inViewSections, setInViewSections] = useState<Set<SectionId>>(new Set(["hero"]))
+  const [inViewSections, setInViewSections] = useState<Set<SectionId>>(new Set<SectionId>(["hero"]))
   const [isNavExpanded, setIsNavExpanded] = useState(false)
   const [isScrolling, setIsScrolling] = useState(false)
   const [isExpanded, setIsExpanded] = useState(false) // 全屏展开状态
@@ -341,7 +348,7 @@ export default function AboutPage() {
               setActiveSection(sectionId)
               setInViewSections((prev) => {
                 if (prev.has(sectionId)) return prev
-                return new Set([...prev, sectionId])
+                return new Set(Array.from(prev).concat(sectionId))
               })
             }
           })

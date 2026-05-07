@@ -171,18 +171,18 @@ export default function SettingsPage() {
       {/* Tab bar */}
       <div className="flex gap-1 mb-6 flex-wrap">
         {([
-          { key: "pipeline", label: "Pipeline 模式" },
-          { key: "models", label: "模型状态" },
-          { key: "motion", label: "帧差法参数" },
+          { key: "pipeline", label: "Pipeline 模式", color: "var(--accent-amber)" },
+          { key: "models", label: "模型状态", color: "var(--accent-green)" },
+          { key: "motion", label: "帧差法参数", color: "var(--accent-purple)" },
           { key: "yolo", label: "YOLO检测", color: "var(--accent-blue)" },
-          { key: "guide", label: "加载指南" },
+          { key: "guide", label: "加载指南", color: "var(--accent-amber)" },
         ] as const).map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
             className="px-4 py-2 rounded-lg text-sm font-mono transition-all"
             style={{
-              background: tab === t.key ? (t.color ?? "var(--accent-amber)") : "var(--bg-card)",
+              background: tab === t.key ? t.color : "var(--bg-card)",
               color: tab === t.key ? "#000" : "var(--text-secondary)",
-              border: `1px solid ${tab === t.key ? (t.color ?? "var(--accent-amber)") : "var(--border)"}`,
+              border: `1px solid ${tab === t.key ? t.color : "var(--border)"}`,
             }}>
             {t.label}
           </button>
@@ -576,7 +576,7 @@ function YoloParamsTab() {
     setSaving(true)
     setMsg(null)
     try {
-      await updateYoloParams(params)
+      await updateYoloParams({ ...params } as Record<string, unknown>)
       setMsg({ type: "ok", text: "✓ YOLO 参数已保存" })
     } catch {
       setMsg({ type: "err", text: "✗ 保存失败" })

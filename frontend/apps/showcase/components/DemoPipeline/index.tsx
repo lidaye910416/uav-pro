@@ -64,9 +64,37 @@ const DEFAULT_DETECTION_PARAMS: DetectionParams = {
   sam_enabled: true,
 }
 
+// ── Helper functions ─────────────────────────────────────────────────────────
+
+/** 从 identify 阶段的 detail 中判断是否有异常事件 */
+function getHasIncident(detail?: string | Record<string, unknown>): boolean {
+  if (!detail) return false
+  if (typeof detail === "string") {
+    // 检查明确的异常事件关键词（不包括"异常"单独出现，容易误匹配"无异常"）
+    return detail.includes("事故") || detail.includes("闯入") || detail.includes("障碍物") || detail.includes("碰撞") || detail.includes("拥堵") || detail.includes("追尾") || detail.includes("散落物") || detail.includes("行人翻越")
+  }
+  const d = detail as Record<string, unknown>
+  // 检查 has_event 或 has_incident 字段
+  if (d.has_event !== undefined) return d.has_event === true
+  if (d.has_incident !== undefined) return d.has_incident === true
+  // 检查 incident_type 是否为 "none"
+  if (d.incident_type && d.incident_type !== "none") return true
+  return false
+}
+
 // ── Local demo scenes (YOLO + SAM + Gemma4:e2b Pipeline) ────────────────────────────
 
-const LOCAL_DEMOS = [
+interface LocalDemoScene {
+  perception: { detail: Record<string, unknown> }
+  rois: ROIBox[]
+  identify: { detail: string }
+  rag?: { query?: string; snippets?: string[] }
+  decision?: { detail?: Record<string, unknown> }
+  skipRag?: boolean
+  skipDecision?: boolean
+}
+
+const LOCAL_DEMOS: LocalDemoScene[] = [
   {
     perception: {
       detail: { frame_idx: "00001", timestamp: "00:00.0", resolution: "1280×720", fps: "30", detections: "0", roi_count: "0" },
@@ -75,24 +103,16 @@ const LOCAL_DEMOS = [
     identify: {
       detail: "无运动区域，检测到 2 辆正常行驶车辆，道路表面完好，无异常事件。",
     },
+    // RAG 和 Decision 部分：正常场景不执行深度检索
     rag: {
-      query: "道路正常通行",
-      snippets: [
-        "[SOP] none | severity=none | 场景特征：道路畅通，无异常物体/人员/事件 | 描述：正常交通状态 | 建议：正常行驶",
-        "[SOP] congestion | severity=low | 场景特征：车辆排队，但缓慢移动，无停滞 | 描述：常规交通拥堵 | 建议：保持车距，耐心等待",
-      ],
+      query: undefined,  // 正常场景，跳过 RAG 检索
+      snippets: undefined,  // 空 snippets 触发"暂不检索"提示
     },
     decision: {
-      detail: {
-        risk_level: "low",
-        has_incident: false,
-        confidence: 0.94,
-        title: "道路通行正常",
-        recommendation: "持续监控，暂无预警处置建议。",
-        incident_type: "none",
-        severity: "none",
-      },
+      detail: undefined,  // 正常场景，跳过 LLM 决策
     },
+    skipRag: true,  // 标记跳过 RAG
+    skipDecision: true,  // 标记跳过决策
   },
   {
     perception: {
@@ -250,9 +270,10 @@ function emptyStages(): Record<string, StageCardData> {
 
 interface PipelinePanelProps {
   onRunningChange?: (running: boolean) => void
+  onStopConfirmChange?: (show: boolean) => void
 }
 
-export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
+export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: PipelinePanelProps) {
   const [running, setRunning]   = useState(false)
   const [done, setDone]         = useState(false)
   const [alert, setAlert]       = useState<Record<string, unknown> | null>(null)
@@ -336,10 +357,12 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
 
   function confirmStop() {
     setStopConfirm(true)
+    onStopConfirmChange?.(true)
   }
 
   function cancelStop() {
     setStopConfirm(false)
+    onStopConfirmChange?.(false)
   }
 
   // ── Local demo orchestrator (no backend required) ────────────────────────
@@ -371,29 +394,53 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
       setStages((prev) => ({ ...prev, identify: { ...prev.identify, status: "done", progress: 100, detail: scene.identify.detail } }))
     }, t2))
 
-    // RAG
-    localTimersRef.current.push(setTimeout(() => {
-      setStages((prev) => ({
-        ...prev,
-        rag: { ...prev.rag, status: "running", progress: 20 },
-      }))
-    }, t3 - 800))
-    localTimersRef.current.push(setTimeout(() => {
-      setStages((prev) => ({ ...prev, rag: { ...prev.rag, status: "done", progress: 100, snippets: scene.rag.snippets, query: scene.rag.query } }))
-    }, t3))
+    // RAG - 判断是否跳过
+    if (scene.skipRag) {
+      // 正常场景：显示"暂不检索"状态后跳过
+      localTimersRef.current.push(setTimeout(() => {
+        setStages((prev) => ({
+          ...prev,
+          rag: { ...prev.rag, status: "done", progress: 100, snippets: undefined, query: undefined, summary: "暂不进行 SOP 检索" },
+        }))
+      }, t3))
+    } else {
+      // 异常场景：执行 RAG 检索
+      localTimersRef.current.push(setTimeout(() => {
+        setStages((prev) => ({
+          ...prev,
+          rag: { ...prev.rag, status: "running", progress: 20 },
+        }))
+      }, t3 - 800))
+      localTimersRef.current.push(setTimeout(() => {
+        setStages((prev) => ({ ...prev, rag: { ...prev.rag, status: "done", progress: 100, snippets: scene.rag?.snippets, query: scene.rag?.query } }))
+      }, t3))
+    }
 
-    // Decision
-    localTimersRef.current.push(setTimeout(() => {
-      setStages((prev) => ({
-        ...prev,
-        decision: { ...prev.decision, status: "running", progress: 30 },
-      }))
-    }, t4 - 800))
-    localTimersRef.current.push(setTimeout(() => {
-      const decision = scene.decision.detail
-      setStages((prev) => ({ ...prev, decision: { ...prev.decision, status: "done", progress: 100, detail: decision } }))
-      setAlert({ ...decision, source_type: "demo", frame_idx: scene.perception.detail.frame_idx })
-    }, t4))
+    // Decision - 判断是否跳过
+    if (scene.skipDecision) {
+      // 正常场景：显示"暂不决策"状态后跳过
+      localTimersRef.current.push(setTimeout(() => {
+        setStages((prev) => ({
+          ...prev,
+          decision: { ...prev.decision, status: "done", progress: 100, summary: "暂不进行事故深度决策" },
+        }))
+      }, t4))
+    } else {
+      // 异常场景：执行 LLM 决策
+      localTimersRef.current.push(setTimeout(() => {
+        setStages((prev) => ({
+          ...prev,
+          decision: { ...prev.decision, status: "running", progress: 30 },
+        }))
+      }, t4 - 800))
+      localTimersRef.current.push(setTimeout(() => {
+        const decision = scene.decision?.detail
+        if (decision) {
+          setStages((prev) => ({ ...prev, decision: { ...prev.decision, status: "done", progress: 100, detail: decision } }))
+          setAlert({ ...decision, source_type: "demo", frame_idx: scene.perception.detail.frame_idx as string })
+        }
+      }, t4))
+    }
 
     // Reveal all done stages with stagger
     ;[t1, t2, t3, t4].forEach((t, i) => {
@@ -688,8 +735,8 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
           {/* 停止确认弹窗 */}
           {stopConfirm && (
             <div
-              className="fixed inset-0 z-50 flex items-center justify-center"
-              style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+              className="fixed inset-0 flex items-center justify-center !z-[999999]"
+              style={{ background: "rgba(0,0,0,0.85)", backdropFilter: "blur(8px)" }}
               onClick={cancelStop}
             >
               <div
@@ -733,7 +780,12 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
 
           {/* LEFT: Video */}
           <div className="flex-1 min-w-0">
-            <VideoPlayer rois={currentRois} showROIBadge={currentRois.length > 0} />
+            <VideoPlayer
+              key={stages.perception.combinedImageUrl || "video"}
+              rois={currentRois}
+              showROIBadge={currentRois.length > 0}
+              annotatedFrameUrl={stages.perception.combinedImageUrl}
+            />
           </div>
 
           {/* ── Right Sidebar: Pipeline Progress + Detection Stats (side by side) ── */}
@@ -866,14 +918,26 @@ export default function PipelinePanel({ onRunningChange }: PipelinePanelProps) {
               <AnomalyOutputSection detail={stages.identify.detail} sceneKey={sceneKey} running={stages.identify.status === "running"} />
             )}
 
-            {/* RAG output */}
-            {stages.rag.status !== "idle" && stages.rag.snippets && (
-              <RagOutputSection snippets={stages.rag.snippets} query={stages.rag.query} sceneKey={sceneKey} running={stages.rag.status === "running"} />
+            {/* RAG output - 仅当 identify 完成后才显示 */}
+            {stages.identify.status === "done" && (
+              <RagOutputSection
+                snippets={stages.rag.snippets}
+                query={stages.rag.query}
+                sceneKey={sceneKey}
+                running={stages.rag.status === "running"}
+                hasIncident={getHasIncident(stages.identify.detail)}
+                status={stages.rag.status}
+              />
             )}
 
-            {/* Decision output */}
-            {stages.decision.status !== "idle" && stages.decision.detail && (
-              <DecisionOutputSection detail={stages.decision.detail as Record<string, unknown>} sceneKey={sceneKey} running={stages.decision.status === "running"} />
+            {/* Decision output - 仅当 identify 完成后才显示 */}
+            {stages.identify.status === "done" && (
+              <DecisionOutputSection
+                detail={stages.decision.detail as Record<string, unknown>}
+                sceneKey={sceneKey}
+                running={stages.decision.status === "running"}
+                hasIncident={getHasIncident(stages.identify.detail)}
+              />
             )}
 
             {/* Alert banner */}
@@ -993,9 +1057,6 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
     combinedImageUrl: combinedImageUrl,
     detailImageUrl: detailImageUrl,
     effectiveUrl: effectiveUrl,
-    combinedImageUrl,
-    detailImageUrl,
-    effectiveUrl,
     status: running ? "running" : "done"
   })
 
@@ -1268,8 +1329,10 @@ function AnomalyOutputSection({ detail, sceneKey, running }: { detail?: string |
 
 // ── RAG Output Section ───────────────────────────────────────────────────────
 
-function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: string[]; query?: string; sceneKey: number; running: boolean }) {
+function RagOutputSection({ snippets, query, sceneKey, running, hasIncident, status }: { snippets?: string[]; query?: string; sceneKey: number; running: boolean; hasIncident?: boolean; status?: StageStatus }) {
   const RAG_KWS = ["应急车道", "道路散落物", "交通事故", "行人闯入", "交警", "报警", "护栏", "二次事故", "处置", "规范", "通知", "预警", "路政", "拥堵"]
+  const hasSnippets = snippets && snippets.length > 0 && snippets.some(s => s && s.trim())
+  const isSkipped = status === 'skipped'
 
   function highlight(text: string, kws: string[]): React.ReactNode {
     if (!text) return <>{text}</>
@@ -1308,24 +1371,75 @@ function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: s
         <span style={{ color: "var(--accent-blue)" }}>◫</span>
         <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-blue)" }}>RAG SOP 知识库检索</span>
         {running && <span className="animate-pulse text-xs font-mono" style={{ color: "var(--accent-blue)" }}>◈ 检索中...</span>}
-        {!running && query && <span className="ml-auto text-xs font-mono truncate max-w-48" style={{ color: "rgba(74,158,255,0.5)" }}>查询: {query}</span>}
+        {isSkipped && <span className="ml-auto text-xs font-mono" style={{ color: "rgba(74,158,255,0.5)" }}>✓ 暂不检索</span>}
+        {!running && !isSkipped && !hasSnippets && <span className="ml-auto text-xs font-mono" style={{ color: "rgba(74,158,255,0.5)" }}>◈ 暂不检索</span>}
+        {!running && !isSkipped && query && <span className="ml-auto text-xs font-mono truncate max-w-48" style={{ color: "rgba(74,158,255,0.5)" }}>查询: {query}</span>}
       </div>
       {/* Snippet cards */}
       <div className="p-3 space-y-2">
-        {(snippets || []).slice(0, 3).map((s, i) => (
+        {hasSnippets ? (
+          (snippets || []).slice(0, 3).map((s, i) => (
+            <div
+              key={`${sceneKey}-${i}`}
+              className="p-3 rounded-lg text-xs leading-relaxed"
+              style={{
+                animation: `slideIn 0.4s ease-out ${i * 0.3}s both`,
+                background: "var(--bg-primary)",
+                border: "1px solid rgba(74,158,255,0.1)",
+                borderLeft: "3px solid rgba(74,158,255,0.35)",
+              }}
+            >
+              {highlight(s, RAG_KWS)}
+            </div>
+          ))
+        ) : isSkipped || !hasSnippets ? (
+          /* 场景正常，跳过 RAG 检索 */
           <div
-            key={`${sceneKey}-${i}`}
-            className="p-3 rounded-lg text-xs leading-relaxed"
+            className="p-4 rounded-lg"
             style={{
-              animation: `slideIn 0.4s ease-out ${i * 0.3}s both`,
               background: "var(--bg-primary)",
-              border: "1px solid rgba(74,158,255,0.1)",
-              borderLeft: "3px solid rgba(74,158,255,0.35)",
+              border: "1px solid rgba(0,229,160,0.2)",
             }}
           >
-            {highlight(s, RAG_KWS)}
+            {/* 跳过提示 */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(0,229,160,0.15)" }}>
+                <span style={{ fontSize: "16px" }}>✅</span>
+              </div>
+              <div>
+                <div className="text-sm font-mono font-bold" style={{ color: "var(--accent-green)" }}>暂不进行 SOP 检索</div>
+                <div className="text-xs" style={{ color: "var(--text-muted)" }}>识别层判断无异常，跳过 RAG 检索流程</div>
+              </div>
+            </div>
+
+            {/* 模型说明 */}
+            <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(74,158,255,0.15)" }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span style={{ color: "var(--accent-blue)" }}>◫</span>
+                <span className="text-xs font-mono font-bold" style={{ color: "var(--accent-blue)" }}>本阶段使用模型</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.15)" }}>
+                <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(74,158,255,0.2)", color: "var(--accent-blue)" }}>ChromaDB</span>
+                <span className="text-xs" style={{ color: "var(--text-secondary)" }}>向量数据库 · 嵌入式语义检索 · 相似度匹配 SOP 条目</span>
+              </div>
+              <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                检索流程：接收异常类型 → 构建语义查询 → ChromaDB 相似度匹配 → 返回 top-3 SOP 条目
+              </div>
+            </div>
+
+            {/* 异常时的 SOP 列表 */}
+            <div className="mt-3 pt-3" style={{ borderTop: "1px dashed rgba(74,158,255,0.2)" }}>
+              <div className="text-xs font-mono mb-2" style={{ color: "var(--accent-blue)" }}>当检测到异常时，将检索对应 SOP：</div>
+              <div className="flex flex-wrap gap-1">
+                {["碰撞事故 SOP", "坑洞处置 SOP", "障碍物清除 SOP", "行人闯入 SOP", "拥堵疏导 SOP"].map((sop) => (
+                  <span key={sop} className="px-2 py-0.5 rounded text-xs" style={{ background: "rgba(74,158,255,0.1)", color: "var(--text-muted)" }}>
+                    {sop}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
-        ))}
+        ) : null}
       </div>
     </div>
   )
@@ -1333,7 +1447,7 @@ function RagOutputSection({ snippets, query, sceneKey, running }: { snippets?: s
 
 // Decision Output Section
 
-function DecisionOutputSection({ detail, sceneKey, running }: { detail?: Record<string, unknown>; sceneKey: number; running: boolean }) {
+function DecisionOutputSection({ detail, sceneKey, running, hasIncident }: { detail?: Record<string, unknown>; sceneKey: number; running: boolean; hasIncident?: boolean }) {
   const d = (typeof detail === "object" && detail ? detail : {}) as Record<string, unknown>
   const risk: string = String(d.risk_level || "low")
   const RISK_COLOR_MAP: Record<string, string> = {
@@ -1350,10 +1464,66 @@ function DecisionOutputSection({ detail, sceneKey, running }: { detail?: Record<
   }
   const color: string = RISK_COLOR_MAP[risk] ?? "var(--border)"
   const riskLabel: string = RISK_LABEL_MAP[risk] ?? "低风险"
-  const hasIncident = d.has_incident !== false
+  const hasIncidentFlag = hasIncident ?? (d.has_incident !== false)
 
   const containerStyle = { border: "1px solid " + color + "25", background: color + "06" }
   const headerStyle = { borderBottom: "1px solid " + color + "15", background: color + "0a" }
+
+  // 无异常时显示提示
+  if (!hasIncidentFlag && !running) {
+    return (
+      <div key={sceneKey} className="rounded-xl overflow-hidden animate-slide-in" style={{ border: "1px solid rgba(180,122,255,0.15)", background: "rgba(180,122,255,0.04)" }}>
+        <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid rgba(180,122,255,0.1)", background: "rgba(180,122,255,0.06)" }}>
+          <span style={{ color: "var(--accent-purple)" }}>◈</span>
+          <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-purple)" }}>LLM 决策输出</span>
+          <span className="ml-auto px-2 py-0.5 rounded text-xs font-mono" style={{ background: "rgba(180,122,255,0.15)", color: "var(--accent-purple)" }}>跳过</span>
+        </div>
+        <div className="p-4">
+          {/* 跳过提示 */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: "rgba(180,122,255,0.15)" }}>
+              <span style={{ fontSize: "16px" }}>⏸️</span>
+            </div>
+            <div>
+              <div className="text-sm font-mono font-bold" style={{ color: "var(--accent-purple)" }}>暂不进行事故深度决策</div>
+              <div className="text-xs" style={{ color: "var(--text-muted)" }}>识别层判断无异常，跳过 RAG + LLM 决策流程</div>
+            </div>
+          </div>
+
+          {/* 模型说明 */}
+          <div className="mt-3 pt-3" style={{ borderTop: "1px solid rgba(180,122,255,0.15)" }}>
+            <div className="flex items-center gap-2 mb-2">
+              <span style={{ color: "var(--accent-purple)" }}>◆</span>
+              <span className="text-xs font-mono font-bold" style={{ color: "var(--accent-purple)" }}>本阶段使用模型</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded-lg mb-2" style={{ background: "rgba(180,122,255,0.08)", border: "1px solid rgba(180,122,255,0.15)" }}>
+              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>Gemma4:e2b</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Google 多模态大语言模型 · 视觉理解 + 决策推理</span>
+            </div>
+            <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.15)" }}>
+              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(74,158,255,0.2)", color: "var(--accent-blue)" }}>ChromaDB</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>向量数据库 · 提供 SOP 处置规范参考</span>
+            </div>
+            <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+              决策流程：接收识别结果 + RAG 检索的 SOP → Gemma4 推理 → 输出风险等级 + 预警标题 + 处置建议
+            </div>
+          </div>
+
+          {/* 输出示例 */}
+          <div className="mt-3 pt-3" style={{ borderTop: "1px dashed rgba(180,122,255,0.2)" }}>
+            <div className="text-xs font-mono mb-2" style={{ color: "var(--accent-purple)" }}>异常时将输出：</div>
+            <div className="flex flex-wrap gap-2">
+              {["⚠ 高风险等级", "📌 预警标题", "📋 处置建议", "📊 置信度"].map((item) => (
+                <span key={item} className="px-2 py-1 rounded text-xs" style={{ background: "rgba(180,122,255,0.1)", color: "var(--text-muted)" }}>
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div key={sceneKey} className="rounded-xl overflow-hidden animate-slide-in" style={containerStyle}>

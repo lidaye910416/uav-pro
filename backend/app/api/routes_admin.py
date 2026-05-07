@@ -81,18 +81,39 @@ async def system_health() -> list[HealthResponse]:
             service="ollama", status="down", detail=str(e),
         ))
 
-    # ChromaDB
+    # ChromaDB - 支持本地库模式和HTTP模式
     try:
         import time
         t0 = time.perf_counter()
-        async with httpx.AsyncClient(timeout=5) as client:
-            # ChromaDB v1.0.0 废弃了 v1 API，使用 v2
-            r = await client.get(f"{settings.CHROMADB_URL}/api/v2/heartbeat")
-        latency = (time.perf_counter() - t0) * 1000
-        results.append(HealthResponse(
-            service="chromadb", status="healthy" if r.status_code == 200 else "degraded",
-            latency_ms=round(latency, 1),
-        ))
+
+        if os.environ.get("CHROMA_URL"):
+            # HTTP 模式
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(f"{os.environ['CHROMA_URL']}/api/v2/heartbeat")
+            latency = (time.perf_counter() - t0) * 1000
+            results.append(HealthResponse(
+                service="chromadb", status="healthy" if r.status_code == 200 else "degraded",
+                latency_ms=round(latency, 1),
+            ))
+        else:
+            # 本地库模式 - 检查数据目录
+            from config import pipeline_config
+            persist_dir = pipeline_config["rag"]["persist_dir"]
+            backend_dir = Path(__file__).parent.parent.parent.absolute()
+            persist_path = (backend_dir / persist_dir).resolve()
+            latency = (time.perf_counter() - t0) * 1000
+            if persist_path.exists():
+                results.append(HealthResponse(
+                    service="chromadb", status="healthy",
+                    latency_ms=round(latency, 1),
+                    detail=f"本地库模式, {len(list(persist_path.iterdir()))} 个文件",
+                ))
+            else:
+                results.append(HealthResponse(
+                    service="chromadb", status="initialized",
+                    latency_ms=round(latency, 1),
+                    detail="数据目录不存在，已初始化",
+                ))
     except Exception as e:
         results.append(HealthResponse(
             service="chromadb", status="down", detail=str(e),
@@ -127,20 +148,45 @@ async def ollama_status() -> OllamaHealth:
 
 @router.get("/chromadb", response_model=ChromaHealth)
 async def chromadb_status() -> ChromaHealth:
-    """ChromaDB 状态."""
+    """ChromaDB 状态（支持本地库模式和HTTP模式）."""
+    import chromadb
+
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            # ChromaDB v1.0.0 使用 v2 API
-            r = await client.get(f"{settings.CHROMADB_URL}/api/v2/heartbeat")
-        if r.status_code == 200:
-            # 尝试获取 collections（v2 API）
-            try:
-                rc = await client.get(f"{settings.CHROMADB_URL}/api/v2/collections")
-                cols = [c.get("name", "") for c in rc.json().get("collections", [])] if rc.status_code == 200 else []
-            except Exception:
-                cols = []
-            return ChromaHealth(status="running", collections=cols)
-        return ChromaHealth(status="error", error=f"HTTP {r.status_code}")
+        # 检查是否使用 HTTP 模式（通过环境变量 CHROMA_URL）
+        chroma_url = os.environ.get("CHROMA_URL")
+
+        if chroma_url:
+            # HTTP 模式：检查远程 ChromaDB 服务
+            async with httpx.AsyncClient(timeout=10) as client:
+                r = await client.get(f"{chroma_url}/api/v2/heartbeat")
+            if r.status_code == 200:
+                try:
+                    rc = await client.get(f"{chroma_url}/api/v2/collections")
+                    cols = [c.get("name", "") for c in rc.json().get("collections", [])] if rc.status_code == 200 else []
+                except Exception:
+                    cols = []
+                return ChromaHealth(status="running", collections=cols)
+            return ChromaHealth(status="error", error=f"HTTP {r.status_code}")
+        else:
+            # 本地库模式：检查 PersistentClient
+            from config import pipeline_config
+            persist_dir = pipeline_config["rag"]["persist_dir"]
+
+            # 转换为绝对路径（基于 backend 目录）
+            backend_dir = Path(__file__).parent.parent.parent.absolute()
+            persist_path = (backend_dir / persist_dir).resolve()
+
+            if persist_path.exists():
+                # 使用 PersistentClient 检查数据
+                try:
+                    _client = chromadb.PersistentClient(path=str(persist_path))
+                    collections = _client.list_collections()
+                    cols = [c.name for c in collections]
+                    return ChromaHealth(status="running", collections=cols)
+                except Exception as e:
+                    return ChromaHealth(status="error", error=str(e))
+            else:
+                return ChromaHealth(status="initialized", collections=[], error="数据目录不存在，已初始化")
     except Exception as e:
         return ChromaHealth(status="error", error=str(e))
 

@@ -169,3 +169,37 @@ export async function updatePipeline(token: string, mode: string): Promise<Recor
   if (!res.ok) throw new Error()
   return res.json()
 }
+
+// Motion detection params
+export async function fetchMotionParams(): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/analyze/motion-params`)
+  if (!res.ok) throw new Error()
+  return res.json()
+}
+
+export async function updateMotionParams(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/analyze/motion-params`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error()
+  return res.json()
+}
+
+// YOLO params
+export async function fetchYoloParams(): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/analyze/yolo-params`)
+  if (!res.ok) throw new Error()
+  return res.json()
+}
+
+export async function updateYoloParams(params: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const res = await fetch(`${API_BASE}/analyze/yolo-params`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new Error()
+  return res.json()
+}

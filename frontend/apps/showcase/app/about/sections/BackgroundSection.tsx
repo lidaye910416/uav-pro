@@ -40,8 +40,6 @@ export default function BackgroundSection({ inView }: BackgroundSectionProps) {
         {PROJECT_BASIC.type}，执行周期{PROJECT_BASIC.period}，总经费{PROJECT_BASIC.funding}。
         参研单位{PROJECT_BASIC.partners.length}家（{PROJECT_BASIC.partners.join("、")}），
         课题团队共{PROJECT_BASIC.team.total}人（高级职称{PROJECT_BASIC.team.senior}人、中级职称{PROJECT_BASIC.team.mid}人，博士{PROJECT_BASIC.team.phd}人、硕士{PROJECT_BASIC.team.master}人）。
-        <br /><br />
-        项目负责人：<strong>李晓宇</strong>（联系电话：15629082897）
       </p>
       <div className="about-metrics">
         {highlights.map((h) => (

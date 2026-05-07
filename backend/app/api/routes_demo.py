@@ -880,15 +880,15 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
                     if severity not in ["high", "mid", "low", "none"]:
                         severity = "low"
 
-                    # 规范化 confidence
-                    conf = float(result.get("confidence", 50))
-                    conf = max(0, min(100, conf))
+                    # 规范化 confidence（0-1范围）
+                    conf = float(result.get("confidence", 0.5))
+                    conf = max(0.0, min(1.0, conf))
 
                     return {
                         "has_event": bool(has_event),
                         "incident_type": incident_type,
                         "severity": severity,
-                        "confidence": conf,
+                        "confidence": round(conf, 2),
                         "scene_description": result.get("scene_description", ""),
                         "description": result.get("description", ""),
                         "recommended_response": result.get("recommended_response", result.get("recommendation", "")),
@@ -911,7 +911,7 @@ async def _gemma4_analyze(frame_bgr, model: str, rag_context: str, timeout: floa
             "has_event": False,
             "incident_type": "none",
             "severity": "none",
-            "confidence": 50,
+            "confidence": 0.5,
             "scene_description": "场景正常，无异常事件",
             "description": fallback_desc,
             "recommended_response": "持续监控，暂无预警处置建议。",
@@ -1031,7 +1031,7 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
                 "has_event": bool(result.get("has_event", False)),
                 "incident_type": result.get("incident_type", "none"),
                 "severity": str(result.get("severity", "low")).lower(),
-                "confidence": max(0, min(100, float(result.get("confidence", 50)))),
+                "confidence": round(max(0.0, min(1.0, float(result.get("confidence", 0.5)))), 2),
                 "scene_description": result.get("scene_description", ""),
                 "description": result.get("description", ""),
             }
@@ -1041,7 +1041,7 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
             "has_event": False,
             "incident_type": "none",
             "severity": "none",
-            "confidence": 50,
+            "confidence": 0.5,
             "scene_description": "分析失败，回退为正常",
             "description": raw[:100] if raw else "分析失败",
         }
@@ -1051,7 +1051,7 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
             "has_event": False,
             "incident_type": "none",
             "severity": "none",
-            "confidence": 50,
+            "confidence": 0.5,
             "scene_description": "分析服务不可用",
             "description": "AI分析失败",
         }
@@ -1509,7 +1509,7 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                 has_incident = False
                 incident_type = "none"
                 severity = "none"
-                confidence = 85
+                confidence = 0.85
                 risk_level = "low"
                 title = "道路通行正常"
                 description = scene_desc
@@ -1533,7 +1533,7 @@ async def _demo_sse_stream(loop: bool = False) -> list[bytes]:
                         has_incident = vision_result.get("has_event", False)
                         incident_type = vision_result.get("incident_type", "none")
                         severity = vision_result.get("severity", "none")
-                        confidence = int(vision_result.get("confidence", 85))
+                        confidence = vision_result.get("confidence", 0.85)
                         scene_desc_vision = vision_result.get("scene_description", scene_desc)
                         description = vision_result.get("description", scene_desc)
 
@@ -1801,7 +1801,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             has_incident = False
             incident_type = "none"
             severity = "none"
-            vision_confidence = 85
+            vision_confidence = 0.85
 
             # 调用识别层：Gemma4 纯视觉分析（不带 RAG）
             try:
@@ -1819,7 +1819,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 has_incident = vision_result.get("has_event", False)
                 incident_type = vision_result.get("incident_type", "none")
                 severity = vision_result.get("severity", "none")
-                vision_confidence = vision_result.get("confidence", 85)
+                vision_confidence = vision_result.get("confidence", 0.85)
 
                 # Vision done - 发送识别层完成事件
                 yield f"event: stage\ndata: {json.dumps({
@@ -1958,25 +1958,26 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 })}\n\n".encode()
                 await asyncio.sleep(0.05)
 
-            else:
-                # ── 正常场景：跳过 RAG + 决策层，直接输出 ─────────────────────
-                # SSE 展示 RAG 跳过
+            # ── 正常场景：跳过 RAG + 决策层，发送 skipped 事件 ─────────────────
+                # SSE 展示 RAG 跳过（确保前端能看到跳过状态）
                 yield f"event: stage\ndata: {json.dumps({
                     'stage': 'rag',
                     'progress': frame_base + 55,
                     'status': 'skipped',
-                    'reason': '正常场景，跳过 RAG 检索',
+                    'summary': '暂不进行 SOP 检索',
+                    'reason': '识别层判断无异常',
                 })}\n\n".encode()
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5)  # 给前端足够时间显示 identify 完成
 
                 # SSE 展示决策跳过
                 yield f"event: stage\ndata: {json.dumps({
                     'stage': 'decision',
                     'progress': frame_base + 70,
                     'status': 'skipped',
-                    'reason': '正常场景，跳过决策层',
+                    'summary': '暂不进行事故深度决策',
+                    'reason': '识别层判断无异常',
                 })}\n\n".encode()
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.5)  # 给前端足够时间显示跳过状态
 
                 # 正常场景的默认值
                 risk_level = "low"

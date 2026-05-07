@@ -19,7 +19,7 @@ const PARTNERS = {
     { name: "武汉理工大学", role: "参研单位", desc: "提供人工智能与计算机视觉技术支持" },
   ],
   leaders: [
-    { name: "李晓宇", role: "项目负责人", contact: "15629082897" },
+    { name: "***", role: "项目负责人", contact: "***" },
   ],
 }
 

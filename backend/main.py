@@ -3,9 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api.routes_auth import router as auth_router
 from app.api.routes_alerts import router as alerts_router
-from app.api.routes_analyze import router as analyze_router
+# from app.api.routes_analyze import router as analyze_router
 from app.api.routes_demo import router as demo_router
-from app.api.routes_streams import router as streams_router
+# from app.api.routes_streams import router as streams_router
 from app.api.routes_admin import router as admin_router
 from app.api.routes_ollama import router as ollama_router
 from app.api.routes_uav import router as uav_router
@@ -42,9 +42,9 @@ app.add_middleware(
 
 app.include_router(auth_router, prefix=settings.API_V1_STR)
 app.include_router(alerts_router, prefix=settings.API_V1_STR)
-app.include_router(analyze_router, prefix=settings.API_V1_STR)
+# app.include_router(analyze_router, prefix=settings.API_V1_STR)
 app.include_router(demo_router, prefix=settings.API_V1_STR)
-app.include_router(streams_router, prefix=settings.API_V1_STR)
+# app.include_router(streams_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(ollama_router, prefix=settings.API_V1_STR)
 app.include_router(uav_router, prefix=settings.API_V1_STR)

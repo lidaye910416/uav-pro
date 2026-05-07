@@ -12,11 +12,12 @@ const INTELLECTUAL_PROPERTY = {
   papers: [
     { title: "Static–Dynamic Analytical Framework for Urban Health Resilience Evaluation", journal: "ISPRS Int. J. Geo-Inf.", type: "SCI", date: "2025年4月" },
     { title: "Research on the resilience of ecological networks from the perspective of ecological security pattern", journal: "Scientific Reports", type: "SCI", date: "2025年" },
-    { title: "Dynamic evaluation of comprehensive water environment carrying capacity in the Three Gorges Reservoir Area", journal: "Environ. Res. Commun.", type: "EI", date: "2026年2月" },
   ],
   software: [
-    { title: "鄂小查（楚汇查）个人信息查询服务平台V1.0", code: "2025SR0933761" },
-    { title: "大模型应用服务平台[U-MaaS] V1.0", code: "2025SR1186369" },
+    { title: "智慧城市运行管理平台V1.0", code: "2026SR0212843" },
+    { title: "城市运行管理服务综合评价系统V1.0", code: "2026SR0021307" },
+    { title: "市级城市数字公共基础设施可视化平台V1.0", code: "2026SR0021046" },
+    { title: "大模型应用服务平台[U-MaaS]V1.0", code: "2025SR1186369" },
     { title: "智能问答助手软件V1.0", code: "2025SR1194792" },
   ],
   patent: {
@@ -33,8 +34,8 @@ const INTELLECTUAL_PROPERTY = {
 
 // 考核指标对照
 const TARGETS = [
-  { name: "高水平论文", target: "≥3篇", current: "3篇已发表", status: "completed" },
-  { name: "软件著作权", target: "≥5项", current: "3项已授权", status: "partial" },
+  { name: "高水平论文", target: "≥3篇", current: "2篇已发表，1篇在投", status: "partial" },
+  { name: "软件著作权", target: "≥5项", current: "5项已授权", status: "completed" },
   { name: "发明专利", target: "≥5项", current: "1项已授权", status: "partial" },
   { name: "科技进步奖", target: "≥1项", current: "1项(三等奖)", status: "completed" },
   { name: "时空数据底座", target: "≥1套", current: "核心模块完成", status: "partial" },

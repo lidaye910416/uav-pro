@@ -33,7 +33,7 @@ function HealthDot({ status }: { status: string }) {
 }
 
 export default function TopHeader() {
-  const pathname = usePathname()
+  const pathname = usePathname() || "/"
   const { user, logout } = useAuth()
   const current = BREADCRUMBS[pathname] || { label: pathname }
 
