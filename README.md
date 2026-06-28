@@ -226,6 +226,12 @@ MIT License
 
 ---
 
+## 📚 项目历史
+
+- [docs/workflow/cleanup-2026-06.md](docs/workflow/cleanup-2026-06.md) — 2026-06 系统性清理执行记录
+
+---
+
 <div align="center">
 
 **Made with ❤️ for safer skies**

@@ -101,7 +101,7 @@ url = "http://localhost:11434"
 | 应用 | 端口 | 路由 |
 |------|------|------|
 | Showcase | 4000 | `/` 首页, `/about` 项目概览, `/monitor` 实时预警 |
-| Dashboard | 4001 | `/monitor` 感知中心, `/alerts` 预警, `/flight` 飞控, `/brain` 决策 |
+| Dashboard | 4001 | `/` 首页, `/monitor` 感知中心, `/alerts` 预警, `/flight` 飞控, `/brain` 决策, `/knowledge` 知识库 |
 | Admin | 4002 | `/` 概览, `/streams` 感知流, `/upload` 测试, `/alerts` 预警, `/rag` 知识库, `/settings` 配置 |
 
 ---
@@ -151,6 +151,15 @@ lsof -i :8888 -i :4000 -i :4001 -i :4002
 **所有代码修改必须记录在 `docs/CHANGELOG.md` 中。**
 
 > ⚠️ **重要**：不要在此文件记录详细修改，统一写入 `docs/CHANGELOG.md`
+
+### 首次启动后
+
+- **种子管理员**：`./start.sh start` 后需手动创建默认账号
+  ```bash
+  docker exec -it uav-backend python -m scripts.seed_admin
+  # 默认凭证: admin / admin123
+  ```
+- **Ollama 模型**：不会自动下载，需手动拉取（详见 STARTUP_GUIDE.md §2）
 
 ---
 

@@ -35,11 +35,35 @@ cp .env.example .env
 2. 构建 backend 与 frontend 镜像（首次约 2-5 分钟）
 3. 启动 6 个容器
 4. 等待 healthcheck 通过
-5. 首次启动后 Ollama 会自动下载 `gemma4:e2b` 与 `nomic-embed-text`（约 5-10 分钟）
+5. **手动下载 Ollama 模型**（首次启动后）：
+   ```bash
+   docker exec -it uav-ollama ollama pull gemma4:e2b
+   docker exec -it uav-ollama ollama pull nomic-embed-text
+   ```
+   （不会自动下载；视网络情况约 5-10 分钟）
 
 ---
 
-## 3. 访问入口
+## 3. 种子管理员（首次启动后）
+
+`./start.sh start` 不会自动创建默认账号，需手动执行：
+
+```bash
+docker exec -it uav-backend python -m scripts.seed_admin
+```
+
+输出示例：
+
+```
+✓ admin 用户创建成功 (密码: admin123)
+```
+
+> 默认凭证：`admin` / `admin123`  
+> 仅用于本地开发，生产部署请立即修改密码。
+
+---
+
+## 4. 访问入口
 
 | 应用 | URL | 说明 |
 |------|-----|------|
@@ -51,7 +75,7 @@ cp .env.example .env
 
 ---
 
-## 4. 修改端口
+## 5. 修改端口
 
 ⚠️ **端口只在 `start.sh` 第 19-25 行配置，勿在 `.env` 中设置**
 
@@ -67,7 +91,7 @@ nano start.sh   # 找到 export BACKEND_PORT=8888 等行
 
 ---
 
-## 5. 常用命令
+## 6. 常用命令
 
 ```bash
 # 查看容器状态
@@ -97,7 +121,7 @@ docker compose up -d --build backend   # 重新构建
 
 ---
 
-## 6. 常见问题
+## 7. 常见问题
 
 ### Q: 启动后前端 502 Bad Gateway
 
@@ -138,17 +162,6 @@ lsof -i :8888
 lsof -ti:8888 | xargs kill -9
 ```
 
-### Q: 模型下载慢/失败
-
-```bash
-# 配置 Ollama 镜像 (国内)
-docker compose down
-# 在 docker-compose.yml 的 ollama service 添加:
-#   environment:
-#     OLLAMA_MIRROR: "https://your-mirror.com"
-docker compose up -d
-```
-
 ### Q: 容器启动失败
 
 ```bash
@@ -159,7 +172,7 @@ docker compose up -d --build --force-recreate
 
 ---
 
-## 7. 性能调优
+## 8. 性能调优
 
 ### Ollama GPU 加速
 
@@ -172,7 +185,7 @@ Linux: 安装 nvidia-container-toolkit 后 docker compose 自动启用
 
 ---
 
-## 8. 目录位置速查
+## 9. 目录位置速查
 
 | 内容 | 路径 |
 |------|------|

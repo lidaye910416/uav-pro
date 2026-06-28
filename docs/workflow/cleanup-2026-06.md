@@ -1,6 +1,8 @@
 # 项目系统性整理 Workflow
 
 > 创建: 2026-06-27  
+> 完成: 2026-06-28  
+> 状态: 已完成 (8 个原子提交合并)  
 > 目的: 把 vibe coding 出来的项目整理成「10 分钟启动 & 维护」的干净代码库  
 > 分支: `refactor/cleanup` → main
 
@@ -58,7 +60,7 @@
 
 ---
 
-## 4. 待办 (剩余步骤)
+## 4. 待办 (剩余步骤) — 全部已完成，详见 §7
 
 ### F. 删除确认无引用的死文件
 - `backend/config/` (llm.yaml / pipeline.yaml / prompts.yaml / loader.py / __init__.py)  
@@ -134,7 +136,7 @@ curl http://localhost:4002/streams
 
 ---
 
-## 4. 执行结果 (2026-06-28)
+## 7. 执行结果 (2026-06-28)
 
 按计划完成 8 个原子提交:
 

@@ -2,6 +2,16 @@
 
 本文件记录所有代码与文档的修改，按时间倒序。
 
+## [Unreleased]
+
+### 文档同步
+
+- `CLAUDE.md`: §4 Dashboard 路由表补全 `/` 与 `/knowledge`
+- `CLAUDE.md`: §7 新增「首次启动后」提示（种子管理员 + Ollama 模型手动拉取）
+- `README.md`: 新增「项目历史」章节，链接 `docs/workflow/cleanup-2026-06.md`
+- `docs/STARTUP_GUIDE.md`: §2 修正「Ollama 自动下载」为手动拉取；新增 §3「种子管理员」；删除 OLLAMA_MIRROR 假环境变量问答
+- `docs/CHANGELOG.md`: 修正清理段「删除 `STARTUP_GUIDE.md`」自相矛盾的描述
+
 ## 2026-06-28 — refactor/cleanup
 
 系统性清理 vibe coding 遗留问题。
@@ -13,7 +23,7 @@
 - 过期脚本: `import_sop_knowledge.py`, `init_chromadb.py`
 - 后端配置: `backend/config/` 整个目录 (yaml/loader.py 无引用)
 - 过期测试: 21 个 `test_pipeline_*` / `debug_*` / `final_test` 等
-- 过期文档: `docs/notes/`, `docs/prd/`, `docs/superpowers/`, `README.docker.md`, `STARTUP_GUIDE.md`
+- 过期文档: `docs/notes/`, `docs/prd/`, `docs/superpowers/`, `README.docker.md`, 根目录旧版 `STARTUP_GUIDE.md`（重建到 `docs/STARTUP_GUIDE.md`，见下）
 - 杂项: `monitor.sh`, `start-services.sh`, `.env.test`
 - 前端: 4 个零引用组件 (Footer, DemoThumbnail, AlertCard, devices page)
 - 前端空包: `frontend/packages/ui/` (cn 工具 0 引用)
@@ -64,3 +74,30 @@ import os
 def get_backend_port() -> int:
     """从环境变量获取后端端口，默认使用 settings.BACKEND_PORT"""
     env_port = os.getenv("BACKEND_PORT")
+
+## [Unreleased] - 2026-06-28 - refactor/cleanup
+
+### 重大清理 (3 commits, 51 files, 521+ / 1312-)
+
+**refactor(backend)** - 删 658 行死代码, 修 6 类质量问题
+- 6 个从未调用的函数 + 4 个死文件 + 1 个废弃模型
+- 33 处 print() → logger, 弃用 on_event/utcnow/Pydantic v1
+- routes_demo.py: 1725 → 1129 行
+
+**refactor(frontend)** - 抽 2 个共享包, 删 318 行重复
+- 新 @uav/hooks (useAlertStream 唯一来源) + @uav/api/alert (Alert 共享)
+- 删 6 个死文件, 13 个 console.log, 6+ 处散落的 API_BASE
+- 替换 14 个 `any` 类型 → 明确 interface
+
+**chore(deploy)** - 新人 5 分钟可启动
+- 6 容器全加 healthcheck, depends_on 联动 healthy
+- backend 端口联动 BACKEND_PORT env
+- 新建 .dockerignore 阻止 800MB 模型进镜像
+- start.sh 加 docker compose v1/v2 自动检测 + .env 预检
+
+**docs** - 文档与代码完全对齐
+- CLAUDE.md §4 补 /knowledge, §7 补 seed_admin 提示
+- STARTUP_GUIDE.md §2 改"自动下载"为手动, §3 补种子管理员, 删虚构 OLLAMA_MIRROR
+- README.md 补"项目历史"链接
+- CHANGELOG.md 修历史自相矛盾, 加 [Unreleased] 段
+
