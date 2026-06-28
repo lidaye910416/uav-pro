@@ -1,22 +1,117 @@
-# Video files (very large - excluded)
-data/streams/MiTra/*.mp4
-data/streams/*.mp4
+# =============================================================================
+# UAV-PRO .dockerignore
+# 阻止 800MB+ 模型 / 视频 / 字体进入镜像, 避免构建缓慢
+# =============================================================================
 
-# Large data directories (excluded)
-backend/data
-**/data/
-
-# Model files - KEEP these for YOLO/SAM
-# backend/models/sam/
-
-# IDE and OS files
+# ── VCS / 仓库元数据 ──────────────────────────────────────────────────────
 .git
+.gitignore
+.gitignore.tmp
+.gitattributes
+
+# ── Claude Code / IDE / OS ────────────────────────────────────────────────
+.claude
 .idea
 .vscode
 .DS_Store
-*.log
+*.swp
+*.swo
+*~
 
-# Dependencies (rebuilt in container)
+# ── 文档 (构建无需) ────────────────────────────────────────────────────────
+*.md
+docs/
+
+# ── 依赖 / 构建产物 (容器内会重新安装) ───────────────────────────────────
 node_modules
+.pnpm-store
+.next
+out
+.turbo
+dist
+build
+
 __pycache__
 *.pyc
+*.pyo
+*.pyd
+.venv
+venv
+env
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# ── Python / 虚拟环境 / 测试缓存 ─────────────────────────────────────────
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+backend/tests/
+backend/scripts/
+
+# ── frontend 源码: 必须保留 (frontend/Dockerfile 依赖它做构建上下文) ─────
+# 但其内部的 node_modules / .next / dist 等已通过上面的规则排除
+
+# ── 模型权重 (大文件) ─────────────────────────────────────────────────────
+*.pt
+*.pth
+*.onnx
+*.h5
+*.safetensors
+backend/models/
+
+# ── 字体 (大文件) ─────────────────────────────────────────────────────────
+*.ttc
+*.ttf
+*.otf
+
+# ── 媒体文件 (视频/帧/大图) ──────────────────────────────────────────────
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.flv
+*.wmv
+*.webm
+*.m4v
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.webp
+
+# ── 音频 ─────────────────────────────────────────────────────────────────
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+
+# ── ChromaDB / 数据库 (运行时挂载, 不进镜像) ─────────────────────────────
+*.db
+*.sqlite
+*.sqlite3
+chroma_data/
+backend/data/chromadb/
+
+# ── 数据目录 (运行时挂载或卷) ───────────────────────────────────────────
+data/
+
+# ── 环境配置 (容器内由 .env 注入, 不需要打进镜像) ───────────────────────
+.env
+.env.*
+.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
+# ── 日志 / 临时文件 ──────────────────────────────────────────────────────
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig

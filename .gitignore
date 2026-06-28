@@ -83,8 +83,6 @@ models/*.pth
 *.ogg
 *.m4a
 
-data/streams/*
-!data/streams/.gitkeep
 data/frames/*
 !data/frames/.gitkeep
 data/knowledge_base/*
@@ -168,6 +166,14 @@ backend.log
 chromadb/
 backend/data/chromadb/
 
+# 完整的 backend/models 目录 (YOLO/SAM 权重, 不入库)
+backend/models/
+
+# backend Python 缓存 / 虚拟环境 / 测试缓存
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+
 # =============================================================================
 # PM2 daemon state (start.sh 不再使用, 但仍可清理)
 # =============================================================================
@@ -181,8 +187,5 @@ backend/data/chromadb/
 
 # =============================================================================
 # Keep these empty directories
-# =============================================================================
-data/streams/.gitkeep
-data/frames/.gitkeep
-data/knowledge_base/.gitkeep
+# (注意: 上方 L86-89 的 !data/<x>/.gitkeep 才是 whitelist, 这里只放注释)
 

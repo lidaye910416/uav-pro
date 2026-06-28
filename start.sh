@@ -1,6 +1,6 @@
 #!/bin/bash
 # UAV-PRO 服务管理脚本 (基于 docker-compose)
-# 端口配置：仅修改本文件第 19-25 行的默认值即可（勿改 .env）
+# 端口配置：仅修改本文件第 28-34 行的默认值即可（勿改 .env）
 
 set -e
 
@@ -21,6 +21,17 @@ export CHROMA_PORT=${CHROMA_PORT:-9001}
 export SHOWCASE_PORT=${SHOWCASE_PORT:-4000}
 export DASHBOARD_PORT=${DASHBOARD_PORT:-4001}
 export ADMIN_PORT=${ADMIN_PORT:-4002}
+
+# ── 自动检测 docker compose 客户端 ─────────────────────────────────────────
+if docker compose version >/dev/null 2>&1; then
+    DC="docker compose"
+elif docker-compose version >/dev/null 2>&1; then
+    DC="docker-compose"
+else
+    echo -e "${RED}错误: 需要 docker compose (v2) 或 docker-compose (v1)${NC}"
+    echo -e "  安装: https://docs.docker.com/compose/install/"
+    exit 1
+fi
 
 # 加载 .env 中非端口配置（如 SECRET_KEY / MODEL_GEMMA4 / PIPELINE_MODE）
 if [ -f "$PROJECT_ROOT/.env" ]; then
@@ -52,19 +63,25 @@ usage() {
   logs     查看所有容器日志 (用法: $0 logs [service])
   clean    删除所有容器、网络与卷（数据将丢失）
 
-端口修改: 编辑本文件第 19-25 行
+端口修改: 编辑本文件第 28-34 行
+配置文件: .env 存放非端口配置 (SECRET_KEY / MODEL_GEMMA4 / PIPELINE_MODE ...)
 EOF
 }
 
+# 等待服务 healthy (无 healthcheck 时降级到 running)
 wait_healthy() {
     local service=$1
     local max_wait=${2:-120}
     echo -ne "${YELLOW}  等待 $service 健康...${NC}"
     for i in $(seq 1 $max_wait); do
-        if docker compose ps "$service" 2>/dev/null | grep -q "healthy"; then
-            echo -e " ${GREEN}✓${NC}"
-            return 0
-        fi
+        local state
+        state=$($DC ps "$service" 2>/dev/null | awk 'NR>1 {print $4; exit}')
+        case "$state" in
+            *healthy*|*Up*)
+                echo -e " ${GREEN}✓${NC} ($state)"
+                return 0
+                ;;
+        esac
         sleep 2
     done
     echo -e " ${RED}超时${NC}"
@@ -76,7 +93,7 @@ check_status() {
     echo "=========================================="
     echo -e "         ${BLUE}服务状态 (docker-compose)${NC}"
     echo "=========================================="
-    docker compose ps
+    $DC ps
 
     echo ""
     echo -e "${YELLOW}HTTP 健康检查:${NC}"
@@ -108,8 +125,16 @@ check_status() {
 
 case "${1:-start}" in
     start)
+        # 启动前检查 .env (非端口配置: SECRET_KEY / MODEL_GEMMA4 / PIPELINE_MODE)
+        if [ ! -f "$PROJECT_ROOT/.env" ]; then
+            echo -e "${RED}错误: .env 文件不存在${NC}"
+            echo -e "  首次启动请先: ${YELLOW}cp .env.example .env${NC}"
+            echo -e "  注意: 端口请编辑 $0 (勿放入 .env)"
+            exit 1
+        fi
+
         echo -e "${YELLOW}构建并启动所有服务...${NC}"
-        docker compose up -d --build
+        $DC up -d --build
         wait_healthy backend 120
         wait_healthy showcase 90
         wait_healthy dashboard 90
@@ -119,12 +144,12 @@ case "${1:-start}" in
         ;;
     stop)
         echo -e "${YELLOW}停止所有服务...${NC}"
-        docker compose down
+        $DC down
         echo -e "${GREEN}✓ 已停止${NC}"
         ;;
     restart)
         echo -e "${YELLOW}重启所有服务...${NC}"
-        docker compose restart
+        $DC restart
         sleep 5
         check_status
         ;;
@@ -132,14 +157,18 @@ case "${1:-start}" in
         check_status
         ;;
     logs)
-        docker compose logs -f --tail=100 "${2:-}"
+        if [ -n "${2:-}" ]; then
+            $DC logs -f --tail=100 "$2"
+        else
+            $DC logs -f --tail=100
+        fi
         ;;
     clean)
         echo -e "${RED}警告: 这将删除所有容器、网络和卷 (ChromaDB 数据将丢失)${NC}"
         read -p "确认? [y/N] " -n 1 -r
         echo
         if [[ $REPLY =~ ^[Yy]$ ]]; then
-            docker compose down -v
+            $DC down -v
             echo -e "${GREEN}✓ 已清理${NC}"
         fi
         ;;

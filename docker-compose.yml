@@ -55,16 +55,17 @@ services:
       MODEL_GEMMA4: "${MODEL_GEMMA4:-gemma4:e2b}"
     depends_on:
       ollama:
-        condition: service_started
+        condition: service_healthy
       chromadb:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - ./backend/data/chromadb:/app/data/chromadb
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT:-8888}/health"]
       interval: 15s
       timeout: 5s
       retries: 5
+      start_period: 30s
 
   # ── Frontend Showcase (端口 4000) ────────────────────────────────────────
   showcase:
@@ -84,6 +85,12 @@ services:
       NEXT_PUBLIC_ADMIN_URL: "http://localhost:${ADMIN_PORT:-4002}"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   # ── Frontend Dashboard (端口 4001) ───────────────────────────────────────
   dashboard:
@@ -103,6 +110,12 @@ services:
       NEXT_PUBLIC_ADMIN_URL: "http://localhost:${ADMIN_PORT:-4002}"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3001/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
   # ── Frontend Admin (端口 4002) ───────────────────────────────────────────
   admin:
@@ -122,6 +135,12 @@ services:
       NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:${DASHBOARD_PORT:-4001}"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:3002/ || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
 
 volumes:
   ollama_data:
