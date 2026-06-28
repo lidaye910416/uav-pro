@@ -29,15 +29,16 @@ AI 助手指南 - UAV 低空检测智能安全预警系统
 
 ## 2. 项目架构
 
-### 服务端口（从 .env 读取）
+### 服务端口（默认值见 start.sh）
 
-| 服务 | 端口 | 说明 |
-|------|------|------|
-| Backend API | BACKEND_PORT (默认 8888) | 后端 API 服务 |
-| Ollama LLM | OLLAMA_PORT (默认 11434) | Gemma4 等模型 |
-| Showcase | SHOWCASE_PORT (默认 3000) | 展示首页 |
-| Dashboard | DASHBOARD_PORT (默认 3001) | 感知中心 |
-| Admin | ADMIN_PORT (默认 3002) | 管理后台 |
+| 服务 | 默认端口 | 用途 |
+|------|----------|------|
+| Backend API | 8888 | FastAPI 后端 |
+| Ollama LLM | 11434 | Gemma4 等模型 |
+| ChromaDB | 9001 | RAG 向量库 |
+| Showcase | 4000 | 展示首页 |
+| Dashboard | 4001 | 感知中心 |
+| Admin | 4002 | 管理后台 |
 
 ### Pipeline 架构
 
@@ -53,27 +54,22 @@ AI 助手指南 - UAV 低空检测智能安全预警系统
 
 ## 3. 端口配置规则 ⚠️
 
-**端口配置只能修改 `start.sh`！禁止修改 `.env` 中的端口！**
-
-### 配置优先级
-```bash
-.env 中的端口配置 > start.sh 默认值   # ❌ 禁止使用
-start.sh 默认值                       # ✅ 正确方式
-```
+**端口配置只能修改 `start.sh`！禁止在 `.env` 中配置端口！**
 
 ### 修改端口
 ```bash
-# 1. 修改 start.sh 第 19-25 行的默认值
+# 1. 编辑 start.sh 第 19-25 行的默认值
 # 2. 重启服务
 ./start.sh restart
 ```
 
-### 服务端口（start.sh 默认值）
+### 服务端口（start.sh 默认值，与 §2 表一致）
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| Backend API | 8888 | 后端 API 服务 |
-| Ollama LLM | 11434 | Gemma4 等模型 |
+| Backend API | 8888 | 后端 API |
+| Ollama LLM | 11434 | 本地 LLM |
+| ChromaDB | 9001 | RAG 向量库 |
 | Showcase | 4000 | 展示首页 |
 | Dashboard | 4001 | 感知中心 |
 | Admin | 4002 | 管理后台 |
@@ -81,15 +77,13 @@ start.sh 默认值                       # ✅ 正确方式
 ### 代码中禁止硬编码端口
 
 ```typescript
-// ✅ 正确 - 使用环境变量
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-fetch(`${API_BASE}/api/v1/demo/stream`)
+// ✅ 正确 - 使用共享包或环境变量
+import { getApiBase } from "@uav/api"
+fetch(`${getApiBase()}/api/v1/demo/stream`)
 
-// ❌ 错误 - 硬编码端口
+// ❌ 错误 - 硬编码
 fetch("http://localhost:8888/api/v1/demo/stream")
 ```
-
-### 后端规范
 
 ```python
 # ✅ 正确 - 使用 settings
@@ -106,32 +100,31 @@ url = "http://localhost:11434"
 
 | 应用 | 端口 | 路由 |
 |------|------|------|
-| Showcase | 4000 | `/` 首页, `/about` 项目概览 |
-| Dashboard | 4001 | `/monitor` 感知中心, `/brain` 智能决策, `/alerts` 预警, `/flight` 飞控 |
-| Admin | 4002 | `/streams` 感知流, `/alerts` 预警, `/rag` 知识库 |
+| Showcase | 4000 | `/` 首页, `/about` 项目概览, `/monitor` 实时预警 |
+| Dashboard | 4001 | `/monitor` 感知中心, `/alerts` 预警, `/flight` 飞控, `/brain` 决策 |
+| Admin | 4002 | `/` 概览, `/streams` 感知流, `/upload` 测试, `/alerts` 预警, `/rag` 知识库, `/settings` 配置 |
 
 ---
 
 ## 5. 启动方式
 
 ```bash
-./start.sh start    # 启动所有服务
-./start.sh stop     # 停止所有服务
+./start.sh start    # 构建并启动所有服务 (docker-compose)
+./start.sh stop     # 停止所有容器
 ./start.sh restart  # 重启所有服务
-./start.sh status   # 检查状态
-./start.sh logs     # 查看后端日志
+./start.sh status   # 检查容器状态与端口健康
+./start.sh logs     # 查看所有容器日志
+./start.sh logs backend  # 仅查看后端日志
+./start.sh clean    # 删除所有容器与数据卷（危险）
 ```
 
-### 修改端口
-1. 编辑 `start.sh` 第 19-25 行
-2. 执行 `./start.sh restart`
-
-### 配置文件说明
+### 配置文件
 
 | 文件 | 作用 | 说明 |
 |------|------|------|
 | `start.sh` | 端口配置 | 修改第 19-25 行默认值 |
-| `.env` | 非端口配置 | 仅存放 NODE_ENV 等配置 |
+| `.env` | 非端口配置 | SECRET_KEY / MODEL_GEMMA4 / PIPELINE_MODE / CORS 等 |
+| `docker-compose.yml` | 容器编排 | 端口用 `${VAR:-default}` 引用 start.sh 注入 |
 
 ---
 
@@ -139,12 +132,15 @@ url = "http://localhost:11434"
 
 ```bash
 # 后端健康检查
-curl http://localhost:8888/api/v1/admin/health
+curl http://localhost:8888/health
 
-# Ollama 检查
+# Ollama 模型列表
 curl http://localhost:11434/api/tags
 
-# 检查端口占用
+# 容器状态
+docker compose ps
+
+# 端口占用
 lsof -i :8888 -i :4000 -i :4001 -i :4002
 ```
 

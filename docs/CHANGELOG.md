@@ -1,12 +1,58 @@
 # 修改记录 (CHANGELOG)
 
-> 所有代码修改都必须在此记录，以便追踪和回溯。
+本文件记录所有代码与文档的修改，按时间倒序。
 
----
+## 2026-06-28 — refactor/cleanup
+
+系统性清理 vibe coding 遗留问题。
+
+### 删除
+
+- 后端死代码: `vision_service.py` (broken import), `services/{perception,video}_service.py` (无调用方)
+- 历史遗留服务: `rag_service{,_v2}.py`, `decision_service.py`, `pipeline{,_manager}.py`, `llm/`, `pipeline_config.py`
+- 过期脚本: `import_sop_knowledge.py`, `init_chromadb.py`
+- 后端配置: `backend/config/` 整个目录 (yaml/loader.py 无引用)
+- 过期测试: 21 个 `test_pipeline_*` / `debug_*` / `final_test` 等
+- 过期文档: `docs/notes/`, `docs/prd/`, `docs/superpowers/`, `README.docker.md`, `STARTUP_GUIDE.md`
+- 杂项: `monitor.sh`, `start-services.sh`, `.env.test`
+- 前端: 4 个零引用组件 (Footer, DemoThumbnail, AlertCard, devices page)
+- 前端空包: `frontend/packages/ui/` (cn 工具 0 引用)
+- 前端: 3 个 app 的 `package-lock.json` (项目用 pnpm)
+- 已跟踪: `ecosystem.config.js` (PM2 不再使用)
+- 已跟踪: `backend/fonts/Hiragino Sans GB.ttc` (~10MB 二进制字体)
+- 已跟踪: `config/{services.json,index.ts,.gitignore}` (0 引用)
+
+### 重构
+
+- `start.sh` (295 → 152 行): 改为 docker-compose wrapper, 保留 start/stop/restart/status/logs/clean
+- `docker-compose.yml`: 端口全用 `${VAR:-default}` 引用; 前端拆为 showcase/dashboard/admin 三个独立容器
+- `backend/Dockerfile`: 容器内端口 8000 → 8888, 与 host 一致
+- `frontend/Dockerfile`: 接收 `APP_NAME` 构建参数, 只启动指定子应用
+- `routes_demo.py` (-296 行): 删除死代码 `_demo_sse_stream`, 修复 frame_data 事件重复发送
+
+### 配置规范化
+
+- `.env.example` / `.env`: 移除所有端口变量 (违反 CLAUDE.md §3)
+- 端口单一来源: `start.sh` 第 19-25 行
+
+### 文档
+
+- `CLAUDE.md`: 修正 §2/§3 端口表矛盾, 删除 `website/` 路径, 端口统一为 4000 系列
+- `README.md`: 重写 — 修正路径, 端口表, 删除 `cd website`, 删除性能数据 (无来源)
+- 新建 `docs/STARTUP_GUIDE.md`: 详细启动 / 调试 / 常见问题
+
+### 依赖
+
+- `requirements.txt`: 移除 6 个未使用依赖 (alembic, llama-index×4, ollama, pytest-asyncio, python-jose)
+
+### gitignore
+
+- 去重: `.next/`, `*.pkl`, `.DS_Store`
+- 补充: `.pm2/`, `backend/data/chromadb/`, `*.ttc`, `*.ttf`
 
 ## 2026-05-07
 
-### 端口配置统一化
+### 端口配置统一化 (历史)
 
 #### 修改 1: `backend/main.py`
 
@@ -18,167 +64,3 @@ import os
 def get_backend_port() -> int:
     """从环境变量获取后端端口，默认使用 settings.BACKEND_PORT"""
     env_port = os.getenv("BACKEND_PORT")
-    if env_port:
-        try:
-            return int(env_port)
-        except ValueError:
-            pass
-    return settings.BACKEND_PORT
-
-if __name__ == "__main__":
-    import uvicorn
-    port = get_backend_port()
-    print(f"[启动] 后端服务端口: {port}")
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
-```
-
-**修改目的：**
-- 支持从环境变量读取 `BACKEND_PORT`
-- 与 `start.sh` 的启动方式保持一致
-- 允许从根目录 `.env` 文件统一配置端口
-
----
-
-#### 修改 2: `CLAUDE.md`
-
-**修改内容：**
-1. 重构 CLAUDE.md 结构，将端口配置规则整合到顶层
-2. 添加「统一配置说明」章节
-3. 添加「修改记录」表格
-
-**CLAUDE.md 新增章节：**
-- 第 6 节：统一配置说明（端口配置规则、配置文件位置、启动方式）
-
----
-
-#### 修改 3: `start.sh`
-
-**修改内容：**
-1. 修复 `init_database()` 函数中的 Python 语法错误
-2. 使用 `os.getcwd()` 替代 `__file__` 解决路径问题
-3. 修改 `start_backend()` 使用 `pm2 start ecosystem.config.js`
-4. 修改 `start_frontend()` 使用 `pm2 start ecosystem.config.js`
-
-**修复的 Bug：**
-- `NameError: name '__file__' is not defined`
-- `except Exception as e:` 缩进错误
-
----
-
-#### 修改 4: `ecosystem.config.js`
-
-**修改内容：**
-1. 将所有 `cwd` 路径从字符串 `./xxx` 改为 `path.join(__dirname, 'xxx')`
-2. 修复 PM2 工作目录问题，确保从项目根目录读取配置
-
-**修复的 Bug：**
-- PM2 找不到 ecosystem.config.js
-
----
-
-### 修改记录表
-
-| 日期 | 修改文件 | 修改内容 | 原因/目的 |
-|------|----------|----------|-----------|
-| 2026-05-07 | `backend/main.py` | 添加 `get_backend_port()` 函数 | 支持从 `.env` 读取端口 |
-| 2026-05-07 | `CLAUDE.md` | 重构 + 添加端口配置说明 | 统一 AI 开发规范 |
-| 2026-05-07 | `docs/CHANGELOG.md` | 新建修改记录文档 | 统一记录所有代码修改 |
-| 2026-05-07 | `start.sh` | 修复 Python 语法错误，修复 PM2 启动方式 | 修复启动脚本 |
-| 2026-05-07 | `ecosystem.config.js` | 修复 cwd 路径问题 | 修复 PM2 工作目录 |
-| 2026-05-07 | 删除 `backend/CLAUDE.md`, `frontend/CLAUDE.md` | 合并到顶层 CLAUDE.md | 简化 CLAUDE.md 结构，精简至 135 行 |
-| 2026-05-07 | `CLAUDE.md` | 更新启动方式说明 | 明确使用 `.env` 统一配置 |
-- 第 7 节：修改记录（日期、文件、内容、原因）
-
----
-
-#### 修改 3: 删除过时文档
-
-**删除文件：**
-- `docs/superpowers/plans/2026-04-12-frontend-redesign.md`
-- `docs/superpowers/plans/2026-04-13-demo-pipeline-plan.md`
-- `docs/superpowers/plans/2026-04-21-yolo-implementation.md`
-- `docs/superpowers/plans/2026-04-22-pipeline-problems.md`
-- `docs/superpowers/specs/2026-04-18-pipeline-comparison.md`
-- `docs/superpowers/specs/2026-04-18-flowchart-comparison.md`
-- `docs/superpowers/specs/2026-04-18-final-comparison.md`
-- `docs/superpowers/specs/2026-04-18-implementation-plan.md`
-- `docs/superpowers/specs/2026-04-18-optimization-plan.md`
-- `docs/superpowers/specs/2026-04-14-monitor-redesign-design.md`
-- `docs/superpowers/specs/2026-04-12-frontend-redesign-design.md`
-- `docs/superpowers/specs/2026-04-18-about-redesign.md`
-- `docs/superpowers/specs/2026-04-18-about-header-refine.md`
-- `docs/superpowers/specs/2026-04-18-prompt-design.md`
-- `docs/superpowers/specs/gemma-pipeline-comparison.md`
-- `docs/superpowers/specs/2026-04-13-demo-pipeline-design.md`
-- `docs/prd/2026-04-24-gemma4-pipeline-integration.md`
-- `.claude/skills/monitor-and-flight-redesign.md`
-
-**删除原因：** 功能已完成，文档过时
-
----
-
-### 修改记录表
-
-| 日期 | 修改文件 | 修改内容 | 原因/目的 |
-|------|----------|----------|-----------|
-| 2026-05-07 | `backend/main.py` | 添加 `if __name__ == "__main__":` 从环境变量读取 `BACKEND_PORT` | 统一端口配置，支持从 `.env` 读取 |
-| 2026-05-07 | `CLAUDE.md` | 重构 CLAUDE.md，整合端口配置规则到顶层，添加修改记录表 | 统一 AI 开发规范 |
-| 2026-05-07 | `backend/CLAUDE.md` | 精简为 14 行，端口配置移至顶层 | 减少重复 |
-| 2026-05-07 | `frontend/CLAUDE.md` | 精简为 55 行，端口配置移至顶层 | 减少重复 |
-| 2026-05-07 | 删除 18 个 Markdown 文件 | 删除过时的 plan/spec/prd 文档 | 清理项目文档 |
-
----
-
-## 使用说明
-
-### 端口配置
-
-所有服务端口统一在根目录 `.env` 文件中配置：
-
-```bash
-# 修改端口 → 编辑 .env
-vim .env
-# BACKEND_PORT=9999
-
-# 启动服务 → 自动使用新端口
-./start.sh start
-```
-
-### 添加修改记录
-
-每次代码修改后，请在 CLAUDE.md 的「修改记录」表格中添加新行：
-
-```markdown
-| YYYY-MM-DD | `文件路径` | 修改内容 | 原因/目的 |
-```
-
----
-
-## 保留文件清单
-
-### CLAUDE.md 文件
-
-| 文件 | 行数 | 作用 |
-|------|------|------|
-| `CLAUDE.md` (顶层) | ~150 | AI 行为准则 + 端口配置 + 修改记录 |
-| `backend/CLAUDE.md` | 14 | 后端特有说明（Pipeline 架构） |
-| `frontend/CLAUDE.md` | 55 | 前端特有说明（路由、API 规范） |
-
-### 文档文件
-
-| 文件 | 作用 |
-|------|------|
-| `docs/prd/2026-04-24-pipeline-optimization.md` | PRD 参考模板 |
-| `docs/superpowers/plans/2026-05-07-routes-demo-refactor-plan.md` | 最近完成的重构计划 |
-| `docs/superpowers/specs/2026-04-21-yolo-pipeline-optimization.md` | YOLO Pipeline 优化规格 |
-| `docs/superpowers/specs/2026-04-22-stage1-yolo-sam-pipeline.md` | YOLO+SAM 技术规格 |
-| `docs/superpowers/specs/2026-05-07-routes-demo-refactor-design.md` | 重构设计文档 |
-| `docs/superpowers/specs/tech-comparison.md` | 技术对比 |
-
-### 技能模板
-
-| 文件 | 作用 |
-|------|------|
-| `.claude/skills/ralph-prd.md` | PRD 生成技能模板 |
-| `.claude/skills/karpathy-guidelines.md` | 编码准则模板 |
-

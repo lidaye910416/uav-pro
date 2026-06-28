@@ -22,7 +22,7 @@ UAV-PRO 是一个基于无人机航拍图像的智能安全预警系统，融合
 - **◉ 空天地一体化感知** - 无人机 + 摄像头 + 雷达多源融合
 - **◆ AI 智能分析** - YOLO + SAM + Gemma 多模型协同
 - **◫ RAG 知识增强** - 行业规范 + SOP 流程检索
-- **◈ 实时预警** - 毫秒级识别，秒级响应
+- **◈ 实时预警** - SSE 流式推送，毫秒级识别，秒级响应
 
 ---
 
@@ -46,12 +46,13 @@ UAV-PRO 是一个基于无人机航拍图像的智能安全预警系统，融合
 
 | 层级 | 技术 | 说明 |
 |------|------|------|
-| 前端 | Next.js 14 + TypeScript + TailwindCSS | 响应式管理后台 |
-| 后端 | FastAPI + Python 3.10+ | 高性能 API 服务 |
-| 视觉 | YOLOv8-World + SAM | 目标检测与分割 |
+| 前端 | Next.js 14 + TypeScript + TailwindCSS | 3 个独立应用 (showcase/dashboard/admin) |
+| 后端 | FastAPI + Python 3.10+ | REST + SSE 流式 |
+| 视觉 | YOLOv8 + MobileSAM | 目标检测与分割 |
 | LLM | Gemma-4 E2B (Ollama) | 多模态视觉理解 |
 | 向量库 | ChromaDB | RAG 知识检索 |
 | 数据库 | SQLite | 预警数据存储 |
+| 部署 | Docker Compose | 一键启动 |
 
 ---
 
@@ -59,132 +60,136 @@ UAV-PRO 是一个基于无人机航拍图像的智能安全预警系统，融合
 
 ### 环境要求
 
-- Python 3.10+
-- Node.js 18+
-- Ollama (本地运行 LLM)
-- macOS / Linux
+- Docker 20+ & Docker Compose v2
+- macOS / Linux / WSL2
+- 16GB+ 内存（推荐 GPU 加速 Ollama）
 
-### 安装步骤
+### 启动
 
 ```bash
 # 1. 克隆项目
 git clone https://github.com/lidaye910416/uav-pro.git
-cd uav-pro/website
+cd uav-pro
 
-# 2. 安装后端依赖
-cd backend
-pip install -r requirements.txt
+# 2. 准备环境变量（可选，默认值开箱即用）
+cp .env.example .env
 
-# 3. 安装前端依赖
-cd ../frontend
-pnpm install
+# 3. 一键启动所有服务（Ollama + ChromaDB + Backend + 3 前端）
+./start.sh start
 
-# 4. 启动 Ollama (确保模型已下载)
-ollama pull gemma4:e2b
-ollama pull nomic-embed-text
-
-# 5. 启动服务
-cd ..
-bash start.sh start
+# 4. 等待 1-3 分钟（首次启动需拉镜像、下载模型、构建前端）
+#    浏览器访问:
+#    - Showcase:  http://localhost:4000
+#    - Dashboard: http://localhost:4001
+#    - Admin:     http://localhost:4002
+#    - API Docs:  http://localhost:8888/docs
 ```
 
-### 服务端口（可通过 .env 配置）
+> 详细启动说明、端口修改、常见问题见 [docs/STARTUP_GUIDE.md](docs/STARTUP_GUIDE.md)
 
-| 服务 | 默认端口 | 环境变量 | 说明 |
-|------|----------|----------|------|
-| 后端 API | 8888 | `BACKEND_PORT` | API 服务 |
-| 前端 Showcase | 4000 | `SHOWCASE_PORT` | 项目展示首页 |
-| 前端 Dashboard | 4001 | `DASHBOARD_PORT` | 感知中心监控 |
-| 前端 Admin | 4002 | `ADMIN_PORT` | 管理后台 |
-| Ollama | 11434 | `OLLAMA_PORT` | LLM 服务 |
-| ChromaDB | 8001 | `CHROMADB_PORT` | RAG 向量库 |
+---
 
-> ⚠️ **重要**: 所有端口都可通过 `.env` 文件配置，无需修改代码。项目启动脚本会自动从环境变量读取端口配置。
+## 📋 服务端口
+
+| 服务 | 默认端口 | 说明 |
+|------|----------|------|
+| Backend API | 8888 | FastAPI 后端 + API 文档 |
+| Ollama LLM | 11434 | 本地 LLM 推理 |
+| ChromaDB | 9001 | SOP 知识库向量存储 |
+| Showcase | 4000 | 项目展示首页 |
+| Dashboard | 4001 | 感知中心 + 实时监控 |
+| Admin | 4002 | 管理后台 + RAG 管理 |
+
+> **修改端口**：编辑 `start.sh` 第 19-25 行的默认值，然后 `./start.sh restart`
+> **不要在 .env 中配置端口**（详见 CLAUDE.md §3）
 
 ---
 
 ## 📁 项目结构
 
 ```
-website/
-├── backend/                    # 后端服务
+uav-pro/
+├── backend/                    # FastAPI 后端
 │   ├── app/
-│   │   ├── api/              # API 路由
-│   │   │   ├── routes_demo.py       # 演示接口 (SSE 流)
-│   │   │   ├── routes_analyze.py   # 分析接口
-│   │   │   └── routes_alerts.py   # 预警接口
-│   │   ├── core/            # 核心配置
-│   │   ├── models/          # 数据模型
-│   │   └── services/        # 业务服务
-│   ├── config/              # 配置文件
-│   └── data/                # 数据目录
-│       ├── streams/         # 视频流
-│       ├── frames/          # 帧缓存
-│       └── knowledge_base/  # RAG 知识库
-├── frontend/                  # 前端应用 (Turborepo)
-│   └── apps/
-│       ├── showcase/        # 展示首页
-│       ├── dashboard/       # 感知中心
-│       └── admin/          # 管理后台
-└── start.sh                 # 启动脚本
+│   │   ├── api/              # API 路由 (demo/admin/auth/alerts/ollama/uav)
+│   │   ├── core/             # 配置 / 数据库 / 安全
+│   │   ├── models/           # SQLAlchemy 模型
+│   │   ├── schemas/          # Pydantic 模式
+│   │   └── services/         # 业务服务 (chroma/alert/auth)
+│   ├── scripts/              # 运维脚本
+│   ├── tests/                # 单元测试
+│   ├── data/
+│   │   ├── streams/          # 演示视频
+│   │   ├── frames/           # 帧缓存
+│   │   └── chromadb/         # RAG 向量库数据
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   └── main.py
+├── frontend/                  # Next.js 14 Turborepo
+│   ├── apps/
+│   │   ├── showcase/         # 端口 4000
+│   │   ├── dashboard/        # 端口 4001
+│   │   └── admin/            # 端口 4002
+│   ├── packages/
+│   │   └── api/              # 共享 API base / 跨应用 URL
+│   ├── pnpm-workspace.yaml
+│   ├── turbo.json
+│   └── Dockerfile
+├── docs/                      # 项目文档
+│   ├── STARTUP_GUIDE.md      # 启动与调试指南
+│   └── CHANGELOG.md          # 修改记录
+├── docker-compose.yml         # 容器编排
+├── start.sh                   # 服务管理入口
+├── .env.example               # 非端口配置模板
+├── CLAUDE.md                  # AI 助手指南
+└── README.md
 ```
 
 ---
 
 ## 🔧 配置说明
 
-### 环境变量 (.env)
+### 非端口配置 (.env)
 
 ```env
-# Ollama 配置
-OLLAMA_BASE_URL=http://localhost:11434
+# JWT 签名密钥（生产环境必须修改）
+SECRET_KEY=change-me-in-production
 
-# Pipeline 模式
-PIPELINE_MODE=single  # single: Gemma4 E2B | dual: llava + deepseek
-
-# 模型配置
+# AI 模型
 MODEL_GEMMA4=gemma4:e2b
+PIPELINE_MODE=single
+
+# CORS
+BACKEND_CORS_ORIGINS=http://localhost:4000,http://localhost:4001,http://localhost:4002
 ```
 
-### 启动脚本
+### 启动命令
 
 ```bash
-# 启动所有服务
-bash start.sh start
-
-# 停止所有服务
-bash start.sh stop
-
-# 重启服务
-bash start.sh restart
-
-# 查看状态
-bash start.sh status
+./start.sh start    # 构建并启动所有服务
+./start.sh stop     # 停止所有容器
+./start.sh restart  # 重启所有服务
+./start.sh status   # 容器状态 + 端口健康检查
+./start.sh logs     # 查看日志 (可指定 service)
+./start.sh clean    # 清理（删除数据卷）
 ```
-
----
-
-## 📊 性能指标
-
-| 指标 | 数值 |
-|------|------|
-| 预警准确率 | 94.2% |
-| 帧处理速率 | 25 FPS |
-| 端到端延迟 | 230ms |
-| 知识库规模 | 1,423 条 |
 
 ---
 
 ## 🧪 测试
 
 ```bash
-# 启动服务后访问
-open http://localhost:3001/monitor   # 感知中心
-open http://localhost:3000/about    # 项目介绍
+# 健康检查
+curl http://localhost:8888/health
 
-# API 测试
-curl http://localhost:8000/api/v1/alerts
-curl http://localhost:8000/api/v1/demo/stream
+# 列出已下载的 Ollama 模型
+curl http://localhost:11434/api/tags
+
+# 触发 demo pipeline (SSE 流)
+curl -N http://localhost:8888/api/v1/demo/stream
+
+# 查询预警列表
+curl http://localhost:8888/api/v1/alerts
 ```
 
 ---
@@ -193,13 +198,19 @@ curl http://localhost:8000/api/v1/demo/stream
 
 ### 添加新的 Pipeline Stage
 
-1. 修改后端 `routes_demo.py` 中的处理逻辑
+1. 修改 `backend/app/api/routes_demo.py` 中的处理函数
 2. 更新前端 `useAlertStream.ts` 中的数据接口
-3. 在 Dashboard 中添加对应的展示组件
+3. 在 Dashboard `/monitor` 页面添加对应展示组件
 
-### 自定义预警规则
+### 添加 SOP 文档到 RAG 知识库
 
-编辑 `config/prompts.yaml` 中的异常检测规则
+```bash
+# 通过 Admin UI: http://localhost:4002/rag
+# 或 API:
+curl -X POST http://localhost:8888/api/v1/admin/rag/add \
+  -H "Content-Type: application/json" \
+  -d '{"text": "...", "metadata": {"category": "construction"}}'
+```
 
 ---
 
