@@ -1,21 +1,19 @@
 services:
-  # ── Ollama — local LLM runtime (GPU preferred) ─────────────────────────────
+  # ── Ollama — 本地 LLM 运行时 ──────────────────────────────────────────────
   ollama:
     image: ollama/ollama:latest
     container_name: uav-ollama
     ports:
-      - "11000:11434"
+      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
     deploy:
       resources:
-        # No memory limit - Gemma4:e2b needs ~7GB+ for vision model
-        # Docker Desktop should be configured with 16GB+ in settings
+        # Gemma4:e2b 需要 ~7GB+ 显存
         limits:
           memory: 16g
-    # command is already set via CMD in the ollama image
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
@@ -23,12 +21,12 @@ services:
       retries: 5
       start_period: 60s
 
-  # ── ChromaDB — vector store for SOP RAG ───────────────────────────────────
+  # ── ChromaDB — SOP 知识库向量存储 ─────────────────────────────────────────
   chromadb:
     image: chromadb/chroma:latest
     container_name: uav-chroma
     ports:
-      - "9001:8000"
+      - "${CHROMA_PORT:-9001}:8000"
     volumes:
       - chroma_data:/chroma/chroma/.chroma_root
     environment:
@@ -39,69 +37,91 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Backend API ────────────────────────────────────────────────────────────
+  # ── Backend API (FastAPI) ─────────────────────────────────────────────────
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: uav-backend
     ports:
-      - "9000:8000"
+      - "${BACKEND_PORT:-8888}:8888"
     environment:
-      DATABASE_URL: "sqlite+aiosqlite:///./uav.db"
+      DATABASE_URL: "sqlite+aiosqlite:////app/data/uav.db"
       OLLAMA_BASE_URL: "http://ollama:11434"
       CHROMA_URL: "http://chromadb:8000"
-      MODEL_VISION: "gemma4-e2b"
-      MODEL_DECISION: "gemma4-e2b"
       SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
-      # Allow all origins for development
-      BACKEND_CORS_ORIGINS: "http://localhost:4000,http://localhost:4001,http://localhost:4002,http://localhost:9000,http://frontend:3000,http://frontend:3001,http://frontend:3002"
+      BACKEND_CORS_ORIGINS: "${BACKEND_CORS_ORIGINS:-http://localhost:4000,http://localhost:4001,http://localhost:4002}"
+      PIPELINE_MODE: "${PIPELINE_MODE:-single}"
+      MODEL_GEMMA4: "${MODEL_GEMMA4:-gemma4:e2b}"
     depends_on:
       ollama:
         condition: service_started
       chromadb:
         condition: service_started
     volumes:
-      - chroma_data:/chroma/chroma/.chroma_root:ro
-      - ./backend:/app
+      - ./backend/data/chromadb:/app/data/chromadb
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8888/health"]
       interval: 15s
       timeout: 5s
       retries: 5
 
-  # ── Frontend (dev server) ──────────────────────────────────────────────────
-  frontend:
+  # ── Frontend Showcase (端口 4000) ────────────────────────────────────────
+  showcase:
     build:
       context: .
       dockerfile: frontend/Dockerfile
-    container_name: uav-frontend
+      args:
+        APP_NAME: showcase
+        APP_PORT: 3000
+    container_name: uav-showcase
     ports:
-      - "4000:3000"
-      - "4001:3001"
-      - "4002:3002"
+      - "${SHOWCASE_PORT:-4000}:3000"
     environment:
-      # Backend API - use localhost with external port for browser access
-      NEXT_PUBLIC_API_BASE: "http://localhost:9000"
-      # Dashboard URL for showcase (external ports)
-      NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:4001"
-      # Showcase URL for admin/dashboard (external ports)
-      NEXT_PUBLIC_SHOWCASE_URL: "http://localhost:4000"
-      # Admin URL for navigation links
-      NEXT_PUBLIC_ADMIN_URL: "http://localhost:4002"
+      PORT: "3000"
+      NEXT_PUBLIC_API_BASE: "http://localhost:${BACKEND_PORT:-8888}"
+      NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:${DASHBOARD_PORT:-4001}"
+      NEXT_PUBLIC_ADMIN_URL: "http://localhost:${ADMIN_PORT:-4002}"
     depends_on:
       - backend
-    # Add host.docker.internal for Linux
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    # Mount source for development, but keep node_modules inside container
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
-      - /app/apps/dashboard/node_modules
-      - /app/apps/showcase/node_modules
-      - /app/apps/admin/node_modules
+
+  # ── Frontend Dashboard (端口 4001) ───────────────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        APP_NAME: dashboard
+        APP_PORT: 3001
+    container_name: uav-dashboard
+    ports:
+      - "${DASHBOARD_PORT:-4001}:3001"
+    environment:
+      PORT: "3001"
+      NEXT_PUBLIC_API_BASE: "http://localhost:${BACKEND_PORT:-8888}"
+      NEXT_PUBLIC_SHOWCASE_URL: "http://localhost:${SHOWCASE_PORT:-4000}"
+      NEXT_PUBLIC_ADMIN_URL: "http://localhost:${ADMIN_PORT:-4002}"
+    depends_on:
+      - backend
+
+  # ── Frontend Admin (端口 4002) ───────────────────────────────────────────
+  admin:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      args:
+        APP_NAME: admin
+        APP_PORT: 3002
+    container_name: uav-admin
+    ports:
+      - "${ADMIN_PORT:-4002}:3002"
+    environment:
+      PORT: "3002"
+      NEXT_PUBLIC_API_BASE: "http://localhost:${BACKEND_PORT:-8888}"
+      NEXT_PUBLIC_SHOWCASE_URL: "http://localhost:${SHOWCASE_PORT:-4000}"
+      NEXT_PUBLIC_DASHBOARD_URL: "http://localhost:${DASHBOARD_PORT:-4001}"
+    depends_on:
+      - backend
 
 volumes:
   ollama_data:
