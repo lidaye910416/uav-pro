@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# Models (huge binaries, not needed for build)
+*.pt
+*.pth
+*.onnx
+*.h5
+*.weights
+models/
+
+# Fonts & media (not needed for backend build)
+*.ttf
+*.ttc
+*.otf
+*.mp4
+*.mp3
+*.wav
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+fonts/
+
+# Local artifacts
+*.db
+*.sqlite
+*.log
+*.bak
+*.tmp
+data/
+uav.db
+.env
+.env.*
+
+# Tests & scripts (not needed for runtime image)
+tests/
+scripts/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store

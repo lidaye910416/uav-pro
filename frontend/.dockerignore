@@ -1,0 +1,38 @@
+# Node
+node_modules/
+.npm
+.pnpm-store/
+
+# Build outputs
+.next/
+out/
+dist/
+build/
+.turbo/
+
+# Tests
+__tests__/
+*.test.ts
+*.test.tsx
+*.spec.ts
+*.spec.tsx
+coverage/
+
+# Public assets that bloat context (videos/images not needed for dev)
+# Note: only ignore if NOT using NEXT_PUBLIC_ at runtime — keeping public/videos/ for now
+# public/videos/*.mp4
+# public/images/*.png
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.log
+*.bak
+*.tmp
+.env
+.env.*
+
+# Docs
+*.md
+docs/

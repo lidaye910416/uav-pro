@@ -11,9 +11,9 @@ services:
       OLLAMA_HOST: 0.0.0.0:11434
     deploy:
       resources:
-        # Gemma4:e2b 需要 ~7GB+ 显存
+        # Gemma4:e2b 需要 ~7GB+ 显存; 16g 会把主机内存吃光导致构建 OOM
         limits:
-          memory: 16g
+          memory: 8g
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
