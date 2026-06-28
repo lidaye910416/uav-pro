@@ -1,9 +1,10 @@
+import { getDashboardUrl } from "@uav/api";
 "use client"
 import { useEffect, useRef, useState, useCallback } from "react"
 import PipelinePanel from "../components/DemoPipeline"
 
 // 统一使用环境变量配置
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"
+const DASHBOARD_URL = getDashboardUrl()
 
 /* ── Interactive Particle Globe ────────────────────────────── */
 function Globe3D() {

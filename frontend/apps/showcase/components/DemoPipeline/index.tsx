@@ -1,3 +1,4 @@
+import { getApiBase } from "@uav/api";
 "use client"
 import React, { useState, useEffect, useRef } from "react"
 import VideoPlayer, { pauseVideo, playVideo } from "./VideoPlayer"
@@ -21,7 +22,7 @@ interface StageCardData {
   combinedImageUrl?: string  // URL to annotated image from Stage 1
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+const API_BASE = getApiBase()
 const DEMO_STREAM_URL = `${API_BASE}/api/v1/demo/stream`
 const DEMO_SEED_URL = `${API_BASE}/api/v1/demo/seed`
 

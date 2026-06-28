@@ -1,3 +1,4 @@
+import { getShowcaseUrl } from "@uav/api";
 "use client"
 import "./globals.css"
 import { AuthProvider, useAuth } from "@/components/AuthContext"
@@ -5,7 +6,7 @@ import TopHeader from "@/components/TopHeader"
 import LoginPage from "@/components/LoginPage"
 import { usePathname } from "next/navigation"
 
-const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
+const SHOWCASE_URL = getShowcaseUrl()
 
 const NAV_ITEMS = [
   { href: "/", label: "系统概览", icon: "◈", section: "overview" },

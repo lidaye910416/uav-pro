@@ -1,3 +1,4 @@
+import { getApiBase } from "@uav/api";
 "use client"
 import { useState, useEffect, useCallback, useRef, memo } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
@@ -27,7 +28,7 @@ const VIDEOS: VideoConfig[] = [
 ]
 
 function buildVideoUrls() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+  const API_BASE = getApiBase()
   return VIDEOS.map((v) => ({
     ...v,
     videoUrl: `${API_BASE}/api/v1/demo/video?video_id=${v.id}`,
@@ -623,7 +624,7 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
   const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+    const API_BASE = getApiBase()
     fetch(`${API_BASE}/api/v1/admin/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d.alerts_by_risk || {}))
@@ -704,7 +705,7 @@ export default function MonitorPage() {
 
     // 释放 Ollama 模型内存
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = getApiBase()
       const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
       const data = await res.json()
       if (data.ok) {
@@ -838,7 +839,7 @@ export default function MonitorPage() {
 
   // Load YOLO params from backend
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+    const API_BASE = getApiBase()
     fetch(`${API_BASE}/api/v1/analyze/yolo-params`)
       .then(r => r.json())
       .then((p: any) => setYoloParams({
@@ -851,7 +852,7 @@ export default function MonitorPage() {
 
   const handleYoloParamsChange = useCallback((newParams: YOLOParams) => {
     setYoloParams(newParams)
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+    const API_BASE = getApiBase()
     fetch(`${API_BASE}/api/v1/analyze/yolo-params`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -919,7 +920,7 @@ export default function MonitorPage() {
 
                 // 3. 释放 Ollama 模型内存
                 try {
-                  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+                  const API_BASE = getApiBase()
                   const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
                   const data = await res.json()
                   if (data.ok) {

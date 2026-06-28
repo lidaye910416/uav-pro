@@ -1,8 +1,9 @@
+import { getShowcaseUrl, getAdminUrl } from "@uav/api";
 "use client"
 import Link from "next/link"
 
-const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+const SHOWCASE_URL = getShowcaseUrl()
+const ADMIN_URL = getAdminUrl()
 
 const navItems = [
   { href: "/", label: "◉ 控制台", icon: "◉" },

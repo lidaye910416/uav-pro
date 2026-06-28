@@ -1,3 +1,4 @@
+import { getApiBase } from "@uav/api";
 "use client"
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/components/AuthContext"
@@ -48,7 +49,7 @@ export default function RAGPage() {
   useEffect(() => {
     async function fetchSOPCount() {
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+        const API_BASE = getApiBase()
         const res = await fetch(`${API_BASE}/api/v1/admin/chromadb`)
         const data = await res.json()
         if (data.status === "running" || data.collections?.length > 0) {
@@ -73,7 +74,7 @@ export default function RAGPage() {
     setGenerating(true); setGenMsg(""); setError("")
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = getApiBase()
       const res = await fetch(`${API_BASE}/api/v1/admin/sop/generate`, {
         method: "POST",
         headers: {
@@ -100,7 +101,7 @@ export default function RAGPage() {
   // 导入 SOP 到知识库
   async function importSOP(text: string) {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = getApiBase()
       await fetch(`${API_BASE}/api/v1/admin/rag/add`, {
         method: "POST",
         headers: {
@@ -144,7 +145,7 @@ export default function RAGPage() {
     formData.append("file", file)
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+      const API_BASE = getApiBase()
       const res = await fetch(`${API_BASE}/api/v1/admin/sop/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${user.token}` },

@@ -1,9 +1,10 @@
+import { getDashboardUrl, getAdminUrl } from "@uav/api";
 "use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+const DASHBOARD_URL = getDashboardUrl()
+const ADMIN_URL = getAdminUrl()
 
 const navItems = [
   { href: "/",      label: "首页" },

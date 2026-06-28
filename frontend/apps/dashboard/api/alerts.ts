@@ -1,5 +1,6 @@
+import { getApiBase } from "@uav/api";
 // 从环境变量读取 API 地址，统一使用 NEXT_PUBLIC_API_BASE
-const API_BASE = `${process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"}/api/v1`
+const API_BASE = `${getApiBase()}/api/v1`
 
 export interface Alert {
   id: number

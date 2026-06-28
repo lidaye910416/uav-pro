@@ -1,3 +1,4 @@
+import { getApiBase } from "@uav/api";
 "use client"
 import { useRef, useEffect, useState } from "react"
 
@@ -13,7 +14,7 @@ interface VideoPlayerProps {
   annotatedFrameUrl?: string  // 标注帧图片 URL
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
+const API_BASE = getApiBase()
 
 export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge = false, annotatedFrameUrl }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)

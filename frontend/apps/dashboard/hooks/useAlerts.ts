@@ -1,9 +1,8 @@
+import { getApiBase } from "@uav/api";
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
 
-// 从环境变量读取 API 地址
-const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
 
 export interface Alert {
   id: number

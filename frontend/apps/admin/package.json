@@ -11,8 +11,8 @@
     "next": "^14.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "@tanstack/react-query": "^5.0.0",
-    "lucide-react": "^0.400.0"
+    "lucide-react": "^0.400.0",
+    "@uav/api": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
