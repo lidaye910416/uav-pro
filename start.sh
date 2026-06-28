@@ -25,8 +25,18 @@ export ADMIN_PORT=${ADMIN_PORT:-4002}
 # 加载 .env 中非端口配置（如 SECRET_KEY / MODEL_GEMMA4 / PIPELINE_MODE）
 if [ -f "$PROJECT_ROOT/.env" ]; then
     set -a
-    # 仅加载非端口配置
-    grep -v -E '^[A-Z_]+_PORT=' "$PROJECT_ROOT/.env" | grep -v '^BACKEND_HOST=' || true
+    # 仅加载非端口配置 (排除 *PORT / BACKEND_HOST 行)
+    while IFS='=' read -r key value; do
+        # 跳过注释 / 空行 / 端口变量
+        case "$key" in
+            ""|\#*) continue ;;
+            *_PORT|BACKEND_HOST) continue ;;
+        esac
+        # 去掉 value 两端引号
+        value="${value%\"}"; value="${value#\"}"
+        value="${value%\'}"; value="${value#\'}"
+        export "$key=$value"
+    done < <(grep -v -E '^[A-Z_]+_PORT=|^BACKEND_HOST=' "$PROJECT_ROOT/.env")
     set +a
 fi
 
