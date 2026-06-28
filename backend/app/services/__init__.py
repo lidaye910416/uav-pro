@@ -1,4 +1,3 @@
-# backend/app/services/__init__.py
 """服务模块 - 业务服务层.
 
 主流程服务:
@@ -13,15 +12,8 @@ from app.services.auth_service import (
 from app.services.chroma_service import (
     ChromaService, get_chroma_service, get_rag_context, search_sops,
 )
-from app.services.types import (
-    AnnotatedImage, Detection, DetectionResult, FrameData, MaskDetail,
-    SSEEvent, VideoInfo, VisionResult,
-)
 
 __all__ = [
-    # Types
-    "FrameData", "VideoInfo", "Detection", "MaskDetail",
-    "DetectionResult", "AnnotatedImage", "VisionResult", "SSEEvent",
     # Services
     "ChromaService",
     "get_chroma_service",

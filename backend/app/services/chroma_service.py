@@ -3,16 +3,15 @@
 
 from __future__ import annotations
 
-import os
+import logging
 from pathlib import Path
 from typing import Optional
 
 import chromadb
 
-# ChromaDB 配置 - 使用 host.docker.internal 访问外部端口
-CHROMADB_HOST = os.getenv("CHROMADB_HOST", "host.docker.internal")
-CHROMADB_PORT = int(os.getenv("CHROMADB_PORT", "9001"))  # 使用外部端口 9001
-CHROMADB_URL = os.getenv("CHROMADB_URL", f"http://{CHROMADB_HOST}:{CHROMADB_PORT}")
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 # Collection names
 SOP_COLLECTION_NAME = "sop_knowledge_base"
@@ -97,10 +96,10 @@ SOP_DOCUMENTS = [
 class ChromaService:
     """ChromaDB RAG Service"""
 
-    def __init__(self, host: str = CHROMADB_HOST, port: int = CHROMADB_PORT):
-        self.host = host
-        self.port = port
-        self.url = f"http://{host}:{port}"
+    def __init__(self, host: Optional[str] = None, port: Optional[int] = None):
+        self.host = host or settings.CHROMADB_HOST
+        self.port = port or settings.CHROMADB_PORT
+        self.url = f"http://{self.host}:{self.port}"
         self._client: Optional[chromadb.Client] = None
 
     @property
@@ -160,26 +159,24 @@ class ChromaService:
                     formatted.append(doc)
             return formatted
         except Exception as e:
-            print(f"[ChromaService] search error: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("ChromaService search 失败: %s", e, exc_info=True)
             return []
 
     def get_rag_context(self, query: str, top_k: int = 3) -> str:
         """
         获取 RAG 上下文字符串（用于 LLM 提示词）
-        
+
         Args:
             query: 查询文本
             top_k: 返回结果数量
-        
+
         Returns:
             str: 格式化的 SOP 上下文
         """
         results = self.search(query, top_k)
         if not results:
             return ""
-        
+
         lines = []
         for r in results:
             text = r.get("text", "")
@@ -203,12 +200,12 @@ class ChromaService:
                 collection = self.client.get_collection(SOP_COLLECTION_NAME)
                 existing_count = collection.count()
                 if existing_count > 0 and not force:
-                    print(f"[ChromaService] SOP 知识库已存在：{existing_count} 条记录")
+                    logger.info("SOP 知识库已存在：%s 条记录", existing_count)
                     return existing_count
                 # 强制重建：删除旧 collection
                 if force:
                     self.client.delete_collection(SOP_COLLECTION_NAME)
-                    print(f"[ChromaService] 删除旧 SOP 知识库")
+                    logger.info("已删除旧 SOP 知识库")
             except Exception:
                 pass  # Collection 不存在
 
@@ -234,12 +231,10 @@ class ChromaService:
                 batch_metadatas = metadatas[i:i+batch_size]
                 collection.add(ids=batch_ids, documents=batch_texts, metadatas=batch_metadatas)
 
-            print(f"[ChromaService] 初始化 SOP 知识库：{len(SOP_DOCUMENTS)} 条记录")
+            logger.info("SOP 知识库初始化完成：%s 条记录", len(SOP_DOCUMENTS))
             return len(SOP_DOCUMENTS)
         except Exception as e:
-            print(f"[ChromaService] 初始化失败: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error("SOP 知识库初始化失败: %s", e, exc_info=True)
             return 0
 
     def get_collection_info(self, collection_name: str = SOP_COLLECTION_NAME) -> dict:
@@ -294,7 +289,7 @@ class ChromaService:
                 inserted += len(ids[i:i + batch_size])
             return inserted
         except Exception as e:
-            print(f"[ChromaService] add_documents error: {e}")
+            logger.error("ChromaService add_documents 失败: %s", e)
             return 0
 
     def list_collections(self) -> list[str]:
@@ -302,7 +297,7 @@ class ChromaService:
         try:
             return [c.name for c in self.client.list_collections()]
         except Exception as e:
-            print(f"[ChromaService] list_collections error: {e}")
+            logger.error("ChromaService list_collections 失败: %s", e)
             return []
 
 

@@ -1,7 +1,9 @@
 """UAV 低空检测智能安全预警系统 - FastAPI 入口."""
 from __future__ import annotations
 
+import logging
 import os
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,8 +20,9 @@ from app.core.database import Base, engine
 # 触发 SQLAlchemy 模型注册
 from app.models.alert import Alert, AlertStatus, RiskLevel  # noqa: F401
 from app.models.data_record import DataRecord  # noqa: F401
-from app.models.device import Device  # noqa: F401
 from app.models.user import User  # noqa: F401
+
+logger = logging.getLogger(__name__)
 
 
 def _get_backend_port() -> int:
@@ -33,25 +36,21 @@ def _get_backend_port() -> int:
     return settings.BACKEND_PORT
 
 
-if __name__ == "__main__":
-    import uvicorn
-
-    port = _get_backend_port()
-    print(f"[启动] 后端服务端口: {port}")
-    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """启动时创建所有表，关闭时释放引擎."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("数据库表已就绪")
+    yield
+    await engine.dispose()
 
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     version=settings.VERSION,
+    lifespan=lifespan,
 )
-
-
-@app.on_event("startup")
-async def _startup_event() -> None:
-    """启动时创建所有表."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
 
 app.add_middleware(
@@ -78,3 +77,15 @@ def root() -> dict:
 @app.get("/health")
 def health_check() -> dict:
     return {"status": "healthy"}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+    port = _get_backend_port()
+    logger.info("后端服务端口: %s", port)
+    uvicorn.run("main:app", host="127.0.0.1", port=port, reload=True)

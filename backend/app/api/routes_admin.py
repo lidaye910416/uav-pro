@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from app.services.chroma_service import (
     search_sops,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
@@ -364,13 +366,13 @@ async def stop_ollama_model() -> dict:
                         )
                         if resp.status_code == 200:
                             stopped_models.append(model_name)
-                            print(f"[Ollama] ✓ 已卸载模型: {model_name}")
+                            logger.info("Ollama 已卸载模型: %s", model_name)
                         else:
                             errors.append(f"{model_name}: {resp.status_code}")
-                            print(f"[Ollama] ✗ 卸载失败 {model_name}: {resp.status_code}")
+                            logger.warning("Ollama 卸载失败 %s: %s", model_name, resp.status_code)
                     except Exception as e:
                         errors.append(f"{model_name}: {str(e)}")
-                        print(f"[Ollama] ✗ 卸载异常 {model_name}: {e}")
+                        logger.error("Ollama 卸载异常 %s: %s", model_name, e)
 
         if stopped_models:
             return {

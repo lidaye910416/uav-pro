@@ -1,31 +1,34 @@
-"""UAV 管理接口 - 预留扩展结构，支持后期接入真实设备数据"""
+"""UAV 管理接口 (demo fixture).
+
+当前仅用于前端展示，无真实设备数据接入。
+接入真实设备时需替换 SAMPLE_UAVS 数据源（DJI SDK / MQTT / DB 等）。
+"""
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/uav", tags=["无人机管理"])
 
-# ── 数据模型（预留扩展）─────────────────────────────────────────────────────
+
+# ── 数据模型 ──────────────────────────────────────────────────────────
 
 class TrackPoint(BaseModel):
-    """轨迹点 - 后期可扩展字段"""
+    """轨迹点."""
     lat: float
     lng: float
     altitude: Optional[float] = None
     speed: Optional[float] = None
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
-    # 预留扩展: signal, battery, heading, etc.
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class UAVDevice(BaseModel):
-    """无人机设备 - 预留扩展字段"""
+    """无人机设备."""
     id: str
     name: str
     model: str
@@ -36,8 +39,7 @@ class UAVDevice(BaseModel):
     lat: float
     lng: float
     signal: float
-    last_seen: datetime = Field(default_factory=datetime.utcnow)
-    # 预留扩展字段
+    last_seen: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     manufacturer: Optional[str] = None
     serial_no: Optional[str] = None
     firmware_version: Optional[str] = None
@@ -45,27 +47,26 @@ class UAVDevice(BaseModel):
     flight_time: Optional[float] = None  # 累计飞行时长(小时)
     total_distance: Optional[float] = None  # 累计飞行里程(公里)
 
-    class Config:
-        json_encoders = {datetime: lambda v: v.isoformat()}
+    model_config = ConfigDict(json_encoders={datetime: lambda v: v.isoformat()})
 
 
 class UAVWithTrack(BaseModel):
-    """带轨迹的无人机 - 用于地图显示"""
+    """带轨迹的无人机 - 用于地图显示."""
     device: UAVDevice
     track: list[TrackPoint] = []  # 最近 N 个轨迹点
 
 
 class FlightStats(BaseModel):
-    """飞行统计 - 预留扩展"""
+    """飞行统计."""
     flying_count: int
     hovering_count: int
     offline_count: int
     avg_battery: float
-    total_flight_time: Optional[float] = None  # 预留: 总飞行时长(小时)
-    total_distance: Optional[float] = None  # 预留: 总飞行里程(公里)
+    total_flight_time: Optional[float] = None
+    total_distance: Optional[float] = None
 
 
-# ── 样例数据（后期替换为真实数据源）─────────────────────────────────────────
+# ── Demo 数据（接入真实设备时替换此源） ────────────────────────────────
 
 SAMPLE_UAVS: list[UAVWithTrack] = [
     UAVWithTrack(
@@ -80,7 +81,6 @@ SAMPLE_UAVS: list[UAVWithTrack] = [
             lat=23.1291,
             lng=113.2644,
             signal=92,
-            last_seen=datetime.utcnow(),
             manufacturer="DJI",
             serial_no="SN-2024-001",
             heading=45,
@@ -99,7 +99,6 @@ SAMPLE_UAVS: list[UAVWithTrack] = [
             lat=23.1301,
             lng=113.2654,
             signal=78,
-            last_seen=datetime.utcnow(),
             manufacturer="DJI",
             serial_no="SN-2024-002",
             heading=180,
@@ -118,7 +117,7 @@ SAMPLE_UAVS: list[UAVWithTrack] = [
             lat=23.1281,
             lng=113.2634,
             signal=0,
-            last_seen=datetime.utcnow() - timedelta(hours=1),
+            last_seen=datetime.now(timezone.utc) - timedelta(hours=1),
             manufacturer="DJI",
             serial_no="SN-2024-003",
         ),
@@ -127,23 +126,17 @@ SAMPLE_UAVS: list[UAVWithTrack] = [
 ]
 
 
-# ── API 端点 ──────────────────────────────────────────────────────────────────
+# ── API 端点 ───────────────────────────────────────────────────────────
 
 @router.get("/uavs", response_model=list[UAVWithTrack])
 async def list_uavs() -> list[UAVWithTrack]:
-    """获取所有无人机状态和轨迹（当前返回样例数据）
-    
-    后期可扩展为:
-    1. 从 DJI SDK 获取真实设备数据
-    2. 从 MQTT 消息队列订阅实时位置
-    3. 从数据库查询历史轨迹
-    """
+    """获取所有无人机状态和轨迹 (demo fixture)."""
     return SAMPLE_UAVS
 
 
 @router.get("/uavs/{uav_id}", response_model=UAVWithTrack)
 async def get_uav(uav_id: str) -> UAVWithTrack:
-    """获取单架无人机详情"""
+    """获取单架无人机详情."""
     for uav in SAMPLE_UAVS:
         if uav.device.id == uav_id:
             return uav
@@ -152,10 +145,7 @@ async def get_uav(uav_id: str) -> UAVWithTrack:
 
 @router.get("/uavs/{uav_id}/track", response_model=list[TrackPoint])
 async def get_uav_track(uav_id: str, minutes: int = 5) -> list[TrackPoint]:
-    """获取无人机历史轨迹（默认最近5分钟）
-    
-    后期可扩展为查询数据库或时间序列存储
-    """
+    """获取无人机历史轨迹 (默认最近5分钟, demo fixture)."""
     for uav in SAMPLE_UAVS:
         if uav.device.id == uav_id:
             return uav.track
@@ -164,19 +154,19 @@ async def get_uav_track(uav_id: str, minutes: int = 5) -> list[TrackPoint]:
 
 @router.get("/stats", response_model=FlightStats)
 async def get_flight_stats() -> FlightStats:
-    """获取飞行统计信息"""
+    """获取飞行统计信息."""
     flying = [u for u in SAMPLE_UAVS if u.device.status == "flying"]
     hovering = [u for u in SAMPLE_UAVS if u.device.status == "hovering"]
     offline = [u for u in SAMPLE_UAVS if u.device.status == "offline"]
     online = flying + hovering
-    
+
     avg_bat = sum(u.device.battery for u in online) / max(1, len(online))
-    
+
     return FlightStats(
         flying_count=len(flying),
         hovering_count=len(hovering),
         offline_count=len(offline),
         avg_battery=round(avg_bat, 1),
-        total_flight_time=None,  # 预留: 从数据库查询
-        total_distance=None,  # 预留: 从数据库查询
+        total_flight_time=None,
+        total_distance=None,
     )

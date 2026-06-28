@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./uav.db"
 
     # JWT
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24小时
 
@@ -88,25 +88,6 @@ class Settings(BaseSettings):
     # ── 双模型模式 ─────────────────────────────
     MODEL_VISION: str = "llava:7b"
     MODEL_DECISION: str = "deepseek-r1:1.5b"
-
-    # ── 模型自动检测 ─────────────────────────────
-    # 这些会在运行时自动检测可用的模型
-    _available_gemma: str | None = None
-    _available_qwen: str | None = None
-
-    def get_vision_model(self) -> str:
-        """获取可用的视觉模型"""
-        # 优先使用 Gemma4
-        if self._available_gemma:
-            return self._available_gemma
-        # 回退到 Qwen
-        if self._available_qwen:
-            return self._available_qwen
-        return "qwen2.5:latest"
-
-    def get_embed_model(self) -> str:
-        """获取可用的嵌入模型"""
-        return "nomic-embed-text"
 
 
 @lru_cache()
