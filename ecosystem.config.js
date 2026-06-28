@@ -25,9 +25,9 @@ const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
 const backendPort = process.env.BACKEND_PORT || '8888';
 
 // 前端服务端口（从环境变量读取，没有则使用默认值）
-const showcasePort = process.env.SHOWCASE_PORT || '3000';
-const dashboardPort = process.env.DASHBOARD_PORT || '3001';
-const adminPort = process.env.ADMIN_PORT || '3002';
+const showcasePort = process.env.SHOWCASE_PORT || '4000';
+const dashboardPort = process.env.DASHBOARD_PORT || '4001';
+const adminPort = process.env.ADMIN_PORT || '4002';
 
 // 前端 URL 配置（用于服务间跳转，动态构建）
 const showcaseUrl = `http://localhost:${showcasePort}`;

@@ -254,6 +254,57 @@ class ChromaService:
         except Exception as e:
             return {"error": str(e)}
 
+    def add_documents(
+        self,
+        texts: list[str],
+        metadatas: list[dict] | None = None,
+        ids: list[str] | None = None,
+        collection_name: str = SOP_COLLECTION_NAME,
+    ) -> int:
+        """向知识库添加文档。
+
+        Args:
+            texts: 文档文本列表
+            metadatas: 可选元数据列表（与 texts 等长）
+            ids: 可选 ID 列表；为空时自动生成
+            collection_name: collection 名称
+
+        Returns:
+            成功插入的文档数量
+        """
+        if not texts:
+            return 0
+        try:
+            collection = self.get_collection(collection_name)
+            import uuid
+
+            ids = ids or [str(uuid.uuid4()) for _ in texts]
+            metadatas = metadatas or [{} for _ in texts]
+            assert len(ids) == len(texts) == len(metadatas), "ids/texts/metadatas 长度必须一致"
+
+            # 分批插入以避免超时
+            batch_size = 5
+            inserted = 0
+            for i in range(0, len(ids), batch_size):
+                collection.add(
+                    ids=ids[i:i + batch_size],
+                    documents=texts[i:i + batch_size],
+                    metadatas=metadatas[i:i + batch_size],
+                )
+                inserted += len(ids[i:i + batch_size])
+            return inserted
+        except Exception as e:
+            print(f"[ChromaService] add_documents error: {e}")
+            return 0
+
+    def list_collections(self) -> list[str]:
+        """列出所有 collection 名称。"""
+        try:
+            return [c.name for c in self.client.list_collections()]
+        except Exception as e:
+            print(f"[ChromaService] list_collections error: {e}")
+            return []
+
 
 # 全局实例
 _chroma_service: Optional[ChromaService] = None
@@ -275,3 +326,22 @@ def search_sops(query: str, top_k: int = 3) -> list[dict]:
 def get_rag_context(query: str, top_k: int = 3) -> str:
     """便捷函数：获取 RAG 上下文"""
     return get_chroma_service().get_rag_context(query, top_k)
+
+
+def add_documents(
+    texts: list[str],
+    metadatas: list[dict] | None = None,
+    ids: list[str] | None = None,
+) -> int:
+    """便捷函数：向 SOP 知识库添加文档"""
+    return get_chroma_service().add_documents(texts, metadatas, ids)
+
+
+def init_sop_collection(force: bool = False) -> int:
+    """便捷函数：初始化/重建 SOP 知识库"""
+    return get_chroma_service().init_sop_collection(force=force)
+
+
+def get_collection_info() -> dict:
+    """便捷函数：获取 SOP collection 信息"""
+    return get_chroma_service().get_collection_info()

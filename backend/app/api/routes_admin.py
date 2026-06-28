@@ -1,19 +1,28 @@
 """管理员接口: 系统健康 / RAG知识库 / 统计 / Pipeline配置 / SOP上传."""
 from __future__ import annotations
 
-import httpx
-import os
 import json
+import time
 from pathlib import Path
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+
+import httpx
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
+from sqlalchemy import func, select
+
 from app.api.routes_auth import get_current_user
-from app.models.user import User
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
-from sqlalchemy import select, func
 from app.models.alert import Alert
 from app.models.data_record import DataRecord
+from app.models.user import User
+from app.services.chroma_service import (
+    add_documents,
+    get_chroma_service,
+    get_collection_info,
+    init_sop_collection,
+    search_sops,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -42,7 +51,6 @@ class SystemStats(BaseModel):
     alerts_by_risk: dict[str, int]
     alerts_by_status: dict[str, int]
     total_records: int
-    registered_streams: int
 
 
 class RAGDoc(BaseModel):
@@ -59,7 +67,6 @@ async def system_health() -> list[HealthResponse]:
 
     # Ollama
     try:
-        import time
         t0 = time.perf_counter()
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
@@ -83,37 +90,15 @@ async def system_health() -> list[HealthResponse]:
 
     # ChromaDB - 支持本地库模式和HTTP模式
     try:
-        import time
         t0 = time.perf_counter()
-
-        if os.environ.get("CHROMA_URL"):
-            # HTTP 模式
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(f"{os.environ['CHROMA_URL']}/api/v2/heartbeat")
-            latency = (time.perf_counter() - t0) * 1000
-            results.append(HealthResponse(
-                service="chromadb", status="healthy" if r.status_code == 200 else "degraded",
-                latency_ms=round(latency, 1),
-            ))
-        else:
-            # 本地库模式 - 检查数据目录
-            from config import pipeline_config
-            persist_dir = pipeline_config["rag"]["persist_dir"]
-            backend_dir = Path(__file__).parent.parent.parent.absolute()
-            persist_path = (backend_dir / persist_dir).resolve()
-            latency = (time.perf_counter() - t0) * 1000
-            if persist_path.exists():
-                results.append(HealthResponse(
-                    service="chromadb", status="healthy",
-                    latency_ms=round(latency, 1),
-                    detail=f"本地库模式, {len(list(persist_path.iterdir()))} 个文件",
-                ))
-            else:
-                results.append(HealthResponse(
-                    service="chromadb", status="initialized",
-                    latency_ms=round(latency, 1),
-                    detail="数据目录不存在，已初始化",
-                ))
+        chroma = get_chroma_service()
+        collections = chroma.list_collections()
+        latency = (time.perf_counter() - t0) * 1000
+        results.append(HealthResponse(
+            service="chromadb", status="healthy",
+            latency_ms=round(latency, 1),
+            detail=f"{len(collections)} collections",
+        ))
     except Exception as e:
         results.append(HealthResponse(
             service="chromadb", status="down", detail=str(e),
@@ -148,45 +133,11 @@ async def ollama_status() -> OllamaHealth:
 
 @router.get("/chromadb", response_model=ChromaHealth)
 async def chromadb_status() -> ChromaHealth:
-    """ChromaDB 状态（支持本地库模式和HTTP模式）."""
-    import chromadb
-
+    """ChromaDB 状态."""
     try:
-        # 检查是否使用 HTTP 模式（通过环境变量 CHROMA_URL）
-        chroma_url = os.environ.get("CHROMA_URL")
-
-        if chroma_url:
-            # HTTP 模式：检查远程 ChromaDB 服务
-            async with httpx.AsyncClient(timeout=10) as client:
-                r = await client.get(f"{chroma_url}/api/v2/heartbeat")
-            if r.status_code == 200:
-                try:
-                    rc = await client.get(f"{chroma_url}/api/v2/collections")
-                    cols = [c.get("name", "") for c in rc.json().get("collections", [])] if rc.status_code == 200 else []
-                except Exception:
-                    cols = []
-                return ChromaHealth(status="running", collections=cols)
-            return ChromaHealth(status="error", error=f"HTTP {r.status_code}")
-        else:
-            # 本地库模式：检查 PersistentClient
-            from config import pipeline_config
-            persist_dir = pipeline_config["rag"]["persist_dir"]
-
-            # 转换为绝对路径（基于 backend 目录）
-            backend_dir = Path(__file__).parent.parent.parent.absolute()
-            persist_path = (backend_dir / persist_dir).resolve()
-
-            if persist_path.exists():
-                # 使用 PersistentClient 检查数据
-                try:
-                    _client = chromadb.PersistentClient(path=str(persist_path))
-                    collections = _client.list_collections()
-                    cols = [c.name for c in collections]
-                    return ChromaHealth(status="running", collections=cols)
-                except Exception as e:
-                    return ChromaHealth(status="error", error=str(e))
-            else:
-                return ChromaHealth(status="initialized", collections=[], error="数据目录不存在，已初始化")
+        chroma = get_chroma_service()
+        cols = chroma.list_collections()
+        return ChromaHealth(status="running", collections=cols)
     except Exception as e:
         return ChromaHealth(status="error", error=str(e))
 
@@ -221,13 +172,11 @@ async def system_stats() -> SystemStats:
             select(func.count(DataRecord.id))
         )).scalar() or 0
 
-    from app.api.routes_streams import STREAM_REGISTRY
     return SystemStats(
         total_alerts=total,
         alerts_by_risk=risk_counts,
         alerts_by_status=status_counts,
         total_records=total_records,
-        registered_streams=len(STREAM_REGISTRY),
     )
 
 
@@ -237,10 +186,8 @@ async def system_stats() -> SystemStats:
 def rag_add_document(doc: RAGDoc, _: User = Depends(get_current_user)) -> dict:
     """向 RAG 知识库添加 SOP 文档."""
     try:
-        from app.rag_service import RAGService
-        rag = RAGService()
-        rag.add_document(doc.text, metadata=doc.metadata)
-        return {"ok": True, "chunks": 1}
+        n = add_documents([doc.text], [doc.metadata or {}])
+        return {"ok": True, "chunks": n}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -249,12 +196,26 @@ def rag_add_document(doc: RAGDoc, _: User = Depends(get_current_user)) -> dict:
 def rag_search(q: str, k: int = 3) -> dict:
     """RAG 向量检索（测试用，无需认证）."""
     try:
-        from app.rag_service import RAGService
-        rag = RAGService()
-        results = rag.retrieve(q, top_k=k)
+        results = search_sops(q, top_k=k)
         return {"query": q, "results": results, "count": len(results)}
     except Exception as e:
         return {"query": q, "results": [], "error": str(e)}
+
+
+@router.post("/rag/init")
+def rag_init(force: bool = False, _: User = Depends(get_current_user)) -> dict:
+    """初始化/重建 SOP 知识库（写入内置 13 条 SOP 文档）."""
+    try:
+        n = init_sop_collection(force=force)
+        return {"ok": True, "documents": n}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/rag/info")
+def rag_info() -> dict:
+    """查看 SOP collection 信息."""
+    return get_collection_info()
 
 
 # ── SOP 文件上传 ────────────────────────────────────────────────────────────
@@ -272,12 +233,10 @@ async def upload_sop_file(
     if ext not in [".json", ".txt", ".md"]:
         raise HTTPException(400, "仅支持 .json / .txt / .md 格式")
 
-    # 保存到临时文件
     content = await file.read()
     try:
         if ext == ".json":
             data = json.loads(content)
-            # 支持批量 SOP: {"sops": [{"title":"...", "content":"..."}]} 或 [{"title":"...", "content":"..."}]
             if isinstance(data, dict) and "sops" in data:
                 texts = [f"【{s['title']}】{s['content']}" for s in data["sops"] if s.get("content")]
             elif isinstance(data, list):
@@ -285,7 +244,6 @@ async def upload_sop_file(
             else:
                 raise HTTPException(400, "JSON 格式不支持")
         else:
-            # TXT/MD: 按空行或特定分隔符分段
             text = content.decode("utf-8", errors="replace")
             texts = [t.strip() for t in text.split("\n\n") if t.strip() and len(t.strip()) > 10]
     except json.JSONDecodeError as e:
@@ -293,17 +251,14 @@ async def upload_sop_file(
     except Exception as e:
         raise HTTPException(400, f"解析文件失败: {e}")
 
-    # 导入到 RAG
     try:
-        from app.rag_service import RAGService
-        rag = RAGService()
-        for i, text in enumerate(texts):
-            rag.add_document(text, metadata={"source": file.filename, "index": i})
+        metadatas = [{"source": file.filename, "index": i} for i in range(len(texts))]
+        inserted = add_documents(texts, metadatas)
         return {
             "ok": True,
             "filename": file.filename,
-            "chunks_imported": len(texts),
-            "message": f"成功导入 {len(texts)} 条 SOP 到知识库",
+            "chunks_imported": inserted,
+            "message": f"成功导入 {inserted} 条 SOP 到知识库",
         }
     except Exception as e:
         raise HTTPException(500, f"RAG 导入失败: {e}")
@@ -313,14 +268,10 @@ async def upload_sop_file(
 def list_sop_documents() -> dict:
     """列出当前 RAG 知识库中的 SOP 文档统计."""
     try:
-        from app.rag_service import RAGService
-        rag = RAGService()
-        # 返回简单统计信息
-        return {
-            "ok": True,
-            "status": "ready",
-            "note": "查看 /api/v1/admin/chromadb 获取 collection 信息",
-        }
+        info = get_collection_info()
+        if "error" in info:
+            return {"ok": False, "error": info["error"]}
+        return {"ok": True, "status": "ready", **info}
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
@@ -347,7 +298,6 @@ async def generate_standard_sop(
         return SOPGenerateResponse(ok=False, error="输入内容太短")
 
     try:
-        import httpx
         prompt = f"""你是一个高速公路安全预警领域的 SOP 标准化专家。请将以下原始内容加工成标准 SOP 格式，要求：
 1. 标题清晰，格式统一
 2. 包含：适用范围、处理流程、注意事项、风险等级建议
@@ -442,7 +392,6 @@ async def stop_ollama_model() -> dict:
 async def list_ollama_models() -> dict:
     """列出 Ollama 所有可用模型."""
     try:
-        import httpx
         async with httpx.AsyncClient(timeout=10) as client:
             r = await client.get(f"{settings.OLLAMA_BASE_URL}/api/tags")
         if r.status_code == 200:
