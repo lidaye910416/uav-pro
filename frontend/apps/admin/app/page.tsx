@@ -1,7 +1,16 @@
 "use client"
 import { useState, useEffect } from "react"
 import { useAuth } from "@/components/AuthContext"
-import { fetchHealth, fetchStats, fetchOllamaStatus, fetchStreams } from "@/lib/api"
+import {
+  fetchHealth,
+  fetchStats,
+  fetchOllamaStatus,
+  fetchStreams,
+  type HealthCheck,
+  type SystemStats,
+  type OllamaStatus,
+  type StreamInfo,
+} from "@/lib/api"
 
 function HealthCard({ service, status, latency, detail }: {
   service: string; status: string; latency: number | null; detail: string | null
@@ -61,10 +70,10 @@ function QuickLink({ href, icon, label, desc, color }: { href: string; icon: str
 
 export default function AdminDashboard() {
   const { user } = useAuth()
-  const [health, setHealth] = useState<any[]>([])
-  const [stats, setStats] = useState<any>(null)
-  const [ollama, setOllama] = useState<any>(null)
-  const [streams, setStreams] = useState<any[]>([])
+  const [health, setHealth] = useState<HealthCheck[]>([])
+  const [stats, setStats] = useState<SystemStats | null>(null)
+  const [ollama, setOllama] = useState<OllamaStatus | null>(null)
+  const [streams, setStreams] = useState<StreamInfo[]>([])
   const [loading, setLoading] = useState(true)
 
   async function loadData() {
@@ -162,7 +171,7 @@ export default function AdminDashboard() {
                   </div>
                   {ollama.models?.length > 0 ? (
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {ollama.models.map((m: string) => (
+                      {ollama.models.map((m) => (
                         <div key={m} className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: "var(--bg-primary)" }}>
                           <span style={{ color: "var(--accent-green)" }}>●</span>
                           <span className="font-mono text-sm flex-1 truncate">{m}</span>
@@ -195,7 +204,7 @@ export default function AdminDashboard() {
                 <div className="rounded-xl p-4" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
                   <div className="font-mono text-base font-bold mb-3" style={{ color: "var(--text-secondary)" }}>感知流状态</div>
                   <div className="space-y-2">
-                    {streams.slice(0, 5).map((s: any) => (
+                    {streams.slice(0, 5).map((s: StreamInfo) => (
                       <div key={s.id} className="flex items-center justify-between px-3 py-2 rounded-lg" style={{ background: "var(--bg-primary)" }}>
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: s.status === "running" ? "var(--accent-green)" : "var(--text-muted)" }} />

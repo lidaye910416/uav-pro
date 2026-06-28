@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/components/AuthContext"
 import { fetchAlerts } from "@/lib/api"
+import type { Alert } from "@uav/api/alert"
 
 const RISK_COLORS: Record<string, string> = {
   critical: "var(--accent-red)", high: "var(--accent-amber)",
@@ -16,7 +17,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function AlertsPage() {
   const { user } = useAuth()
-  const [alerts, setAlerts] = useState<any[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>("all")
 

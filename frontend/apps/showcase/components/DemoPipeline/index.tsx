@@ -1,4 +1,4 @@
-import { getApiBase } from "@uav/api";
+import { API_BASE } from "@uav/api"
 "use client"
 import React, { useState, useEffect, useRef } from "react"
 import VideoPlayer, { pauseVideo, playVideo } from "./VideoPlayer"
@@ -22,9 +22,8 @@ interface StageCardData {
   combinedImageUrl?: string  // URL to annotated image from Stage 1
 }
 
-const API_BASE = getApiBase()
-const DEMO_STREAM_URL = `${API_BASE}/api/v1/demo/stream`
-const DEMO_SEED_URL = `${API_BASE}/api/v1/demo/seed`
+const DEMO_STREAM_URL = `${API_BASE}/demo/stream`
+const DEMO_SEED_URL = `${API_BASE}/demo/seed`
 
 // ── ROI types ─────────────────────────────────────────────────────────────────
 
@@ -320,7 +319,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
   async function handleStop() {
     closeStopConfirm()  // 关闭弹窗并同步重置父组件状态
     setIsStopping(true)
-    console.log("[Pipeline] handleStop called")
 
     try {
       // Close SSE
@@ -340,20 +338,19 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
       playVideo()
 
       // 调用后端强制卸载 Ollama 模型
-      const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, {
+      const res = await fetch(`${API_BASE}/admin/ollama/stop`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       })
       const data = await res.json()
       if (data.ok) {
-        console.log("[Pipeline] Ollama models stopped:", data.stopped_models)
+        // Ollama models stopped
       }
     } catch (e) {
-      console.warn("[Pipeline] Failed to stop Ollama via API:", e)
+      console.error("[Pipeline] Failed to stop Ollama via API:", e)
     }
 
     setIsStopping(false)
-    console.log("[Pipeline] Stopped - Ollama model unloaded")
   }
 
   function confirmStop() {
@@ -468,7 +465,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
   }
 
   async function handleDemo() {
-    console.log("[Pipeline] handleDemo called")
     reset()
     setRunning(true)
     setDone(false)
@@ -482,14 +478,12 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
     // Give backend more time to process video (10 seconds for YOLO+SAM)
     const sseTimeout = setTimeout(() => {
       if (!sseConnected) {
-        console.log("[Pipeline] SSE timeout - falling back to local demo")
         // SSE not connected within 10s → fall back to local demo
         esRef.current?.close()
         runLocalDemo(0)
       }
     }, 10000)
 
-    console.log("[Pipeline] Connecting to SSE...")
     const es = new EventSource(DEMO_STREAM_URL)
     esRef.current = es
 
@@ -500,7 +494,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
     let completedCount = 0
 
     es.addEventListener("open", () => {
-      console.log("[Pipeline] SSE open event received")
       sseConnected = true
       clearTimeout(sseTimeout)
       fetch(DEMO_SEED_URL).catch(() => {})
@@ -516,14 +509,12 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
       sseConnected = true
       clearTimeout(sseTimeout)
       const data = JSON.parse(e.data) as Record<string, unknown>
-      console.log("[Pipeline] frame_data received:", JSON.stringify(data))
 
       // Convert to absolute URL for image loading
       const rawUrl = data.combined_image_url as string | undefined
       let imageUrl: string | undefined = undefined
       if (rawUrl) {
         imageUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`
-        console.log("[Pipeline] frame_data -> imageUrl:", imageUrl)
       }
 
       // Update ref first (immediately)
@@ -568,8 +559,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
         ...prev,
         perception: updatedPerception,
       }))
-
-      console.log("[Pipeline] frame_data setStages, perception.combinedImageUrl:", updatedPerception.combinedImageUrl)
     })
 
     es.addEventListener("stage", (e: MessageEvent) => {
@@ -582,7 +571,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
         combined_image_url?: string  // URL to annotated image
       }
       if (!data.stage) return
-      console.log("[Pipeline] stage event:", data.stage, "progress:", data.progress, "status:", data.status)
 
       // 使用 ref 中的最新状态，避免被旧状态覆盖
       const current = stageStatusRef.current[data.stage]
@@ -1029,14 +1017,6 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
   // Handle detail as object (from SSE) or string (from local demo)
   const d: Record<string, unknown> = (typeof detail === "object" && detail !== null) ? detail as Record<string, unknown> : {}
 
-  console.log("[DetectionOutput] PROPS:", {
-    detail: !!detail,
-    detailType: typeof detail,
-    detailKeys: detail && typeof detail === 'object' ? Object.keys(detail) : 'N/A',
-    running,
-    sceneKey,
-    combinedImageUrl: !!combinedImageUrl,
-  })
   const frameIdx = d.frame_idx != null ? String(d.frame_idx) : "—"
   const ts = (d.timestamp as string) || "—"
   const res = (d.resolution as string) || "—"
@@ -1057,15 +1037,6 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
   } else if (detailImageUrl) {
     effectiveUrl = detailImageUrl.startsWith('http') ? detailImageUrl : `${API_BASE}${detailImageUrl}`
   }
-
-  console.log("[DetectionOutput] render:", {
-    API_BASE,
-    detailKeys: Object.keys(d),
-    combinedImageUrl: combinedImageUrl,
-    detailImageUrl: detailImageUrl,
-    effectiveUrl: effectiveUrl,
-    status: running ? "running" : "done"
-  })
 
   // 使用 frameIdx 作为 key，确保每帧都正确更新
   const componentKey = `${sceneKey}-${frameIdx}`

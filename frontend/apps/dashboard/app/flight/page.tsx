@@ -1,8 +1,7 @@
 "use client"
 import { useState, useEffect } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
-import FlightMap from "../../components/FlightMap"
-import { UAVDevice, TrackPoint } from "../../components/types"
+import FlightMap, { UAVDevice, TrackPoint } from "../../components/FlightMap"
 
 type UAVStatus = "flying" | "hovering" | "landing" | "offline"
 

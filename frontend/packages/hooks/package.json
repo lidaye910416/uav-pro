@@ -1,13 +1,9 @@
 {
-  "name": "@uav/api",
+  "name": "@uav/hooks",
   "version": "0.1.0",
   "private": true,
-  "main": "./index.ts",
-  "types": "./index.ts",
-  "exports": {
-    ".": "./index.ts",
-    "./alert": "./alert.ts"
-  },
+  "main": "./useAlertStream.ts",
+  "types": "./useAlertStream.ts",
   "scripts": {
     "lint": "tsc --noEmit"
   },

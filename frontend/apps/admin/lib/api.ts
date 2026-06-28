@@ -1,5 +1,7 @@
-import { getApiBase } from "@uav/api";
-const API_BASE = `${getApiBase()}/api/v1`
+import { API_BASE } from "@uav/api"
+import type { Alert } from "@uav/api/alert"
+
+export type { Alert }
 
 export interface StreamInfo {
   id: string
@@ -37,12 +39,6 @@ export interface ChromaStatus {
   status: string
   collections: string[]
   error: string | null
-}
-
-export interface Alert {
-  id: number; title: string; description: string | null
-  risk_level: string; status: string; confidence: number | null
-  recommendation: string | null; created_at: string
 }
 
 export async function login(username: string, password: string): Promise<string> {

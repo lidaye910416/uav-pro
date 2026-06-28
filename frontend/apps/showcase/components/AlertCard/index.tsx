@@ -1,4 +1,4 @@
-import { StreamAlert } from "../../hooks/useAlertStream"
+import { StreamAlert } from "@uav/hooks"
 
 const RISK_CONFIG: Record<string, { label: string; borderClass: string; textVar: string; dotVar: string; glowClass: string }> = {
   low:      { label: "低风险", borderClass: "risk-low",      textVar: "var(--accent-green)",  dotVar: "var(--accent-green)", glowClass: "animate-pulse-green" },

@@ -1,4 +1,4 @@
-import { getApiBase } from "@uav/api";
+import { API_BASE } from "@uav/api"
 "use client"
 import { useRef, useEffect, useState } from "react"
 
@@ -13,8 +13,6 @@ interface VideoPlayerProps {
   showROIBadge?: boolean
   annotatedFrameUrl?: string  // 标注帧图片 URL
 }
-
-const API_BASE = getApiBase()
 
 export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge = false, annotatedFrameUrl }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -64,7 +62,7 @@ export default function VideoPlayer({ onPlay, onPause, rois = [], showROIBadge =
         /* 原始视频 */
         <video
           ref={videoRef}
-          src={`${API_BASE}/api/v1/demo/video?video_id=gal_1`}
+          src={`${API_BASE}/demo/video?video_id=gal_1`}
           autoPlay
           muted
           loop

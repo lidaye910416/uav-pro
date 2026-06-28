@@ -1,6 +1,6 @@
 "use client"
-import { useState, useEffect, useRef } from "react"
-import { useAlertStream, StreamAlert } from "../../hooks/useAlertStream"
+import { useState, useEffect } from "react"
+import { useAlertStream, StreamAlert } from "@uav/hooks"
 import AlertCard from "../../components/AlertCard"
 import ReactECharts from "echarts-for-react"
 
@@ -76,7 +76,7 @@ export default function MonitorPage() {
   const [trend, setTrend] = useState<{ time: string; alerts: number }[]>([])
   const { connected } = useAlertStream((alert) => {
     setAlerts(prev => [alert, ...prev].slice(0, 50))
-  })
+  }, true)
 
   useEffect(() => {
     setTrend(makeAlertTrendData())

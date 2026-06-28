@@ -1,4 +1,4 @@
-import { getApiBase } from "@uav/api";
+import { API_BASE } from "@uav/api"
 "use client"
 import { useState, useEffect, useRef, useCallback } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
@@ -19,8 +19,6 @@ interface PipelineResult {
   rag: { title: string; snippet: string; score: number }[]
   decision: { risk: "low" | "medium" | "high" | "critical"; title: string; recommendation: string; confidence: number }
 }
-
-const API_BASE = getApiBase()
 
 // ── Demo data ────────────────────────────────────────────────────────────────
 
@@ -592,7 +590,7 @@ export default function BrainPage() {
       {/* Hidden video element for frame extraction */}
       <video
         ref={videoRef}
-        src={`${API_BASE}/api/v1/demo/video?video_id=d1`}
+        src={`${API_BASE}/demo/video?video_id=d1`}
         style={{ display: "none" }}
         muted
         loop={false}
@@ -791,7 +789,7 @@ export default function BrainPage() {
                   {v.active ? (
                     <>
                       <video
-                        src={`${API_BASE}/api/v1/demo/video?video_id=${v.id}`}
+                        src={`${API_BASE}/demo/video?video_id=${v.id}`}
                         autoPlay
                         muted
                         loop

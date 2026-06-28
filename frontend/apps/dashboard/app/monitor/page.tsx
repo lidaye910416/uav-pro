@@ -1,8 +1,8 @@
-import { getApiBase } from "@uav/api";
+import { API_BASE } from "@uav/api"
 "use client"
 import { useState, useEffect, useCallback, useRef, memo } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
-import { useAlertStream, StreamAlert, closeAlertStream } from "../../hooks/useAlertStream"
+import { useAlertStream, StreamAlert, closeAlertStream } from "@uav/hooks"
 import { SOPPanel } from "../../components/SOPPanel"
 
 type VideoId = "d1" | "d2" | "d3" | "d4" | "d5" | "d6" | "default"
@@ -28,10 +28,9 @@ const VIDEOS: VideoConfig[] = [
 ]
 
 function buildVideoUrls() {
-  const API_BASE = getApiBase()
   return VIDEOS.map((v) => ({
     ...v,
-    videoUrl: `${API_BASE}/api/v1/demo/video?video_id=${v.id}`,
+    videoUrl: `${API_BASE}/demo/video?video_id=${v.id}`,
   }))
 }
 
@@ -64,6 +63,13 @@ const DEFAULT_YOLO_PARAMS: YOLOParams = {
   confidence_threshold: 35,
   sam_enabled: true,
   model_name: "yolov8n.pt",
+}
+
+// 后端返回的 YOLO params (置信度为 0-1 浮点)
+interface YoloParamsResponse {
+  confidence_threshold?: number
+  sam_enabled?: boolean
+  model_name?: string
 }
 
 // ── Pipeline Stage State ─────────────────────────────────────────────────────
@@ -624,8 +630,7 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
   const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    const API_BASE = getApiBase()
-    fetch(`${API_BASE}/api/v1/admin/stats`)
+    fetch(`${API_BASE}/admin/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d.alerts_by_risk || {}))
       .catch(() => {})
@@ -705,14 +710,13 @@ export default function MonitorPage() {
 
     // 释放 Ollama 模型内存
     try {
-      const API_BASE = getApiBase()
-      const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
+      const res = await fetch(`${API_BASE}/admin/ollama/stop`, { method: "POST" })
       const data = await res.json()
       if (data.ok) {
-        console.log("[Monitor] Ollama models stopped:", data.stopped_models)
+        // Ollama models stopped
       }
     } catch (e) {
-      console.warn("[Monitor] Failed to stop Ollama:", e)
+      console.error("[Monitor] Failed to stop Ollama:", e)
     }
   }, [clearPipelineTimer])
 
@@ -839,10 +843,9 @@ export default function MonitorPage() {
 
   // Load YOLO params from backend
   useEffect(() => {
-    const API_BASE = getApiBase()
-    fetch(`${API_BASE}/api/v1/analyze/yolo-params`)
+    fetch(`${API_BASE}/analyze/yolo-params`)
       .then(r => r.json())
-      .then((p: any) => setYoloParams({
+      .then((p: YoloParamsResponse) => setYoloParams({
         confidence_threshold: Math.round((p.confidence_threshold ?? 0.35) * 100),
         sam_enabled: p.sam_enabled ?? true,
         model_name: p.model_name ?? "yolov8n.pt",
@@ -852,8 +855,7 @@ export default function MonitorPage() {
 
   const handleYoloParamsChange = useCallback((newParams: YOLOParams) => {
     setYoloParams(newParams)
-    const API_BASE = getApiBase()
-    fetch(`${API_BASE}/api/v1/analyze/yolo-params`, {
+    fetch(`${API_BASE}/analyze/yolo-params`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -865,7 +867,7 @@ export default function MonitorPage() {
   }, [])
 
   const handleStageClick = (key: string) => {
-    console.log("Stage clicked:", key)
+    // no-op: stage rows are decorative
   }
 
   return (
@@ -920,8 +922,7 @@ export default function MonitorPage() {
 
                 // 3. 释放 Ollama 模型内存
                 try {
-                  const API_BASE = getApiBase()
-                  const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
+                  const res = await fetch(`${API_BASE}/admin/ollama/stop`, { method: "POST" })
                   const data = await res.json()
                   if (data.ok) {
                     setReleaseStatus({

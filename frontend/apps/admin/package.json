@@ -12,7 +12,8 @@
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "lucide-react": "^0.400.0",
-    "@uav/api": "workspace:*"
+    "@uav/api": "workspace:*",
+    "@uav/hooks": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

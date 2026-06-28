@@ -1,25 +1,7 @@
-import { getApiBase } from "@uav/api";
-// 从环境变量读取 API 地址，统一使用 NEXT_PUBLIC_API_BASE
-const API_BASE = `${getApiBase()}/api/v1`
+import { API_BASE } from "@uav/api"
+import type { Alert } from "@uav/api/alert"
 
-export interface Alert {
-  id: number
-  title: string
-  description: string | null
-  risk_level: "low" | "medium" | "high" | "critical"
-  status: "pending" | "confirmed" | "resolved" | "dismissed"
-  latitude: number | null
-  longitude: number | null
-  location_name: string | null
-  created_at: string
-  updated_at: string | null
-  // AI 决策新增字段
-  scene_description?: string | null
-  recommendation?: string | null
-  confidence?: number | null
-  source_type?: string | null
-  source_path?: string | null
-}
+export type { Alert }
 
 export interface AlertListResponse {
   total: number

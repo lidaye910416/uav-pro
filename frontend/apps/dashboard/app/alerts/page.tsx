@@ -1,8 +1,9 @@
 "use client"
 import { useState, useEffect, useCallback } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
-import { useAlertStream, StreamAlert } from "../../hooks/useAlertStream"
-import { fetchAlerts, Alert } from "../../api/alerts"
+import { useAlertStream, StreamAlert } from "@uav/hooks"
+import { fetchAlerts } from "../../api/alerts"
+import type { Alert } from "@uav/api/alert"
 
 const RISK_COLORS: Record<string, string> = {
   critical: "var(--accent-red)",
@@ -32,7 +33,7 @@ function formatTime(iso: string) {
 function AlertDetailModal({ alert, onClose }: { alert: Alert | StreamAlert; onClose: () => void }) {
   const risk = RISK_COLORS[alert.risk_level] || "var(--border)"
   const statusCfg = STATUS_LABELS[alert.status] || STATUS_LABELS.pending
-  const confidence = (alert as any).confidence
+  const confidence = alert.confidence
 
   return (
     <div
@@ -76,16 +77,16 @@ function AlertDetailModal({ alert, onClose }: { alert: Alert | StreamAlert; onCl
               <div className="text-sm" style={{ color: "var(--accent-amber)" }}>◎ {String(alert.location_name)}</div>
             </div>
           )}
-          {(alert as any).scene_description && (
+          {alert.scene_description && (
             <div>
               <div className="text-xs font-mono mb-1.5" style={{ color: "var(--text-muted)" }}>场景描述</div>
-              <div className="text-sm" style={{ color: "var(--text-secondary)" }}>{String((alert as any).scene_description)}</div>
+              <div className="text-sm" style={{ color: "var(--text-secondary)" }}>{String(alert.scene_description)}</div>
             </div>
           )}
-          {(alert as any).recommendation && (
+          {alert.recommendation && (
             <div className="p-3 rounded-xl" style={{ background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.2)" }}>
               <div className="text-xs font-mono mb-1.5" style={{ color: "var(--accent-amber)" }}>▶ 处置建议</div>
-              <div className="text-sm" style={{ color: "var(--accent-amber)" }}>{String((alert as any).recommendation)}</div>
+              <div className="text-sm" style={{ color: "var(--accent-amber)" }}>{String(alert.recommendation)}</div>
             </div>
           )}
           {confidence != null && (
@@ -100,8 +101,8 @@ function AlertDetailModal({ alert, onClose }: { alert: Alert | StreamAlert; onCl
             </div>
           )}
           <div className="flex gap-4 text-xs" style={{ color: "var(--text-muted)" }}>
-            <div>创建: {formatTime((alert as any).created_at)}</div>
-            {((alert as any).updated_at) && <div>更新: {formatTime((alert as any).updated_at)}</div>}
+            <div>创建: {formatTime(alert.created_at)}</div>
+            {alert.updated_at && <div>更新: {formatTime(alert.updated_at)}</div>}
           </div>
         </div>
 
@@ -138,7 +139,7 @@ function AlertDetailModal({ alert, onClose }: { alert: Alert | StreamAlert; onCl
 function AlertRow({ alert, onClick }: { alert: Alert | StreamAlert; onClick: () => void }) {
   const risk = RISK_COLORS[alert.risk_level] || "var(--border)"
   const statusCfg = STATUS_LABELS[alert.status] || STATUS_LABELS.pending
-  const confidence = (alert as any).confidence
+  const confidence = alert.confidence
 
   return (
     <div
@@ -181,7 +182,7 @@ function AlertRow({ alert, onClick }: { alert: Alert | StreamAlert; onClick: () 
           {statusCfg.label}
         </span>
         <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-          {formatTime((alert as any).created_at)}
+          {formatTime(alert.created_at)}
         </span>
         <span className="text-xs" style={{ color: "var(--text-muted)" }}>›</span>
       </div>
@@ -284,12 +285,12 @@ export default function AlertsPage() {
     setLiveAlerts(prev => [alert, ...prev].slice(0, 10))
   }, [])
 
-  const { connected } = useAlertStream(onAlert)
+  const { connected } = useAlertStream(onAlert, true)
 
   // Merge live alerts with historical (deduped)
   const displayAlerts = (() => {
     const liveIds = new Set(liveAlerts.map(a => a.id ?? -1))
-    const historical = allAlerts.filter(a => !liveIds.has((a as any).id))
+    const historical = allAlerts.filter(a => !liveIds.has(a.id))
     return [...liveAlerts, ...historical]
   })()
 
@@ -397,7 +398,7 @@ export default function AlertsPage() {
             </div>
           ) : (
             filteredAlerts.map((alert) => (
-              <AlertRow key={(alert as any).id ?? Math.random()} alert={alert} onClick={() => setSelectedAlert(alert)} />
+              <AlertRow key={alert.id ?? Math.random()} alert={alert} onClick={() => setSelectedAlert(alert)} />
             ))
           )}
         </div>

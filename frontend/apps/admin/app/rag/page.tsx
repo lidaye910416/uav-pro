@@ -1,4 +1,4 @@
-import { getApiBase } from "@uav/api";
+import { API_BASE } from "@uav/api"
 "use client"
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/components/AuthContext"
@@ -49,8 +49,7 @@ export default function RAGPage() {
   useEffect(() => {
     async function fetchSOPCount() {
       try {
-        const API_BASE = getApiBase()
-        const res = await fetch(`${API_BASE}/api/v1/admin/chromadb`)
+        const res = await fetch(`${API_BASE}/admin/chromadb`)
         const data = await res.json()
         if (data.status === "running" || data.collections?.length > 0) {
           // ChromaDB 返回 collection 列表，但无法直接获取文档数量
@@ -74,8 +73,7 @@ export default function RAGPage() {
     setGenerating(true); setGenMsg(""); setError("")
 
     try {
-      const API_BASE = getApiBase()
-      const res = await fetch(`${API_BASE}/api/v1/admin/sop/generate`, {
+      const res = await fetch(`${API_BASE}/admin/sop/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -92,8 +90,8 @@ export default function RAGPage() {
       } else {
         setError(data.error || "AI 加工失败")
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
     setGenerating(false)
   }
@@ -101,8 +99,7 @@ export default function RAGPage() {
   // 导入 SOP 到知识库
   async function importSOP(text: string) {
     try {
-      const API_BASE = getApiBase()
-      await fetch(`${API_BASE}/api/v1/admin/rag/add`, {
+      await fetch(`${API_BASE}/admin/rag/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -121,10 +118,10 @@ export default function RAGPage() {
     if (!query) return
     setLoading(true); setError("")
     try {
-      const r: any = await ragSearch(query)
+      const r = await ragSearch(query) as { results?: string[]; error?: string }
       setResults(r.results || [])
       if (r.error) setError(r.error)
-    } catch (e: any) { setError(e.message) }
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     setLoading(false)
   }
 
@@ -145,8 +142,7 @@ export default function RAGPage() {
     formData.append("file", file)
 
     try {
-      const API_BASE = getApiBase()
-      const res = await fetch(`${API_BASE}/api/v1/admin/sop/upload`, {
+      const res = await fetch(`${API_BASE}/admin/sop/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${user.token}` },
         body: formData,
@@ -157,8 +153,8 @@ export default function RAGPage() {
       } else {
         setError(data.detail || data.error || "上传失败")
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ""

@@ -17,7 +17,8 @@
     "lucide-react": "^0.400.0",
     "leaflet": "^1.9.4",
     "react-leaflet": "^5.0.0",
-    "@uav/api": "workspace:*"
+    "@uav/api": "workspace:*",
+    "@uav/hooks": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

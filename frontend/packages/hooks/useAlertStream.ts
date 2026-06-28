@@ -1,8 +1,7 @@
-import { getApiBase } from "@uav/api";
 "use client"
 
-import { useEffect, useRef, useState, useCallback } from "react"
-
+import { useEffect, useRef, useState } from "react"
+import { API_BASE } from "@uav/api"
 
 export interface StreamAlert {
   id: number
@@ -29,22 +28,12 @@ export interface StreamAlert {
 
 // 导出连接管理器，用于外部控制连接
 let esInstance: EventSource | null = null
-let reconnectTimerRef: NodeJS.Timeout | null = null
 
 export function closeAlertStream() {
   if (esInstance) {
     esInstance.close()
     esInstance = null
   }
-  if (reconnectTimerRef) {
-    clearTimeout(reconnectTimerRef)
-    reconnectTimerRef = null
-  }
-}
-
-// 获取当前连接状态
-export function isAlertStreamConnected(): boolean {
-  return esInstance !== null && esInstance.readyState === EventSource.OPEN
 }
 
 export function useAlertStream(onAlert: (alert: StreamAlert) => void, enabled = false) {
@@ -73,15 +62,13 @@ export function useAlertStream(onAlert: (alert: StreamAlert) => void, enabled = 
     // 关闭已有连接
     closeAlertStream()
 
-    const API_BASE = getApiBase()
-    const es = new EventSource(`${API_BASE}/api/v1/demo/stream`)
+    const es = new EventSource(`${API_BASE}/demo/stream`)
     esInstance = es
 
     es.addEventListener("open", () => {
       if (enabledRef.current) {
         setConnected(true)
         setError(null)
-        console.log("[useAlertStream] SSE connected")
       }
     })
 
@@ -89,7 +76,6 @@ export function useAlertStream(onAlert: (alert: StreamAlert) => void, enabled = 
       if (!enabledRef.current) return
       try {
         const data = JSON.parse(event.data) as StreamAlert
-        console.log("[useAlertStream] Alert received:", data.title)
         onAlertRef.current(data)
       } catch (e) {
         console.error("[useAlertStream] Failed to parse alert:", e)
@@ -112,3 +98,4 @@ export function useAlertStream(onAlert: (alert: StreamAlert) => void, enabled = 
 
   return { connected, error }
 }
+
