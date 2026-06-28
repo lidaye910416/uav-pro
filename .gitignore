@@ -36,10 +36,6 @@ env/
 node_modules/
 */node_modules/
 .npm
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 .pnpm-debug.log*
 
 # =============================================================================
@@ -48,11 +44,16 @@ yarn-error.log*
 *.pt
 *.pth
 *.onnx
-*.pkl
 *.h5
-*.pkl
 models/*.pt
 models/*.pth
+
+# =============================================================================
+# Binary font files (避免误提交 10MB+ 字体)
+# =============================================================================
+*.ttc
+*.ttf
+*.otf
 
 # =============================================================================
 # Media Files (Videos, Images, Audio)
@@ -106,10 +107,7 @@ secrets.json
 # =============================================================================
 .next/
 out/
-.next/
 .turbo/
-dist/
-build/
 
 # =============================================================================
 # IDE & Editor
@@ -119,8 +117,6 @@ build/
 *.swp
 *.swo
 *~
-.DS_Store
-Thumbs.db
 *.sublime-workspace
 *.sublime-project
 
@@ -170,6 +166,12 @@ backend.log
 *.sqlite
 *.sqlite3
 chromadb/
+backend/data/chromadb/
+
+# =============================================================================
+# PM2 daemon state (start.sh 不再使用, 但仍可清理)
+# =============================================================================
+.pm2/
 
 # =============================================================================
 # Claude Code (local settings)
@@ -183,3 +185,4 @@ chromadb/
 data/streams/.gitkeep
 data/frames/.gitkeep
 data/knowledge_base/.gitkeep
+
