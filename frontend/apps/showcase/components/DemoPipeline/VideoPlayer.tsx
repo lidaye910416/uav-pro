@@ -173,7 +173,7 @@ function AnnotatedFrame({ url, rois, imageWidth, imageHeight }: AnnotatedFramePr
   // 必须拼接 API_BASE (http://localhost:8888/api/v1) 让请求落到后端。
   const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`
   return (
-    <div className="relative w-full h-full">
+    <div className="absolute inset-0">
       <img
         src={fullUrl}
         alt="检测帧"
