@@ -168,10 +168,14 @@ interface AnnotatedFrameProps {
 function AnnotatedFrame({ url, rois, imageWidth, imageHeight }: AnnotatedFrameProps) {
   // viewBox 与原图像素尺寸一致, 这样 (x1,y1,x2,y2) 直接当 SVG 坐标用
   const viewBox = `0 0 ${imageWidth} ${imageHeight}`
+  // 关键: 后端返回的是相对路径 /api/v1/demo/frames/xxx.jpg,
+  // 当前端在 showcase:4000 时, 浏览器会把 /api/v1/... 解析到 localhost:4000/api/v1 → 404。
+  // 必须拼接 API_BASE (http://localhost:8888/api/v1) 让请求落到后端。
+  const fullUrl = url.startsWith("http") ? url : `${API_BASE}${url}`
   return (
     <div className="relative w-full h-full">
       <img
-        src={url}
+        src={fullUrl}
         alt="检测帧"
         style={{
           width: "100%",
