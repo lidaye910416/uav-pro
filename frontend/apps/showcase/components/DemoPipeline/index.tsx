@@ -2,7 +2,8 @@
 import { API_BASE } from "@uav/api"
 import React, { useState, useEffect, useRef } from "react"
 import VideoPlayer, { pauseVideo, playVideo } from "./VideoPlayer"
-import type { StageStatus } from "./StageCard"
+
+type StageStatus = "idle" | "running" | "done" | "skipped" | "error"
 
 interface StageCardData {
   stage: string
@@ -790,34 +791,79 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
                   const s = stages[def.key]
                   const isActive = s.status === "running"
                   const isDone = s.status === "done"
+                  const isSkipped = s.status === "skipped"
+                  const isError = s.status === "error"
                   const isIdle = s.status === "idle"
+
+                  // 状态点颜色: done=绿 / running=黄脉冲 / error=红 / skipped=灰 / idle=暗
+                  const dotColor = isDone
+                    ? "var(--accent-green)"
+                    : isError
+                      ? "var(--accent-red)"
+                      : isActive
+                        ? def.color
+                        : isSkipped
+                          ? "rgba(255,255,255,0.25)"
+                          : "rgba(255,255,255,0.15)"
+                  const labelText = isDone
+                    ? "完成"
+                    : isError
+                      ? "失败"
+                      : isActive
+                        ? "进行中"
+                        : isSkipped
+                          ? "跳过"
+                          : "等待"
+                  const labelColor = isDone
+                    ? "var(--accent-green)"
+                    : isError
+                      ? "var(--accent-red)"
+                      : isActive
+                        ? def.color
+                        : "var(--text-muted)"
 
                   return (
                     <div
                       key={def.key}
-                      className="flex items-center gap-2 transition-all duration-500"
+                      className="flex flex-col gap-1 transition-all duration-500"
                       style={{ opacity: isIdle ? 0.4 : 1 }}
                     >
-                      <div
-                        className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 font-mono text-xs font-bold transition-all duration-500"
-                        style={{
-                          background: isDone ? "var(--accent-green)" : isActive ? def.color : "rgba(255,255,255,0.06)",
-                          color: isDone || isActive ? "#000" : "var(--text-muted)",
-                          fontSize: "10px",
-                        }}
-                      >
-                        {isDone ? "✓" : def.icon}
+                      <div className="flex items-center gap-1.5">
+                        {/* 状态点 (icon 在外) */}
+                        <span
+                          className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isActive ? "animate-pulse" : ""}`}
+                          style={{
+                            background: dotColor,
+                            boxShadow: isActive || isDone ? `0 0 4px ${dotColor}` : "none",
+                          }}
+                        />
+                        {/* 阶段标签 */}
+                        <span className="text-[10px] font-mono truncate" style={{ color: "var(--text-secondary)" }}>
+                          {def.label}
+                        </span>
+                        {/* 状态文字 (右对齐) */}
+                        <span
+                          className="ml-auto text-[10px] font-mono font-bold flex-shrink-0"
+                          style={{ color: labelColor }}
+                        >
+                          {labelText}
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="h-0.5 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
-                          <div
-                            className="h-full rounded-full transition-all duration-700"
-                            style={{
-                              width: `${s.progress}%`,
-                              background: isDone ? "var(--accent-green)" : def.color,
-                            }}
-                          />
-                        </div>
+                      {/* 进度条 4px 高 */}
+                      <div className="h-1 rounded-full overflow-hidden" style={{ background: "rgba(255,255,255,0.06)" }}>
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${s.progress}%`,
+                            background: isDone
+                              ? "var(--accent-green)"
+                              : isError
+                                ? "var(--accent-red)"
+                                : isSkipped
+                                  ? "rgba(255,255,255,0.2)"
+                                  : def.color,
+                          }}
+                        />
                       </div>
                     </div>
                   )
@@ -919,11 +965,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
                 running={stages.decision.status === "running"}
                 hasIncident={getHasIncident(stages.identify.detail)}
               />
-            )}
-
-            {/* Alert banner */}
-            {(alert || done) && alert && !running && (
-              <AlertBanner alert={alert} />
             )}
           </div>
         </div>
@@ -1077,8 +1118,7 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
               <img
                 src={effectiveUrl}
                 alt="YOLO+SAM 分割标注图"
-                className="w-full h-auto"
-                style={{ maxHeight: "280px", objectFit: "contain" }}
+                style={{ width: "100%", maxHeight: "400px", objectFit: "contain" }}
                 onLoad={() => setImgLoading(false)}
                 onError={() => { setImgError(true); setImgLoading(false); console.error("[Pipeline] Image load error:", effectiveUrl) }}
               />
@@ -1090,20 +1130,24 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
               )}
             </div>
             {/* 颜色图例（动态） */}
-            <div className="mt-2 flex flex-wrap gap-3 text-xs">
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded" style={{ background: "#00FF00" }}></span>
-                <span style={{ color: "var(--text-muted)" }}>行人</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded" style={{ background: "#0064FF" }}></span>
-                <span style={{ color: "var(--text-muted)" }}>车辆</span>
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-3 h-3 rounded" style={{ background: "#6496FF" }}></span>
-                <span style={{ color: "var(--text-muted)" }}>自行车/摩托</span>
-              </span>
-            </div>
+            {detectionDetails.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                {(() => {
+                  // 从当前帧 detection_details 中动态取 label+color 组合
+                  const seen = new Map<string, { color: string; label: string }>()
+                  for (const det of detectionDetails) {
+                    const key = `${det.label}__${det.color}`
+                    if (!seen.has(key)) seen.set(key, { color: MASK_COLORS[det.color] || "#888", label: det.label })
+                  }
+                  return Array.from(seen.values()).map((entry, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span className="w-3 h-3 rounded" style={{ background: entry.color }}></span>
+                      <span style={{ color: "var(--text-muted)" }}>{entry.label}</span>
+                    </span>
+                  ))
+                })()}
+              </div>
+            )}
           </div>
         )}
 
@@ -1114,100 +1158,83 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
           </div>
         )}
 
-        {/* 检测详情表格（对齐 stage4_gemma_prompt.txt 格式） */}
-        {(detectionDetails.length > 0 || maskDetails.length > 0) && (
-          <div>
-            <div className="text-xs font-mono mb-2" style={{ color: "var(--accent-green)" }}>
-              ▶ 【当前画面检测摘要】
-            </div>
-            <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(0,229,160,0.15)" }}>
-              <div className="px-3 py-2 text-xs font-mono" style={{ background: "rgba(0,229,160,0.06)", color: "var(--accent-green)" }}>
-                检测到 {detectionDetails.length} 个目标：
+        {/* 合并后的检测详情表：label | color | 置信度 | 像素数(SAM) | bbox */}
+        {(detectionDetails.length > 0 || maskDetails.length > 0) && (() => {
+          // 用 mask_details 的 label 匹配 detection_details, 得到对应 bbox
+          const hasSam = maskDetails.length > 0
+          // 5 列或 4 列
+          const colTemplate = hasSam
+            ? "minmax(60px,1fr) minmax(56px,0.8fr) minmax(72px,0.9fr) minmax(96px,1.1fr) minmax(120px,1.4fr)"
+            : "minmax(60px,1fr) minmax(56px,0.8fr) minmax(72px,0.9fr) minmax(140px,1.6fr)"
+          const headerCells = [
+            { key: "label",     text: "目标" },
+            { key: "color",     text: "掩膜" },
+            { key: "conf",      text: "置信度" },
+            ...(hasSam ? [{ key: "pixel", text: "像素数" }] : []),
+            { key: "bbox",      text: "BBox (x1,y1,x2,y2)" },
+          ]
+          return (
+            <div>
+              <div className="text-xs font-mono mb-2" style={{ color: "var(--accent-green)" }}>
+                ▶ 当前画面检测详情
+                <span className="ml-2" style={{ color: "var(--text-muted)" }}>
+                  ({detectionDetails.length} 检测{hasSam ? ` · ${maskDetails.length} 分割` : ""})
+                </span>
               </div>
-              <div className="p-2 space-y-1">
-                {detectionDetails.map((det, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <span
-                      className="w-3 h-3 rounded flex-shrink-0"
-                      style={{ background: MASK_COLORS[det.color] || '#888' }}
-                    />
-                    <span style={{ color: "var(--text-secondary)" }}>
-                      {det.label}（{det.color}掩膜，置信度 {det.confidence}%）
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* SAM 分割详细信息 */}
-        {maskDetails.length > 0 && (
-          <div>
-            <div className="text-xs font-mono mb-2" style={{ color: "var(--accent-blue)" }}>
-              ▶ 【SAM分割详细信息】
-            </div>
-            <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(74,158,255,0.15)" }}>
-              <div className="p-2 space-y-1">
-                {maskDetails.map((mask, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs font-mono" style={{ color: "var(--text-secondary)" }}>
-                    <span
-                      className="w-3 h-3 rounded flex-shrink-0"
-                      style={{ background: MASK_COLORS[mask.color] || '#888' }}
-                    />
-                    <span>
-                      {mask.label}: {mask.color}掩膜 {mask.pixel_count.toLocaleString()} 像素, SAM置信度 {(mask.confidence * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Gemma Prompt 预览（完整的提示词模板） */}
-        <div>
-          <div className="text-xs font-mono mb-1" style={{ color: "var(--accent-purple)" }}>
-            ▶ 发送给 Gemma 的完整 Prompt
-          </div>
-          <div
-            className="rounded-lg p-3 text-xs leading-relaxed"
-            style={{
-              background: "var(--bg-primary)",
-              border: "1px solid rgba(180,122,255,0.15)",
-              fontFamily: "var(--font-mono, monospace)",
-              color: "var(--text-secondary)",
-              maxHeight: "180px",
-              overflow: "auto",
-            }}
-          >
-            <div className="mb-2" style={{ color: "var(--accent-amber)" }}>请分析这张航拍图像，判断是否存在以下5类道路异常之一：</div>
-            <div className="mb-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              1. collision - 交通事故/碰撞<br/>
-              2. pothole - 路面塌陷/坑洞<br/>
-              3. obstacle - 道路障碍物<br/>
-              4. pedestrian - 行人闯入<br/>
-              5. congestion - 交通拥堵
-            </div>
-            <div className="mb-2" style={{ color: "var(--accent-blue)" }}>【颜色图例】</div>
-            <div className="mb-2 text-xs px-2 py-1 rounded" style={{ background: "rgba(74,158,255,0.1)" }}>
-              绿色掩膜 → 行人 | 蓝色掩膜 → 车辆 | 浅蓝色掩膜 → 自行车/摩托车
-            </div>
-            <div className="mb-2" style={{ color: "var(--accent-green)" }}>【当前画面检测摘要】</div>
-            <div className="mb-2 px-2 py-1 rounded text-xs" style={{ background: "rgba(0,229,160,0.1)", color: "var(--accent-green)" }}>
-              {detectionDetails.length > 0
-                ? detectionDetails.map((d, i) => `${d.label}（${d.color}掩膜，置信度 ${d.confidence}%）`).join("\n")
-                : "检测到 N 个目标..."
-              }
-            </div>
-            <div className="mt-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
-              <div style={{ color: "var(--text-muted)" }}>请按JSON格式输出：</div>
-              <div className="mt-1 p-2 rounded text-xs" style={{ background: "rgba(0,0,0,0.3)" }}>
-                {"{"}"has_incident": true/false, "incident_type": "...", "confidence": 0.0-1.0, "description": "...", "recommendation": "..."{"}"}
+              <div className="rounded-lg overflow-hidden" style={{ border: "1px solid rgba(0,229,160,0.15)" }}>
+                {/* 表头 */}
+                <div
+                  className="grid gap-2 px-3 py-2 text-xs font-mono"
+                  style={{
+                    background: "rgba(0,229,160,0.06)",
+                    color: "var(--accent-green)",
+                    gridTemplateColumns: colTemplate,
+                  }}
+                >
+                  {headerCells.map((c) => (
+                    <div key={c.key}>{c.text}</div>
+                  ))}
+                </div>
+                {/* 表行 */}
+                {detectionDetails.map((det, i) => {
+                  // 找匹配的 mask (按 label)
+                  const mask = maskDetails.find((m) => m.label === det.label)
+                  return (
+                    <div
+                      key={i}
+                      className="grid gap-2 px-3 py-2 text-xs font-mono items-center"
+                      style={{
+                        gridTemplateColumns: colTemplate,
+                        borderTop: "1px solid rgba(0,229,160,0.08)",
+                        color: "var(--text-secondary)",
+                      }}
+                    >
+                      <div style={{ color: "var(--text-primary)" }}>{det.label}</div>
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className="w-3 h-3 rounded flex-shrink-0"
+                          style={{ background: MASK_COLORS[det.color] || "#888" }}
+                        />
+                        <span style={{ color: "var(--text-muted)" }}>{det.color || "—"}</span>
+                      </div>
+                      <div>{(det.confidence * 100).toFixed(1)}%</div>
+                      {hasSam && (
+                        <div style={{ color: "var(--text-muted)" }}>
+                          {mask ? mask.pixel_count.toLocaleString() : "—"}
+                        </div>
+                      )}
+                      <div style={{ color: "var(--text-muted)" }}>
+                        {det.bbox && det.bbox.length === 4
+                          ? `(${det.bbox[0]}, ${det.bbox[1]}, ${det.bbox[2]}, ${det.bbox[3]})`
+                          : "—"}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
-          </div>
-        </div>
+          )
+        })()}
       </div>
     </div>
   )
@@ -1572,36 +1599,4 @@ const INCIDENT_TYPE_NAMES: Record<string, string> = {
   obstacle: "道路障碍物",
   pedestrian: "行人闯入",
   congestion: "交通拥堵",
-}
-
-function AlertBanner({ alert }: { alert: Record<string, unknown> }) {
-  const RISK_COLORS2: Record<string, string> = {
-    critical: "var(--accent-red)",
-    high: "var(--accent-amber)",
-    medium: "var(--accent-blue)",
-    low: "var(--accent-green)",
-  }
-  const color = RISK_COLORS2[String(alert.risk_level)] ?? "var(--border)"
-  return (
-    <div
-      className="rounded-xl p-4 animate-fade-in-up"
-      style={{ background: `${color}08`, border: `1px solid ${color}30` }}
-    >
-      <div className="flex items-center gap-2 mb-1.5">
-        <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: color, boxShadow: `0 0 6px ${color}` }} />
-        <span className="font-bold text-sm" style={{ color }}>{String(alert.title)}</span>
-        {!!alert.incident_type && String(alert.incident_type) !== "none" && (
-          <span className="px-2 py-0.5 rounded text-xs font-mono" style={{ background: `${color}15`, color }}>
-            {INCIDENT_TYPE_NAMES[String(alert.incident_type)] ?? String(alert.incident_type)}
-          </span>
-        )}
-        <span className="ml-auto text-xs font-mono" style={{ color: "var(--text-muted)" }}>
-          {(typeof alert.confidence === "number" ? `${((alert.confidence as number) * 100).toFixed(0)}%` : "—")} 置信
-        </span>
-      </div>
-      {!!alert.recommendation && (
-        <div className="text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>{String(alert.recommendation)}</div>
-      )}
-    </div>
-  )
 }

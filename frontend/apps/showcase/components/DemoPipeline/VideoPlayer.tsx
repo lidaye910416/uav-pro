@@ -196,6 +196,10 @@ function AnnotatedFrame({ url, rois, imageWidth, imageHeight }: AnnotatedFramePr
             // label 背景宽度估算 (按每字符 ~22px @ 1080 height)
             const labelW = Math.max(labelText.length * 22 + 12, 60)
             const labelH = 28
+            // 上下交错: 奇数索引 y1-labelH, 偶数索引 y1-labelH-22 (再往上挪 22px)
+            // 用 3 档交错 (i % 3) 适配更密集场景
+            const yOffsets = [0, -22, -44]
+            const labelY = Math.max(roi.y1 - labelH + yOffsets[i % yOffsets.length], 0)
             return (
               <g key={i}>
                 {/* 主矩形 */}
@@ -220,7 +224,7 @@ function AnnotatedFrame({ url, rois, imageWidth, imageHeight }: AnnotatedFramePr
                 {/* 类别标签背景 */}
                 <rect
                   x={roi.x1}
-                  y={Math.max(roi.y1 - labelH, 0)}
+                  y={labelY}
                   width={labelW}
                   height={labelH}
                   fill={stroke}
@@ -230,7 +234,7 @@ function AnnotatedFrame({ url, rois, imageWidth, imageHeight }: AnnotatedFramePr
                 {/* 类别标签文字 */}
                 <text
                   x={roi.x1 + 6}
-                  y={Math.max(roi.y1 - labelH, 0) + labelH - 8}
+                  y={labelY + labelH - 8}
                   fontSize={18}
                   fontFamily="var(--font-mono, monospace)"
                   fontWeight="bold"
