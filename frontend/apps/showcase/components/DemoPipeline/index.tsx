@@ -1210,8 +1210,7 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
             <div className="mb-2" style={{ color: "var(--accent-green)" }}>【当前画面检测摘要】</div>
             <div className="mb-2 px-2 py-1 rounded text-xs" style={{ background: "rgba(0,229,160,0.1)", color: "var(--accent-green)" }}>
               {detectionDetails.length > 0
-                ? detectionDetails.map((d, i) => `${d.label}（${d.color}掩膜，置信度 ${d.confidence}%）`).join('
-')
+                ? detectionDetails.map((d, i) => `${d.label}（${d.color}掩膜，置信度 ${d.confidence}%）`).join("\n")
                 : "检测到 N 个目标..."
               }
             </div>
