@@ -1,5 +1,5 @@
+"use client";
 import { API_BASE } from "@uav/api"
-"use client"
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/components/AuthContext"
 import { ragSearch } from "@/lib/api"
@@ -310,7 +310,11 @@ export default function RAGPage() {
               value={docText}
               onChange={e => setDocText(e.target.value)}
               rows={8}
-              placeholder="输入或粘贴原始内容...\n支持以下格式导入:\n- 原始文档文本\n- 未格式化的规范描述\n系统会自动识别并 AI 加工成标准 SOP"
+              placeholder="输入或粘贴原始内容...
+支持以下格式导入:
+- 原始文档文本
+- 未格式化的规范描述
+系统会自动识别并 AI 加工成标准 SOP"
               className="w-full px-3 py-2 rounded-lg text-sm font-mono resize-none"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
             />

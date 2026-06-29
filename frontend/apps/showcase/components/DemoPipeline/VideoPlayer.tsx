@@ -1,5 +1,5 @@
+"use client";
 import { API_BASE } from "@uav/api"
-"use client"
 import { useRef, useEffect, useState } from "react"
 
 interface ROIBox {

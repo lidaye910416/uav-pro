@@ -1,5 +1,5 @@
+"use client";
 import { getDashboardUrl } from "@uav/api";
-"use client"
 import { useEffect, useRef, useState, useCallback } from "react"
 import PipelinePanel from "../components/DemoPipeline"
 

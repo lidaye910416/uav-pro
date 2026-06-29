@@ -1,5 +1,5 @@
+"use client";
 import { getShowcaseUrl } from "@uav/api";
-"use client"
 import "./globals.css"
 import { AuthProvider, useAuth } from "@/components/AuthContext"
 import TopHeader from "@/components/TopHeader"

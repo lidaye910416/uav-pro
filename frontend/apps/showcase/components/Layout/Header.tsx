@@ -1,5 +1,5 @@
+"use client";
 import { getDashboardUrl, getAdminUrl } from "@uav/api";
-"use client"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 

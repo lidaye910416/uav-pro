@@ -1,5 +1,5 @@
+"use client";
 import { API_BASE } from "@uav/api"
-"use client"
 import { useState, useEffect, useRef, useCallback } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
 

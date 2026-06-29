@@ -1,5 +1,5 @@
+"use client";
 import { getShowcaseUrl, getAdminUrl } from "@uav/api";
-"use client"
 import Link from "next/link"
 
 const SHOWCASE_URL = getShowcaseUrl()

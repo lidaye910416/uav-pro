@@ -1,5 +1,5 @@
+"use client";
 import { API_BASE } from "@uav/api"
-"use client"
 import { useState, useEffect, useCallback, useRef, memo } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
 import { useAlertStream, StreamAlert, closeAlertStream } from "@uav/hooks"
