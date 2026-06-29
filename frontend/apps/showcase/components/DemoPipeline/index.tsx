@@ -27,18 +27,21 @@ const DEMO_SEED_URL = `${API_BASE}/demo/seed`
 
 // ── ROI types ─────────────────────────────────────────────────────────────────
 
+// ROIBox 像素坐标 (与后端 detection_details.bbox 单位一致)
 export interface ROIBox {
   x1: number; y1: number; x2: number; y2: number
   confidence: number
+  label?: string
+  color?: string  // 中文色名, e.g. "绿色" "蓝色"
 }
 
 // ── Stage definitions (YOLO + SAM + Gemma4:e2b 多模态 Pipeline) ─────────────
 
 const STAGE_DEFS = [
-  { key: "perception",   label: "目标检测", icon: "◉", color: "var(--accent-amber)" },
-  { key: "identify",    label: "异常识别", icon: "◆", color: "var(--accent-green)" },
-  { key: "rag",         label: "RAG检索", icon: "◫", color: "var(--accent-blue)" },
-  { key: "decision",    label: "决策输出", icon: "◈", color: "var(--accent-purple)" },
+  { key: "perception",   label: "感知 (YOLO+SAM)", icon: "◉", color: "var(--accent-amber)" },
+  { key: "identify",     label: "识别 (Gemma4)",   icon: "◆", color: "var(--accent-green)" },
+  { key: "rag",          label: "知识检索 (RAG)",  icon: "◫", color: "var(--accent-blue)" },
+  { key: "decision",     label: "决策建议",        icon: "◈", color: "var(--accent-purple)" },
 ]
 
 const RISK_COLORS: Record<string, string> = {
@@ -279,6 +282,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
   const [alert, setAlert]       = useState<Record<string, unknown> | null>(null)
   const [stages, setStages]     = useState<Record<string, StageCardData>>(emptyStages())
   const [currentRois, setCurrentRois] = useState<ROIBox[]>([])
+  const [imageDims, setImageDims] = useState<{ width: number; height: number }>({ width: 1280, height: 720 })
   const [detectionParams, setDetectionParams] = useState<DetectionParams>(DEFAULT_DETECTION_PARAMS)
   const [sceneIdx, setSceneIdx] = useState(0)  // 用 state 而不是 ref，确保组件能响应更新
   const [isStopping, setIsStopping] = useState(false)  // 停止中状态
@@ -471,43 +475,24 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
     pauseVideo()
     setSceneIdx(0)
 
-    // Try backend SSE first (with timeout fallback to local demo)
+    // 默认走后端 SSE; 仅在 SSE onerror 时回退 LOCAL_DEMOS.
+    // 不再有 "10s 内先显示假数据再切真数据" 的体验.
     if (esRef.current) esRef.current.close()
 
     let sseConnected = false
-    // Give backend more time to process video (10 seconds for YOLO+SAM)
-    const sseTimeout = setTimeout(() => {
-      if (!sseConnected) {
-        // SSE not connected within 10s → fall back to local demo
-        esRef.current?.close()
-        runLocalDemo(0)
-      }
-    }, 10000)
 
     const es = new EventSource(DEMO_STREAM_URL)
     esRef.current = es
 
-    es.onerror = (err) => {
-      console.error("[Pipeline] SSE error:", err)
-    }
-
-    let completedCount = 0
+    let frameCounter = 0
 
     es.addEventListener("open", () => {
       sseConnected = true
-      clearTimeout(sseTimeout)
       fetch(DEMO_SEED_URL).catch(() => {})
     })
 
-    es.addEventListener("error", (e) => {
-      console.error("[Pipeline] SSE error:", e)
-    })
-
-    let frameCounter = 0
-
     es.addEventListener("frame_data", (e: MessageEvent) => {
       sseConnected = true
-      clearTimeout(sseTimeout)
       const data = JSON.parse(e.data) as Record<string, unknown>
 
       // Convert to absolute URL for image loading
@@ -536,22 +521,25 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
       frameCounter++
       setSceneIdx(frameCounter)
 
-      // Also update currentRois from detection_details
-      const detectionDetails = data.detection_details as Array<{label: string; bbox?: number[]; confidence?: number}> | undefined
+      // Also update currentRois from detection_details (单位: 像素, 与 VideoPlayer SVG viewBox 对齐)
+      const detectionDetails = data.detection_details as Array<{label: string; bbox?: number[]; confidence?: number; color?: string}> | undefined
       if (detectionDetails && detectionDetails.length > 0) {
         const resolution = (data.resolution as string)?.split('×')
         const imgW = resolution?.[0] ? parseInt(resolution[0]) : 1280
         const imgH = resolution?.[1] ? parseInt(resolution[1]) : 720
-        const rois = detectionDetails
+        const rois: ROIBox[] = detectionDetails
           .filter(d => d.bbox && d.bbox.length === 4)
           .map(d => ({
-            x1: d.bbox![0] / imgW * 100,
-            y1: d.bbox![1] / imgH * 100,
-            x2: d.bbox![2] / imgW * 100,
-            y2: d.bbox![3] / imgH * 100,
+            x1: d.bbox![0],
+            y1: d.bbox![1],
+            x2: d.bbox![2],
+            y2: d.bbox![3],
+            label: d.label,
+            color: d.color,
             confidence: d.confidence ?? 0.5,
           }))
         setCurrentRois(rois)
+        setImageDims({ width: imgW, height: imgH })
       }
 
       // Update React state
@@ -563,7 +551,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
 
     es.addEventListener("stage", (e: MessageEvent) => {
       sseConnected = true
-      clearTimeout(sseTimeout)
       const data = JSON.parse(e.data) as {
         stage: string; progress: number; status?: StageStatus
         summary?: string; detail?: string | Record<string, unknown>; snippets?: string[]; query?: string; error?: string
@@ -617,7 +604,6 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
     })
 
     es.addEventListener("alert", (e: MessageEvent) => {
-      clearTimeout(sseTimeout)
       sseConnected = true
       const data = JSON.parse(e.data) as Record<string, unknown>
       setAlert(data)
@@ -628,14 +614,12 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
       setTimeout(() => { setDone(false); setAlert(null) }, 20000)
     })
 
+    // 唯一回退入口: SSE 不可达 / 连接异常 → LOCAL_DEMOS
     es.onerror = () => {
       if (!sseConnected) {
-        clearTimeout(sseTimeout)
         es.close()
-        // No backend → use local demo
         runLocalDemo(0)
       } else {
-        clearTimeout(sseTimeout)
         setRunning(false)
         playVideo()
         setStages((prev) =>
@@ -673,7 +657,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
           <div className="flex-1">
             <div className="font-bold text-sm" style={{ color: "var(--accent-amber)" }}>◈ YOLO + SAM + Gemma4:e2b Pipeline</div>
             <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-              目标检测 → 异常识别 → RAG检索 → 决策输出 &nbsp;·&nbsp;
+              感知 (YOLO+SAM) → 识别 (Gemma4) → 知识检索 (RAG) → 决策建议 &nbsp;·&nbsp;
               {running ? (
                 <span style={{ color: "var(--accent-amber)" }}>运行中</span>
               ) : done ? (
@@ -780,6 +764,8 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
               rois={currentRois}
               showROIBadge={currentRois.length > 0}
               annotatedFrameUrl={stages.perception.combinedImageUrl}
+              imageWidth={imageDims.width}
+              imageHeight={imageDims.height}
             />
           </div>
 
@@ -894,7 +880,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
           <div className="p-4 space-y-3">
             {!running && activeCount === 0 && (
               <div className="text-xs text-center py-8" style={{ color: "var(--text-muted)" }}>
-                点击「启动演示」体验完整 pipeline — YOLO+SAM → Gemma识别 → RAG检索 → 决策输出
+                点击「启动演示」体验完整 pipeline — 感知 (YOLO+SAM) → 识别 (Gemma4) → 知识检索 (RAG) → 决策建议
               </div>
             )}
 

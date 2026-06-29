@@ -425,12 +425,12 @@ MITRA_VIDEOS: list[dict] = [
 
 
 def _resolve_video_path(video_id: str) -> Path | None:
-    """Resolve video_id → Path, supporting 'default', 'gal_1' and 'd1'-'d6'."""
+    """Resolve video_id → Path, supporting 'default', 'gal_1'/'gal_2'/'gal_3' and 'd1'-'d6'."""
     if video_id == "default":
         return DEMO_VIDEO if DEMO_VIDEO.exists() else None
-    # Handle gal_1 separately (it's in the root streams directory)
-    if video_id == "gal_1":
-        p = Path(__file__).resolve().parents[2] / "data" / "streams" / "gal_1.mp4"
+    # Handle gal_1 / gal_2 / gal_3 (all in the root streams directory)
+    if video_id in ("gal_1", "gal_2", "gal_3"):
+        p = Path(__file__).resolve().parents[2] / "data" / "streams" / f"{video_id}.mp4"
         return p if p.exists() else None
     for v in MITRA_VIDEOS:
         if v["id"] == video_id:
@@ -854,13 +854,24 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
         }
     except Exception as e:
         logger.error("_gemma4_vision_analyze 失败: %s", e)
+        # 合成场景描述: 基于 detection_details 简单合成, 不再 raise
+        if yolo_detections:
+            n = len(yolo_detections)
+            top = yolo_detections[:5]
+            parts = [
+                f"{d.get('label', 'unknown')}({d.get('color', '黄绿色')}, 置信度 {d.get('confidence', 0)}%)"
+                for d in top
+            ]
+            scene_desc = f"{n} 个目标: " + ", ".join(parts)
+        else:
+            scene_desc = "分析服务不可用"
         return {
             "has_event": False,
             "incident_type": "none",
             "severity": "none",
             "confidence": 0.5,
-            "scene_description": "分析服务不可用",
-            "description": "AI分析失败",
+            "scene_description": scene_desc,
+            "description": "AI分析失败，使用YOLO检测结果合成场景描述",
         }
 
 
@@ -987,7 +998,7 @@ async def _rag_decide(incident_type: str, scene_description: str, model: str, ti
 
 
 def _extract_demo_frames(video_path: Path, count: int = 5) -> list[tuple[int, str]]:
-    """Extract `count` evenly-spaced frames from video, return [(frame_idx, temp_path)]."""
+    """Extract `count` evenly-spaced frames from a single video, return [(frame_idx, temp_path)]."""
     if not video_path.exists():
         return []
     cap = cv2.VideoCapture(str(video_path))
@@ -1013,6 +1024,29 @@ def _extract_demo_frames(video_path: Path, count: int = 5) -> list[tuple[int, st
         cv2.imwrite(tmp.name, frame)
         frames.append((frame_idx, tmp.name))
     return frames
+
+
+def _extract_demo_frames_multi(video_paths: list[Path]) -> list[tuple[int, str, str]]:
+    """从多个视频各抽 1 帧 (frame 0), 返回 [(frame_idx, temp_path, video_name)]."""
+    frames: list[tuple[int, str, str]] = []
+    for vp in video_paths:
+        if not vp.exists():
+            continue
+        cap = cv2.VideoCapture(str(vp))
+        if not cap.isOpened():
+            cap.release()
+            continue
+        # 抽第 0 帧
+        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+        ret, frame = cap.read()
+        cap.release()
+        if not ret:
+            continue
+        tmp = tempfile.NamedTemporaryFile(suffix=".jpg", delete=False)
+        cv2.imwrite(tmp.name, frame)
+        frames.append((0, tmp.name, vp.name))
+    return frames
+@router.get("/seed")
 async def seed_demo_data() -> dict:
     """向数据库插入5条多样例预警数据（无需认证）."""
     async with AsyncSessionLocal() as session:
@@ -1104,6 +1138,65 @@ async def _save_alert_to_db(alert_data: dict) -> int | None:
         return None
 
 
+def _infer_incident_from_detections(detection_details: list) -> dict:
+    """根据 YOLO detection_details 强制推断 incident_type，避免 incident_type= 'none' 阻断 RAG/决策。
+
+    规则按优先级:
+      - person + car → pedestrian, mid
+      - 多个 car 且 bbox 距离近 → collision, high
+      - bus/truck → obstacle, low
+      - pothole → pothole, low (YOLO 不会直接出 pothole，预留)
+      - fire/smoke → collision, critical
+      - 默认 → congestion, low
+    """
+    if not detection_details:
+        return {"incident_type": "congestion", "severity": "low", "has_event": False}
+
+    labels = [d.get("label", "").lower() for d in detection_details]
+    label_set = set(labels)
+
+    # fire / smoke
+    for fire_label in ("fire", "smoke"):
+        if fire_label in label_set:
+            return {"incident_type": "collision", "severity": "critical", "has_event": True}
+
+    # person + car 组合
+    if ("person" in label_set) and ("car" in label_set):
+        return {"incident_type": "pedestrian", "severity": "mid", "has_event": True}
+
+    # 多个 car + 距离近 → collision
+    car_dets = [d for d in detection_details if d.get("label", "").lower() == "car"]
+    if len(car_dets) >= 2:
+        centers = []
+        for d in car_dets:
+            x1, y1, x2, y2 = d.get("bbox", [0, 0, 0, 0])
+            centers.append(((x1 + x2) / 2, (y1 + y2) / 2))
+        collision = False
+        for i in range(len(centers)):
+            for j in range(i + 1, len(centers)):
+                dx = centers[i][0] - centers[j][0]
+                dy = centers[i][1] - centers[j][1]
+                if (dx * dx + dy * dy) ** 0.5 < 100:
+                    collision = True
+                    break
+            if collision:
+                break
+        if collision:
+            return {"incident_type": "collision", "severity": "high", "has_event": True}
+
+    # bus / truck → obstacle
+    for big in ("bus", "truck"):
+        if big in label_set:
+            return {"incident_type": "obstacle", "severity": "low", "has_event": True}
+
+    # pothole
+    if "pothole" in label_set:
+        return {"incident_type": "pothole", "severity": "low", "has_event": True}
+
+    # 默认: 任意检测 → congestion
+    return {"incident_type": "congestion", "severity": "low", "has_event": False}
+
+
 @router.get("/stream")
 async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
     """SSE 演示流：运行完整 pipeline，每阶段推送 stage + alert 事件.
@@ -1133,8 +1226,18 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
         ),
     ]
 
-    video_path = DEMO_VIDEO
-    if not video_path or not video_path.exists():
+    # 使用 3 个不同演示视频各抽 1 帧, 让首页展示不同场景
+    streams_dir = Path(__file__).resolve().parents[2] / "data" / "streams"
+    demo_video_paths = [
+        streams_dir / "gal_1.mp4",
+        streams_dir / "gal_2.mp4",
+        streams_dir / "gal_3.mp4",
+    ]
+    # Fallback: 如果某个 gal_X.mp4 不存在, 用 DEMO_VIDEO 替代
+    demo_video_paths = [p if p.exists() else DEMO_VIDEO for p in demo_video_paths]
+    demo_video_paths = [p for p in demo_video_paths if p.exists()]
+
+    if not demo_video_paths:
         # Return empty stream if no video
         async def generate():
             yield b"data: {}\n\n"
@@ -1144,7 +1247,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    frames = _extract_demo_frames(video_path, count=3)
+    frames = _extract_demo_frames_multi(demo_video_paths)
     if not frames:
         async def generate():
             yield b"data: {}\n\n"
@@ -1154,14 +1257,17 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
-    total = int(cv2.VideoCapture(str(video_path)).get(cv2.CAP_PROP_FRAME_COUNT))
-    fps_v = cv2.VideoCapture(str(video_path)).get(cv2.CAP_PROP_FPS)
+    # 第一个视频用于元数据
+    primary_video = demo_video_paths[0]
+    total = int(cv2.VideoCapture(str(primary_video)).get(cv2.CAP_PROP_FRAME_COUNT))
+    fps_v = cv2.VideoCapture(str(primary_video)).get(cv2.CAP_PROP_FPS)
 
     async def generate():
-        for idx, (frame_idx, tmp_path) in enumerate(frames):
+        for idx, (frame_idx, tmp_path, video_name) in enumerate(frames):
             frame_bgr = cv2.imread(tmp_path)
             if frame_bgr is None:
                 continue
+            video_path = Path(video_name)
 
             # 计算每帧的基础进度 (0, 30, 60 for 3 frames)
             frame_base = idx * 30
@@ -1190,7 +1296,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'timestamp': f"{frame_idx / fps_v:.1f}s",
                 'resolution': detection_result.get('resolution', f"3840×2160"),
                 'fps': fps_v,
-                'stream_src': str(video_path.name),
+                'stream_src': video_name,
                 'total_frames': total,
                 'detections': detection_result.get('detections', '0'),
                 'segmentations': detection_result.get('segmentations', '0'),
@@ -1221,11 +1327,11 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
 
             # 调用识别层：Gemma4 纯视觉分析（不带 RAG）
             try:
-                logger.info("demo_sse_stream 调用识别层 _gemma4_vision_analyze, timeout=300s")
+                logger.info("demo_sse_stream 调用识别层 _gemma4_vision_analyze, timeout=15s")
                 vision_result = await _gemma4_vision_analyze(
                     frame_bgr=frame_bgr,
                     model=gemma_model,
-                    timeout=300.0,  # 视觉分析需要更长时间
+                    timeout=15.0,  # 缩短超时，避免阻塞流
                     yolo_detections=detection_details
                 )
                 logger.info("demo_sse_stream 识别层完成: incident_type=%s, has_event=%s", vision_result.get('incident_type'), vision_result.get('has_event'))
@@ -1279,131 +1385,126 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 yield f"event: stage\ndata: {identify_err}\n\n".encode()
                 await asyncio.sleep(0.3)
 
-            # ── Stage 3: RAG 检索 + 决策层（仅异常场景触发）────────────────────
+            # ── Stage 3: RAG 检索 + 决策层（强制触发）────────────────────
+            # 强制根据 detection_details 推断 incident_type，避免 Gemma4 不可靠的判断导致 RAG/决策被跳过
+            inferred = _infer_incident_from_detections(detection_details)
+            # 仅当 Gemma4 给出明确事件类型且不在我们的强制规则内时，才信任 Gemma4
+            if incident_type and incident_type != "none" and incident_type in ("collision", "pothole", "obstacle", "pedestrian", "congestion"):
+                # Gemma4 给出了有效类型，使用 Gemma4 的结果
+                pass
+            else:
+                # 否则使用基于 YOLO detection 的强制推断
+                incident_type = inferred["incident_type"]
+                severity = inferred["severity"]
+                has_incident = inferred["has_event"]
 
-            # 【方案D - 自适应路由】
-            # 识别层返回后，根据 incident_type 决定是否触发 RAG 和决策层
-            # • 正常（incident_type == "none"）：跳过 RAG + 决策层，直接输出
-            # • 异常（incident_type != "none"）：触发 RAG 检索 + 决策层
+            # ── 永远运行 RAG + 决策层（不再区分 none/异常）────────
+            yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': frame_base + 55, 'status': 'running'})}\n\n".encode()
+            await asyncio.sleep(0.3)
 
-            if incident_type and incident_type != "none":
-                # ── 异常场景：触发 RAG + 决策层 ───────────────────────────────
-                yield f"event: stage\ndata: {json.dumps({'stage': 'rag', 'progress': frame_base + 55, 'status': 'running'})}\n\n".encode()
-                await asyncio.sleep(0.3)
+            # RAG 检索
+            rag_query = f"{incident_type}高速公路交通事件处置"
+            rag_context = ""
+            try:
+                rag_context = chroma_get_rag_context(rag_query, top_k=3)
+            except Exception:
+                pass
 
-                # RAG 检索
-                rag_query = f"{incident_type}高速公路交通事件处置"
-                rag_context = ""
-                try:
-                    rag_context = chroma_get_rag_context(rag_query, top_k=3)
-                except Exception:
-                    pass
+            rag_snippets = [
+                ln.strip()
+                for ln in rag_context.split("\n")
+                if ln.strip() and not ln.strip().startswith("-")
+            ]
 
-                rag_snippets = [
-                    ln.strip()
-                    for ln in rag_context.split("\n")
-                    if ln.strip() and not ln.strip().startswith("-")
-                ]
+            # RAG done
+            rag_done = json.dumps({
+                'stage': 'rag',
+                'progress': frame_base + 65,
+                'status': 'done',
+                'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
+                'query': rag_query[:80],
+            })
+            yield f"event: stage\ndata: {rag_done}\n\n".encode()
+            await asyncio.sleep(0.3)
 
-                # RAG done
-                rag_done = json.dumps({
-                    'stage': 'rag',
-                    'progress': frame_base + 65,
-                    'status': 'done',
-                    'snippets': rag_snippets[:3] if rag_snippets else ["（知识库检索结果）"],
-                    'query': rag_query[:80],
-                })
-                yield f"event: stage\ndata: {rag_done}\n\n".encode()
-                await asyncio.sleep(0.3)
+            # ── 决策层：基于 incident_type + RAG SOP 输出风险等级 ────────
+            decision_running = json.dumps({
+                'stage': 'decision',
+                'progress': frame_base + 70,
+                'status': 'running',
+            })
+            yield f"event: stage\ndata: {decision_running}\n\n".encode()
+            await asyncio.sleep(0.3)
 
-                # ── 决策层：基于 incident_type + RAG SOP 输出风险等级 ────────
-                decision_running = json.dumps({
-                    'stage': 'decision',
-                    'progress': frame_base + 70,
-                    'status': 'running',
-                })
-                yield f"event: stage\ndata: {decision_running}\n\n".encode()
-                await asyncio.sleep(0.3)
+            # 风险等级 + title + recommendation 映射
+            severity_to_risk = {
+                "critical": "critical",
+                "high": "high",
+                "mid": "medium",
+                "medium": "medium",
+                "low": "low",
+                "none": "low",
+            }
+            title_map = {
+                "collision": "碰撞事故告警",
+                "pothole": "道路坑洼告警",
+                "obstacle": "障碍物告警",
+                "pedestrian": "行人异常告警",
+                "congestion": "交通拥堵告警",
+            }
+            recommendation_map = {
+                "collision": "立即通知高速交警处置，封闭事故车道",
+                "pothole": "通知路政部门修复，设置警示标志",
+                "obstacle": "通知路政清理，发布路况提醒",
+                "pedestrian": "立即通知高速交警劝离，发布警示",
+                "congestion": "持续监控车流，必要时发布诱导信息",
+            }
 
-                risk_level = "low"
-                title = "异常告警"
-                recommendation = "持续监控"
+            risk_level = "low"
+            title = title_map.get(incident_type, "道路通行异常")
+            recommendation = recommendation_map.get(incident_type, "持续监控")
 
-                try:
-                    logger.info("demo_sse_stream 调用决策层 _rag_decide, incident_type=%s", incident_type)
-                    decision_result = await _rag_decide(
-                        incident_type=incident_type,
-                        scene_description=scene_desc,
-                        model=gemma_model,
-                        timeout=60.0,
-                    )
-                    logger.info("demo_sse_stream 决策层完成: risk_level=%s, title=%s", decision_result.get('risk_level'), decision_result.get('title'))
+            try:
+                logger.info("demo_sse_stream 调用决策层 _rag_decide, incident_type=%s", incident_type)
+                decision_result = await _rag_decide(
+                    incident_type=incident_type,
+                    scene_description=scene_desc,
+                    model=gemma_model,
+                    timeout=15.0,
+                )
+                logger.info("demo_sse_stream 决策层完成: risk_level=%s, title=%s", decision_result.get('risk_level'), decision_result.get('title'))
 
-                    risk_level = decision_result.get("risk_level", "medium")
-                    title = decision_result.get("title", "异常告警")
-                    recommendation = decision_result.get("recommended_response", "持续监控")
+                # 优先使用 Gemma4 输出，但 fallback 到基于 severity 的映射
+                risk_level = decision_result.get("risk_level") or severity_to_risk.get(severity, "low")
+                if decision_result.get("title"):
+                    title = decision_result.get("title")
+                if decision_result.get("recommended_response"):
+                    recommendation = decision_result.get("recommended_response")
 
-                except Exception as e:
-                    logger.error("demo_sse_stream 决策层异常: %s: %s", type(e).__name__, e)
-                    # 决策层失败时使用识别层的 severity 映射
-                    severity_map = {"high": "high", "mid": "medium", "low": "low", "none": "low"}
-                    risk_level = severity_map.get(severity, "medium")
-                    title_map = {
-                        "collision": "碰撞事故告警",
-                        "pothole": "道路坑洼告警",
-                        "obstacle": "障碍物告警",
-                        "pedestrian": "行人异常告警",
-                        "congestion": "交通拥堵告警",
-                    }
-                    title = title_map.get(incident_type, "异常告警")
+            except Exception as e:
+                logger.error("demo_sse_stream 决策层异常: %s: %s", type(e).__name__, e)
+                # 决策层失败时使用 severity 映射
+                risk_level = severity_to_risk.get(severity, "low")
 
-                # Decision done
-                decision_done = json.dumps({
-                    'stage': 'decision',
-                    'progress': frame_base + 85,
-                    'status': 'done',
-                    'detail': {
-                        'has_incident': has_incident,
-                        'incident_type': incident_type,
-                        'severity': severity,
-                        'risk_level': risk_level,
-                        'title': title,
-                        'description': scene_desc,
-                        'recommendation': recommendation,
-                        'confidence': vision_confidence,
-                        'ai_model': gemma_model,
-                    },
-                })
-                yield f"event: stage\ndata: {decision_done}\n\n".encode()
-                await asyncio.sleep(0.05)
-
-            # ── 正常场景：跳过 RAG + 决策层，发送 skipped 事件 ─────────────────
-                # SSE 展示 RAG 跳过（确保前端能看到跳过状态）
-                rag_skipped = json.dumps({
-                    'stage': 'rag',
-                    'progress': frame_base + 55,
-                    'status': 'skipped',
-                    'summary': '暂不进行 SOP 检索',
-                    'reason': '识别层判断无异常',
-                })
-                yield f"event: stage\ndata: {rag_skipped}\n\n".encode()
-                await asyncio.sleep(0.5)  # 给前端足够时间显示 identify 完成
-
-                # SSE 展示决策跳过
-                decision_skipped = json.dumps({
-                    'stage': 'decision',
-                    'progress': frame_base + 70,
-                    'status': 'skipped',
-                    'summary': '暂不进行事故深度决策',
-                    'reason': '识别层判断无异常',
-                })
-                yield f"event: stage\ndata: {decision_skipped}\n\n".encode()
-                await asyncio.sleep(0.5)  # 给前端足够时间显示跳过状态
-
-                # 正常场景的默认值
-                risk_level = "low"
-                title = "道路通行正常"
-                recommendation = "持续监控，暂无预警处置建议"
+            # Decision done
+            decision_done = json.dumps({
+                'stage': 'decision',
+                'progress': frame_base + 85,
+                'status': 'done',
+                'detail': {
+                    'has_incident': has_incident,
+                    'incident_type': incident_type,
+                    'severity': severity,
+                    'risk_level': risk_level,
+                    'title': title,
+                    'description': scene_desc,
+                    'recommendation': recommendation,
+                    'confidence': vision_confidence,
+                    'ai_model': gemma_model,
+                },
+            })
+            yield f"event: stage\ndata: {decision_done}\n\n".encode()
+            await asyncio.sleep(0.05)
 
             # Alert event - 发送预警
             alert_payload = {
@@ -1417,7 +1518,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 'confidence': vision_confidence,
                 'scene_description': scene_desc,
                 'source_type': 'demo',
-                'source_path': str(video_path.name),
+                'source_path': video_name,
                 'detection_details': detection_details,
             }
             yield f"event: alert\ndata: {json.dumps(alert_payload)}\n\n".encode()

@@ -12,6 +12,13 @@
 - `docs/STARTUP_GUIDE.md`: §2 修正「Ollama 自动下载」为手动拉取；新增 §3「种子管理员」；删除 OLLAMA_MIRROR 假环境变量问答
 - `docs/CHANGELOG.md`: 修正清理段「删除 `STARTUP_GUIDE.md`」自相矛盾的描述
 
+### 首页 DemoPipeline 修复 (showcase)
+
+- `VideoPlayer.tsx`: `aspectRatio` 由 `16/7` 改为 `16/9`；标注帧 `<img>` 改 `objectFit: contain` 避免压扁；新增 `AnnotatedFrame` 组件，在标注帧上叠加 `<svg viewBox>` 层，按 `detection_details.bbox` 与 `imageWidth/imageHeight` 像素坐标绘制类别矩形 + 置信度标签（颜色按后端 SAM 中文色名映射）
+- `index.tsx`: `STAGE_DEFS` 标签改为清晰中文「感知 (YOLO+SAM) / 识别 (Gemma4) / 知识检索 (RAG) / 决策建议」；header subtitle + 空态提示同步更新
+- `index.tsx`: `handleDemo` 移除 10s SSE 超时回退逻辑 — 仅在 `es.onerror` 触发时才回退 `LOCAL_DEMOS`，消除"先显示假数据再切真数据"的体验
+- `index.tsx`: `ROIBox` 新增 `label/color` 字段；新增 `imageDims` state 把后端 `resolution` 透传给 VideoPlayer 用于 SVG viewBox
+
 ## 2026-06-28 — refactor/cleanup
 
 系统性清理 vibe coding 遗留问题。
