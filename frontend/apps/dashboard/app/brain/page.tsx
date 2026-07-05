@@ -1,5 +1,7 @@
-"use client"
+"use client";
+import { API_BASE } from "@uav/api"
 import { useState, useEffect, useRef, useCallback } from "react"
+import { useLLMStatus } from "@uav/hooks"
 import Sidebar from "../../components/Layout/Sidebar"
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -18,8 +20,6 @@ interface PipelineResult {
   rag: { title: string; snippet: string; score: number }[]
   decision: { risk: "low" | "medium" | "high" | "critical"; title: string; recommendation: string; confidence: number }
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
 
 // ── Demo data ────────────────────────────────────────────────────────────────
 
@@ -494,6 +494,11 @@ function RiskCard({ risk, demoRunning }: { risk: string; demoRunning: boolean })
 // ── Main Page ───────────────────────────────────────────────────────────────
 
 export default function BrainPage() {
+  const { status } = useLLMStatus()
+  const visionProvider = status?.stages?.vision?.provider ?? "ollama"
+  const visionModel = status?.stages?.vision?.model ?? "gemma4:e2b"
+  const decisionProvider = status?.stages?.decision?.provider ?? "ollama"
+  const decisionModel = status?.stages?.decision?.model ?? "gemma4:e2b"
   const [demoRunning, setDemoRunning] = useState(false)
   const [stage, setStage] = useState<Stage>("idle")
   const [sceneIndex, setSceneIndex] = useState(0)
@@ -591,7 +596,7 @@ export default function BrainPage() {
       {/* Hidden video element for frame extraction */}
       <video
         ref={videoRef}
-        src={`${API_BASE}/api/v1/demo/video?video_id=d1`}
+        src={`${API_BASE}/demo/video?video_id=d1`}
         style={{ display: "none" }}
         muted
         loop={false}
@@ -627,7 +632,7 @@ export default function BrainPage() {
               感知中心 · 智能推理演示
             </h1>
             <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-              ◈ 单模型 Pipeline · Gemma 4B E2B 多模态推理 · 实时视频流理解
+              ◈ Pipeline · 视觉识别 = {visionProvider} · 决策推理 = {decisionProvider} · 实时视频流理解
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -635,7 +640,7 @@ export default function BrainPage() {
               className="px-4 py-2 rounded-xl text-xs font-mono font-bold"
               style={{ background: "rgba(255,184,0,0.1)", border: "1px solid rgba(255,184,0,0.3)", color: "var(--accent-amber)" }}
             >
-              ◈ 单模型 · Gemma 4B E2B
+              ◈ vision={visionProvider} · decision={decisionProvider}
             </div>
             <div
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
@@ -690,7 +695,7 @@ export default function BrainPage() {
                 active={isPerception}
                 completed={isVision || isRag || isDecision || isDone}
                 description="接收视频帧流，通过多模态模型理解画面整体场景与上下文"
-                subText={isPerception ? "Gemma 4B E2B 多模态推理中..." : isVision || isRag || isDecision || isDone ? `场景: ${result?.perception?.slice(0, 28)}...` : undefined}
+                subText={isPerception ? `${visionProvider}:${visionModel} 多模态推理中...` : isVision || isRag || isDecision || isDone ? `场景: ${result?.perception?.slice(0, 28)}...` : undefined}
               />
               <PipelineStageRow
                 label="视觉识别"
@@ -736,7 +741,7 @@ export default function BrainPage() {
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2">
                   <span style={{ color: "var(--accent-green)" }}>◉</span>
-                  <span style={{ color: "var(--text-secondary)" }}>Gemma 4B E2B</span>
+                  <span style={{ color: "var(--text-secondary)" }}>{visionProvider}:{visionModel}</span>
                   <span className="ml-auto" style={{ color: "var(--text-muted)" }}>多模态感知</span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -790,7 +795,7 @@ export default function BrainPage() {
                   {v.active ? (
                     <>
                       <video
-                        src={`${API_BASE}/api/v1/demo/video?video_id=${v.id}`}
+                        src={`${API_BASE}/demo/video?video_id=${v.id}`}
                         autoPlay
                         muted
                         loop

@@ -1,0 +1,19 @@
+{
+  "name": "@uav/hooks",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./index.ts",
+  "types": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./useAlertStream": "./useAlertStream.ts",
+    "./useLLMStatus": "./useLLMStatus.ts",
+    "./useLLMPerStage": "./useLLMPerStage.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

@@ -1,8 +1,11 @@
-"use client"
+"use client";
+import { getShowcaseUrl, getAdminUrl } from "@uav/api";
 import Link from "next/link"
+import LLMStatusBadge from "../LLMStatusBadge"
+import PerStageProviderBadge from "../PerStageProviderBadge"
 
-const SHOWCASE_URL = process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+const SHOWCASE_URL = getShowcaseUrl()
+const ADMIN_URL = getAdminUrl()
 
 const navItems = [
   { href: "/", label: "◉ 控制台", icon: "◉" },
@@ -54,6 +57,9 @@ export default function Sidebar() {
         ))}
       </nav>
       <div className="px-4 py-4" style={{ borderTop: "1px solid var(--border)" }}>
+        <div className="mb-3">
+          <PerStageProviderBadge variant="compact" />
+        </div>
         <div className="font-mono text-xs px-3 py-2 rounded" style={{ background: "var(--bg-tertiary)", color: "var(--text-muted)" }}>
           <div>ver 1.0.0</div>
           <div className="mt-1" style={{ color: "var(--accent-green)" }}>● ALL SYSTEMS OK</div>

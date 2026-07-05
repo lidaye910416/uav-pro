@@ -1,7 +1,8 @@
-"use client"
+"use client";
+import { API_BASE } from "@uav/api"
 import { useState, useEffect, useCallback, useRef, memo } from "react"
 import Sidebar from "../../components/Layout/Sidebar"
-import { useAlertStream, StreamAlert, closeAlertStream } from "../../hooks/useAlertStream"
+import { useAlertStream, StreamAlert, closeAlertStream, useLLMStatus } from "@uav/hooks"
 import { SOPPanel } from "../../components/SOPPanel"
 
 type VideoId = "d1" | "d2" | "d3" | "d4" | "d5" | "d6" | "default"
@@ -27,10 +28,9 @@ const VIDEOS: VideoConfig[] = [
 ]
 
 function buildVideoUrls() {
-  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
   return VIDEOS.map((v) => ({
     ...v,
-    videoUrl: `${API_BASE}/api/v1/demo/video?video_id=${v.id}`,
+    videoUrl: `${API_BASE}/demo/video?video_id=${v.id}`,
   }))
 }
 
@@ -43,13 +43,26 @@ const RISK_COLORS: Record<string, string> = {
   low:      "var(--accent-green)",
 }
 
-// Pipeline 4 个 Stage 定义
-const PIPELINE_STAGES = [
+// Pipeline 4 个 Stage 定义 (vision/decision desc 由 useLLMStatus 动态填充)
+const PIPELINE_STAGES_TEMPLATE = [
   { key: "detection",  label: "目标检测", icon: "◉", color: "var(--accent-amber)", desc: "YOLOv8 + SAM 分割" },
   { key: "identify",   label: "异常识别", icon: "◆", color: "var(--accent-green)", desc: "Gemma4:e2b 多模态" },
   { key: "rag",       label: "RAG检索",   icon: "◫", color: "var(--accent-blue)",   desc: "ChromaDB 向量检索" },
   { key: "decision",  label: "决策输出", icon: "◈", color: "var(--accent-purple)",desc: "Ollama 风险判定" },
 ]
+
+function buildStages(status: ReturnType<typeof useLLMStatus>["status"]) {
+  const stages = status?.stages
+  const vp = stages?.vision?.provider
+  const vm = stages?.vision?.model
+  const dp = stages?.decision?.provider
+  const dm = stages?.decision?.model
+  return PIPELINE_STAGES_TEMPLATE.map((s) => {
+    if (s.key === "identify" && vp && vm) return { ...s, desc: `${vp} · ${vm}` }
+    if (s.key === "decision" && dp && dm) return { ...s, desc: `${dp} · ${dm}` }
+    return s
+  })
+}
 
 // ── YOLO+SAM Params ───────────────────────────────────────────────────────────
 
@@ -63,6 +76,13 @@ const DEFAULT_YOLO_PARAMS: YOLOParams = {
   confidence_threshold: 35,
   sam_enabled: true,
   model_name: "yolov8n.pt",
+}
+
+// 后端返回的 YOLO params (置信度为 0-1 浮点)
+interface YoloParamsResponse {
+  confidence_threshold?: number
+  sam_enabled?: boolean
+  model_name?: string
 }
 
 // ── Pipeline Stage State ─────────────────────────────────────────────────────
@@ -111,7 +131,7 @@ const VideoCard = memo(function VideoCard({ config, pipelineState, alerts, yoloP
     : "var(--border)"
 
   // 当前 Stage 的进度
-  const currentStage = PIPELINE_STAGES.find(s => {
+  const currentStage = pipelineStages.find(s => {
     const state = pipelineState[s.key as keyof PipelineState]
     return state.status === "running" || (state.status === "idle" && s.key === "detection")
   })
@@ -236,7 +256,7 @@ const VideoCard = memo(function VideoCard({ config, pipelineState, alerts, yoloP
       {/* Mini Pipeline Progress Bar */}
       <div className="px-3 pb-2">
         <div className="flex gap-1">
-          {PIPELINE_STAGES.map((stage, i) => {
+          {pipelineStages.map((stage, i) => {
             const state = pipelineState[stage.key as keyof PipelineState]
             const isActive = state.status === "running"
             const isDone = state.status === "done"
@@ -333,7 +353,7 @@ const CollapsibleRightPanel = memo(function CollapsibleRightPanel({ pipelineStat
 const PipelineProgressPanelInternal = memo(function PipelineProgressPanelInternal({ pipelineState }: { pipelineState: PipelineState }) {
   return (
     <div className="space-y-2">
-      {PIPELINE_STAGES.map((stage) => {
+      {pipelineStages.map((stage) => {
         const state = pipelineState[stage.key as keyof PipelineState]
         const isActive = state.status === "running"
         const isDone = state.status === "done"
@@ -623,8 +643,7 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
   const [stats, setStats] = useState<Record<string, number>>({})
 
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-    fetch(`${API_BASE}/api/v1/admin/stats`)
+    fetch(`${API_BASE}/admin/stats`)
       .then((r) => r.json())
       .then((d) => setStats(d.alerts_by_risk || {}))
       .catch(() => {})
@@ -632,7 +651,7 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
 
   const total = Object.values(stats).reduce((a, b) => a + b, 0)
   const activeCount = VIDEOS_WITH_URLS.filter(v => v.active).length
-  const completedStages = PIPELINE_STAGES.filter(s => pipelineState[s.key as keyof PipelineState].status === "done").length
+  const completedStages = pipelineStages.filter(s => pipelineState[s.key as keyof PipelineState].status === "done").length
 
   return (
     <div className="grid grid-cols-8 gap-3">
@@ -658,6 +677,8 @@ function StatsRow({ pipelineState, yoloParams }: { pipelineState: PipelineState;
 // ── Monitor Page ────────────────────────────────────────────────────────────
 
 export default function MonitorPage() {
+  const { status: llmStatus } = useLLMStatus()
+  const pipelineStages = buildStages(llmStatus)
   const [alerts, setAlerts] = useState<StreamAlert[]>([])
   const [yoloParams, setYoloParams] = useState<YOLOParams>(DEFAULT_YOLO_PARAMS)
   const [pipelineState, setPipelineState] = useState<PipelineState>(createEmptyPipelineState())
@@ -704,14 +725,13 @@ export default function MonitorPage() {
 
     // 释放 Ollama 模型内存
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-      const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
+      const res = await fetch(`${API_BASE}/admin/ollama/stop`, { method: "POST" })
       const data = await res.json()
       if (data.ok) {
-        console.log("[Monitor] Ollama models stopped:", data.stopped_models)
+        // Ollama models stopped
       }
     } catch (e) {
-      console.warn("[Monitor] Failed to stop Ollama:", e)
+      console.error("[Monitor] Failed to stop Ollama:", e)
     }
   }, [clearPipelineTimer])
 
@@ -838,10 +858,9 @@ export default function MonitorPage() {
 
   // Load YOLO params from backend
   useEffect(() => {
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-    fetch(`${API_BASE}/api/v1/analyze/yolo-params`)
+    fetch(`${API_BASE}/analyze/yolo-params`)
       .then(r => r.json())
-      .then((p: any) => setYoloParams({
+      .then((p: YoloParamsResponse) => setYoloParams({
         confidence_threshold: Math.round((p.confidence_threshold ?? 0.35) * 100),
         sam_enabled: p.sam_enabled ?? true,
         model_name: p.model_name ?? "yolov8n.pt",
@@ -851,8 +870,7 @@ export default function MonitorPage() {
 
   const handleYoloParamsChange = useCallback((newParams: YOLOParams) => {
     setYoloParams(newParams)
-    const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-    fetch(`${API_BASE}/api/v1/analyze/yolo-params`, {
+    fetch(`${API_BASE}/analyze/yolo-params`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -864,7 +882,7 @@ export default function MonitorPage() {
   }, [])
 
   const handleStageClick = (key: string) => {
-    console.log("Stage clicked:", key)
+    // no-op: stage rows are decorative
   }
 
   return (
@@ -919,8 +937,7 @@ export default function MonitorPage() {
 
                 // 3. 释放 Ollama 模型内存
                 try {
-                  const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-                  const res = await fetch(`${API_BASE}/api/v1/admin/ollama/stop`, { method: "POST" })
+                  const res = await fetch(`${API_BASE}/admin/ollama/stop`, { method: "POST" })
                   const data = await res.json()
                   if (data.ok) {
                     setReleaseStatus({

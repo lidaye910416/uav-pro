@@ -1,9 +1,12 @@
-"use client"
+"use client";
+import { getDashboardUrl, getAdminUrl } from "@uav/api";
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import LLMStatusBadge from "../LLMStatusBadge"
+import PerStageProviderBadge from "../PerStageProviderBadge"
 
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"
-const ADMIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"
+const DASHBOARD_URL = getDashboardUrl()
+const ADMIN_URL = getAdminUrl()
 
 const navItems = [
   { href: "/",      label: "首页" },
@@ -60,6 +63,7 @@ export default function Header() {
               </Link>
             )
           })}
+          <PerStageProviderBadge variant="compact" />
           <a
             href={`${DASHBOARD_URL}/monitor`}
             className="text-sm font-medium px-5 py-2 rounded-lg transition-all duration-200 font-mono tracking-wider"

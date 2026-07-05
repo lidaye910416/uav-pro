@@ -1,5 +1,6 @@
 "use client"
 import { useEffect, useRef, useState, useCallback } from "react"
+import { useLLMStatus } from "@uav/hooks"
 import PipelinePanel from "../components/DemoPipeline"
 
 // 统一使用环境变量配置
@@ -457,6 +458,9 @@ function StarCanvas() {
 
 /* ── Home Page ───────────────────────────────────────────────── */
 export default function HomePage() {
+  const { status } = useLLMStatus()
+  const visionProvider = status?.stages?.vision?.provider ?? "Gemma4"
+  const visionModel = status?.stages?.vision?.model ?? "e2b"
   const scrollRef = useRef<HTMLDivElement>(null)
   const [activeSection, setActiveSection] = useState(0)
   const [pipelineRunning, setPipelineRunning] = useState(false)
@@ -709,7 +713,7 @@ export default function HomePage() {
                   },
                   {
                     title: "智能识别",
-                    desc: "Gemma4:e2b 多模态视觉理解，自动识别6类道路异常事件",
+                    desc: `${visionProvider}:${visionModel} 多模态视觉理解，自动识别6类道路异常事件`,
                     color: "var(--accent-green)",
                     icon: (
                       <svg width="22" height="22" viewBox="0 0 28 28" fill="none">

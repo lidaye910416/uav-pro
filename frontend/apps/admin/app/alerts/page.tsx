@@ -2,6 +2,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "@/components/AuthContext"
 import { fetchAlerts } from "@/lib/api"
+import type { Alert } from "@uav/api/alert"
+import { useLLMStatus } from "@uav/hooks"
 
 const RISK_COLORS: Record<string, string> = {
   critical: "var(--accent-red)", high: "var(--accent-amber)",
@@ -16,7 +18,8 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function AlertsPage() {
   const { user } = useAuth()
-  const [alerts, setAlerts] = useState<any[]>([])
+  const { status } = useLLMStatus()
+  const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<string>("all")
 
@@ -85,6 +88,15 @@ export default function AlertsPage() {
                     style={{ background: "rgba(74,158,255,0.1)", color: "var(--accent-blue)" }}>
                     {STATUS_LABELS[alert.status] || alert.status}
                   </span>
+                  {status?.scope === "per-stage" && (
+                    <span
+                      className="text-xs font-mono px-2 py-0.5 rounded"
+                      style={{ background: "rgba(255,255,255,0.04)", color: "var(--text-muted)" }}
+                      title={`vision=${status?.stages?.vision?.provider ?? "—"} · decision=${status?.stages?.decision?.provider ?? "—"}`}
+                    >
+                      V:{(status?.stages?.vision?.provider ?? "?").slice(0, 8)} · D:{(status?.stages?.decision?.provider ?? "?").slice(0, 8)}
+                    </span>
+                  )}
                 </div>
                 <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
                   {new Date(alert.created_at).toLocaleString("zh-CN")}

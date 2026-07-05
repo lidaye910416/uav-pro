@@ -1,7 +1,9 @@
-"use client"
+"use client";
+import { API_BASE } from "@uav/api"
 import { useState, useRef, useEffect } from "react"
 import { useAuth } from "@/components/AuthContext"
 import { ragSearch } from "@/lib/api"
+import { useLLMStatus } from "@uav/hooks"
 
 // SOP 事件类型配置
 const SOP_INCIDENT_TYPES = [
@@ -30,6 +32,7 @@ const PRESET_SOPS = [
 
 export default function RAGPage() {
   const { user } = useAuth()
+  const { status } = useLLMStatus()
   const [query, setQuery] = useState("")
   const [results, setResults] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
@@ -48,8 +51,7 @@ export default function RAGPage() {
   useEffect(() => {
     async function fetchSOPCount() {
       try {
-        const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-        const res = await fetch(`${API_BASE}/api/v1/admin/chromadb`)
+        const res = await fetch(`${API_BASE}/admin/chromadb`)
         const data = await res.json()
         if (data.status === "running" || data.collections?.length > 0) {
           // ChromaDB 返回 collection 列表，但无法直接获取文档数量
@@ -73,8 +75,7 @@ export default function RAGPage() {
     setGenerating(true); setGenMsg(""); setError("")
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-      const res = await fetch(`${API_BASE}/api/v1/admin/sop/generate`, {
+      const res = await fetch(`${API_BASE}/admin/sop/generate`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -91,8 +92,8 @@ export default function RAGPage() {
       } else {
         setError(data.error || "AI 加工失败")
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
     setGenerating(false)
   }
@@ -100,8 +101,7 @@ export default function RAGPage() {
   // 导入 SOP 到知识库
   async function importSOP(text: string) {
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-      await fetch(`${API_BASE}/api/v1/admin/rag/add`, {
+      await fetch(`${API_BASE}/admin/rag/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -120,10 +120,10 @@ export default function RAGPage() {
     if (!query) return
     setLoading(true); setError("")
     try {
-      const r: any = await ragSearch(query)
+      const r = await ragSearch(query) as { results?: string[]; error?: string }
       setResults(r.results || [])
       if (r.error) setError(r.error)
-    } catch (e: any) { setError(e.message) }
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)) }
     setLoading(false)
   }
 
@@ -144,8 +144,7 @@ export default function RAGPage() {
     formData.append("file", file)
 
     try {
-      const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-      const res = await fetch(`${API_BASE}/api/v1/admin/sop/upload`, {
+      const res = await fetch(`${API_BASE}/admin/sop/upload`, {
         method: "POST",
         headers: { Authorization: `Bearer ${user.token}` },
         body: formData,
@@ -156,8 +155,8 @@ export default function RAGPage() {
       } else {
         setError(data.detail || data.error || "上传失败")
       }
-    } catch (err: any) {
-      setError(err.message)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
     }
     setUploading(false)
     if (fileInputRef.current) fileInputRef.current.value = ""
@@ -313,10 +312,21 @@ export default function RAGPage() {
               value={docText}
               onChange={e => setDocText(e.target.value)}
               rows={8}
-              placeholder="输入或粘贴原始内容...\n支持以下格式导入:\n- 原始文档文本\n- 未格式化的规范描述\n系统会自动识别并 AI 加工成标准 SOP"
+              placeholder="输入或粘贴原始内容...
+支持以下格式导入:
+- 原始文档文本
+- 未格式化的规范描述
+系统会自动识别并 AI 加工成标准 SOP"
               className="w-full px-3 py-2 rounded-lg text-sm font-mono resize-none"
               style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
             />
+            <div className="flex items-center gap-2 mt-1 mb-2 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+              <span>决策引擎:</span>
+              <span style={{ color: "var(--accent-purple)" }}>
+                {(status?.stages?.decision?.provider ?? status?.provider ?? "ollama")}:
+                {(status?.stages?.decision?.model ?? status?.model ?? "gemma4:e2b")}
+              </span>
+            </div>
             <div className="flex items-center gap-2 mt-3">
               <button onClick={handleGenerateFromRaw} disabled={!docText.trim() || generating}
                 className="flex-1 px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all hover:brightness-110 disabled:opacity-50"

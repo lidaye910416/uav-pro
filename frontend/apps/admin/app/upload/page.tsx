@@ -2,9 +2,11 @@
 import { useState, useRef } from "react"
 import { useAuth } from "@/components/AuthContext"
 import { analyzeImage } from "@/lib/api"
+import { useLLMStatus } from "@uav/hooks"
 
 export default function UploadPage() {
   const { user } = useAuth()
+  const { status } = useLLMStatus()
   const [file, setFile] = useState<File | null>(null)
   const [preview, setPreview] = useState<string | null>(null)
   const [result, setResult] = useState<any>(null)
@@ -70,14 +72,29 @@ export default function UploadPage() {
               )}
             </div>
             {file && (
-              <div className="mt-3 flex items-center justify-between">
-                <span className="text-sm font-mono truncate max-w-xs" style={{ color: "var(--text-secondary)" }}>{file.name}</span>
-                <button onClick={handleAnalyze} disabled={loading}
-                  className="px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all hover:brightness-110 disabled:opacity-50"
-                  style={{ background: "var(--accent-amber)", color: "#000" }}>
-                  {loading ? "分析中…" : "开始分析"}
-                </button>
-              </div>
+              <>
+                <div className="mt-3 p-3 rounded-lg text-sm font-mono"
+                  style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-secondary)" }}>
+                  <span style={{ color: "var(--text-muted)" }}>本次分析将调用 </span>
+                  <span style={{ color: "var(--accent-green)" }}>
+                    vision={(status?.stages?.vision?.provider ?? status?.provider ?? "ollama")}:
+                    {(status?.stages?.vision?.model ?? status?.model ?? "gemma4:e2b")}
+                  </span>
+                  <span style={{ color: "var(--text-muted)" }}> + </span>
+                  <span style={{ color: "var(--accent-purple)" }}>
+                    decision={(status?.stages?.decision?.provider ?? status?.provider ?? "ollama")}:
+                    {(status?.stages?.decision?.model ?? status?.model ?? "gemma4:e2b")}
+                  </span>
+                </div>
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-sm font-mono truncate max-w-xs" style={{ color: "var(--text-secondary)" }}>{file.name}</span>
+                  <button onClick={handleAnalyze} disabled={loading}
+                    className="px-4 py-2 rounded-lg text-sm font-mono font-bold transition-all hover:brightness-110 disabled:opacity-50"
+                    style={{ background: "var(--accent-amber)", color: "#000" }}>
+                    {loading ? "分析中…" : "开始分析"}
+                  </button>
+                </div>
+              </>
             )}
             {error && <p className="text-sm mt-2" style={{ color: "var(--accent-red)" }}>{error}</p>}
           </div>

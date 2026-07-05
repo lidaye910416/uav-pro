@@ -1,6 +1,8 @@
-"use client"
+"use client";
+import { getShowcaseUrl, getAdminUrl } from "@uav/api";
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
+import { useLLMStatus } from "@uav/hooks"
 
 const SECTIONS = [
   {
@@ -38,6 +40,14 @@ const PIPELINE_STAGES = [
 ]
 
 function PipelineFlowchart() {
+  const { status } = useLLMStatus()
+  const visionName = status?.stages?.vision?.provider ?? "Gemma分析"
+  const decisionName = status?.stages?.decision?.provider ?? "风险决策"
+  const stages = PIPELINE_STAGES.map((s) => {
+    if (s.name === "Gemma分析") return { ...s, name: `${visionName}分析` }
+    if (s.name === "风险决策") return { ...s, name: `${decisionName}决策` }
+    return s
+  })
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   return (
@@ -57,8 +67,8 @@ function PipelineFlowchart() {
         {/* SVG Flowchart */}
         <svg viewBox="0 0 980 100" className="w-full" style={{ minHeight: "100px" }}>
           {/* Connection lines */}
-          {PIPELINE_STAGES.map((_, i) => {
-            if (i === PIPELINE_STAGES.length - 1) return null
+          {stages.map((_, i) => {
+            if (i === stages.length - 1) return null
             const x1 = 70 + i * 140
             const x2 = 70 + (i + 1) * 140
             return (
@@ -84,7 +94,7 @@ function PipelineFlowchart() {
           </defs>
 
           {/* Stage nodes */}
-          {PIPELINE_STAGES.map((stage, i) => {
+          {stages.map((stage, i) => {
             const isHovered = hoveredIndex === i
             const x = 20 + i * 140
             return (
@@ -167,7 +177,7 @@ function PipelineFlowchart() {
             <span style={{ color: "#00D9A5" }}>◈</span> SAM 语义分割
           </span>
           <span className="flex items-center gap-1">
-            <span style={{ color: "#7C3AED" }}>◆</span> Gemma4 多模态理解
+            <span style={{ color: "#7C3AED" }}>◆</span> {visionName} 多模态理解
           </span>
           <span className="flex items-center gap-1">
             <span style={{ color: "#3B82F6" }}>◫</span> ChromaDB RAG
@@ -423,14 +433,14 @@ export default function DashboardHome() {
         {/* External links */}
         <div className="mt-14 flex gap-4 flex-wrap">
           <a
-            href={process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:3000"}
+            href={getShowcaseUrl()}
             className="px-5 py-2.5 rounded-xl text-sm font-mono transition-all hover:brightness-110"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "var(--text-secondary)" }}
           >
             ← 展示首页
           </a>
           <a
-            href={process.env.NEXT_PUBLIC_ADMIN_URL || "http://localhost:3002"}
+            href={getAdminUrl()}
             className="px-5 py-2.5 rounded-xl text-sm font-mono transition-all hover:brightness-110"
             style={{ background: "rgba(255,184,0,0.08)", border: "1px solid rgba(255,184,0,0.28)", color: "var(--accent-amber)" }}
           >

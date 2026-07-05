@@ -1,16 +1,41 @@
 "use client"
 import { useState, useEffect, useRef } from "react"
 import { useAlertStream, StreamAlert } from "../../hooks/useAlertStream"
+import { useLLMStatus } from "@uav/hooks"
 import AlertCard from "../../components/AlertCard"
 import ReactECharts from "echarts-for-react"
 
-// ── Pipeline Stage Config ─────────────────────────────────────────────────────
-const PIPELINE_STAGES = [
+// ── Pipeline Stage Config (vision/decision desc 由 useLLMStatus 动态填充) ────
+const PIPELINE_STAGES_TEMPLATE = [
   { key: "perception", label: "感知层", icon: "◉", color: "var(--accent-amber)", desc: "无人机 + 高挂摄像头", metric: "帧率 25fps", detail: "视频流采集" },
   { key: "vision",     label: "视觉识别", icon: "◆", color: "var(--accent-green)", desc: "Gemma 4 E2B 边缘推理", metric: "模型已加载", detail: "多模态视觉理解" },
   { key: "rag",        label: "RAG检索", icon: "◫", color: "var(--accent-blue)", desc: "ChromaDB SOP 知识库", metric: "向量库 1423 条", detail: "相似案例检索" },
   { key: "decision",   label: "决策生成", icon: "◈", color: "var(--accent-purple)", desc: "Ollama 本地 LLM", metric: "响应 230ms", detail: "风险等级判定" },
 ]
+
+function buildPipelineStages(status: ReturnType<typeof useLLMStatus>["status"]) {
+  const stages = status?.stages
+  const visionProvider = stages?.vision?.provider
+  const visionModel = stages?.vision?.model
+  const decisionProvider = stages?.decision?.provider
+  const decisionModel = stages?.decision?.model
+
+  return PIPELINE_STAGES_TEMPLATE.map((s) => {
+    if (s.key === "vision") {
+      if (visionProvider && visionModel) {
+        return { ...s, desc: `${visionProvider} · ${visionModel}` }
+      }
+      return s
+    }
+    if (s.key === "decision") {
+      if (decisionProvider && decisionModel) {
+        return { ...s, desc: `${decisionProvider} · ${decisionModel}` }
+      }
+      return s
+    }
+    return s
+  })
+}
 
 // ── Chart Data Generators ────────────────────────────────────────────────────
 function makeAlertTrendData() {
@@ -77,6 +102,8 @@ export default function MonitorPage() {
   const { connected } = useAlertStream((alert) => {
     setAlerts(prev => [alert, ...prev].slice(0, 50))
   })
+  const { status } = useLLMStatus()
+  const pipelineStages = buildPipelineStages(status)
 
   useEffect(() => {
     setTrend(makeAlertTrendData())
@@ -93,7 +120,7 @@ export default function MonitorPage() {
           <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--accent-red)" }} />
           <span className="font-mono text-xs font-bold" style={{ color: "var(--accent-red)" }}>LIVE</span>
         </div>
-        {PIPELINE_STAGES.map((s) => (
+        {pipelineStages.map((s) => (
           <div key={s.key} className="flex items-center gap-1.5">
             <span style={{ color: s.color }}>{s.icon}</span>
             <span className="font-mono text-xs" style={{ color: s.color }}>{s.label}</span>
@@ -110,7 +137,7 @@ export default function MonitorPage() {
 
         {/* Pipeline stage cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {PIPELINE_STAGES.map((stage) => (
+          {pipelineStages.map((stage) => (
             <div
               key={stage.key}
               className="rounded-2xl p-5 transition-all duration-300"

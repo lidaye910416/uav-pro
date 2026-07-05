@@ -1,6 +1,7 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from functools import lru_cache
 import os
+from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+aiosqlite:///./uav.db"
 
     # JWT
-    SECRET_KEY: str = "your-secret-key-change-in-production"
+    SECRET_KEY: str = "your-super-secret-key-change-in-production"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24小时
 
@@ -89,29 +90,47 @@ class Settings(BaseSettings):
     MODEL_VISION: str = "llava:7b"
     MODEL_DECISION: str = "deepseek-r1:1.5b"
 
-    # ── 模型自动检测 ─────────────────────────────
-    # 这些会在运行时自动检测可用的模型
-    _available_gemma: str | None = None
-    _available_qwen: str | None = None
+    # ── LLM Provider ───────────────────────────────────────────────
+    # "local" = Ollama (settings.MODEL_GEMMA4)
+    # "external" = Anthropic 兼容 API (EXTERNAL_LLM_*)
+    LLM_PROVIDER: str = "local"
+    EXTERNAL_LLM_BASE_URL: str = "https://api.minimaxi.com/anthropic"
+    EXTERNAL_LLM_API_KEY: str = ""
+    EXTERNAL_LLM_MODEL: str = "MiniMax-M3"
 
-    def get_vision_model(self) -> str:
-        """获取可用的视觉模型"""
-        # 优先使用 Gemma4
-        if self._available_gemma:
-            return self._available_gemma
-        # 回退到 Qwen
-        if self._available_qwen:
-            return self._available_qwen
-        return "qwen2.5:latest"
+    # ── Provider 目录 (用于管理端下拉选择) ──────────────────────────
+    LLM_PROVIDERS_CATALOG: dict = {
+        "ollama":    {"label":"本地 Ollama (gemma4)",   "default_base_url":"http://localhost:11434",            "protocol":"ollama",   "multimodal":True,  "models":["gemma4:e2b","llava:7b","qwen2.5-vl"]},
+        "anthropic": {"label":"Anthropic 官方",          "default_base_url":"https://api.anthropic.com",         "protocol":"anthropic","multimodal":True,  "models":["claude-sonnet-4-5","claude-opus-4-8","claude-haiku-4-5"]},
+        "minimax":   {"label":"MiniMax M3 (多模态)",     "default_base_url":"https://api.minimaxi.com/anthropic","protocol":"anthropic","multimodal":True,  "models":["MiniMax-M3","MiniMax-M2"]},
+        "openai":    {"label":"OpenAI (GPT-4o)",         "default_base_url":"https://api.openai.com/v1",        "protocol":"openai",    "multimodal":True,  "models":["gpt-4o","gpt-4-turbo","o1","o3-mini"]},
+        "deepseek":  {"label":"DeepSeek 官方",           "default_base_url":"https://api.deepseek.com/v1",      "protocol":"openai",    "multimodal":False, "models":["deepseek-chat","deepseek-reasoner"]},
+        "custom":    {"label":"自定义 (Anthropic 兼容)", "default_base_url":"",                                  "protocol":"anthropic","multimodal":True,  "models":[]},
+    }
 
-    def get_embed_model(self) -> str:
-        """获取可用的嵌入模型"""
-        return "nomic-embed-text"
+    # ── Per-stage 覆盖 (None → 沿用 LLM_PROVIDER) ──────────────────
+    VISION_PROVIDER:    Optional[str] = None
+    VISION_MODEL:       Optional[str] = None
+    DECISION_PROVIDER:  Optional[str] = None
+    DECISION_MODEL:     Optional[str] = None
 
 
 @lru_cache()
 def get_settings() -> Settings:
     return Settings()
+
+
+def resolve_provider_id(explicit: str | None) -> str:
+    """将历史 provider 别名映射到目录 id.
+
+    - "local"    -> "ollama"
+    - "external" -> "anthropic"   (保留向后兼容)
+    - 其他       -> 原值
+    """
+    if not explicit:
+        return "ollama"
+    mapping = {"local": "ollama", "external": "anthropic"}
+    return mapping.get(explicit, explicit)
 
 
 settings = get_settings()

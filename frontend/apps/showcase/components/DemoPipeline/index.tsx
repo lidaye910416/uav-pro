@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef } from "react"
 import VideoPlayer, { pauseVideo, playVideo } from "./VideoPlayer"
 import type { StageStatus } from "./StageCard"
+import { useLLMStatus } from "@uav/hooks"
 
 interface StageCardData {
   stage: string
@@ -274,6 +275,12 @@ interface PipelinePanelProps {
 }
 
 export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: PipelinePanelProps) {
+  const { status } = useLLMStatus()
+  const visionProvider = status?.stages?.vision?.provider ?? "ollama"
+  const visionModel = status?.stages?.vision?.model ?? "gemma4:e2b"
+  const decisionProvider = status?.stages?.decision?.provider ?? "ollama"
+  const decisionModel = status?.stages?.decision?.model ?? "gemma4:e2b"
+  const isExternal = !!status?.provider && status.provider !== "ollama" && status.provider !== "unknown"
   const [running, setRunning]   = useState(false)
   const [done, setDone]         = useState(false)
   const [alert, setAlert]       = useState<Record<string, unknown> | null>(null)
@@ -682,7 +689,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
             AI
           </div>
           <div className="flex-1">
-            <div className="font-bold text-sm" style={{ color: "var(--accent-amber)" }}>◈ YOLO + SAM + Gemma4:e2b Pipeline</div>
+            <div className="font-bold text-sm" style={{ color: "var(--accent-amber)" }}>◈ YOLO + SAM + {visionProvider}:{visionModel} Pipeline</div>
             <div className="text-xs" style={{ color: "var(--text-muted)" }}>
               目标检测 → 异常识别 → RAG检索 → 决策输出 &nbsp;·&nbsp;
               {running ? (
@@ -755,7 +762,9 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
                   确认释放 Ollama 内存？
                 </h3>
                 <p className="text-sm mb-4 text-center" style={{ color: "var(--text-secondary)" }}>
-                  将从内存中卸载 Gemma4 模型，<br/>释放约 7GB 内存空间。
+                  {isExternal
+                    ? `外部 ${visionProvider} 客户端无需卸载内存；确认仅停止当前 demo。`
+                    : `将从内存中卸载 ${visionProvider} 模型，\n释放约 7GB 内存空间。`}
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -777,7 +786,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
             </div>
           )}
           <div className="text-xs font-mono px-2 py-1 rounded flex-shrink-0" style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>
-            Gemma4:e2b
+            {visionProvider}:{visionModel}
           </div>
         </div>
 
@@ -1315,7 +1324,7 @@ function AnomalyOutputSection({ detail, sceneKey, running }: { detail?: string |
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid rgba(0,229,160,0.1)", background: "rgba(0,229,160,0.06)" }}>
         <span style={{ color: "var(--accent-green)" }}>◆</span>
-        <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-green)" }}>Gemma4:e2b 异常识别</span>
+        <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-green)" }}>{visionProvider}:{visionModel} 异常识别</span>
         {running && !done && <span className="animate-pulse text-xs font-mono" style={{ color: "var(--accent-green)" }}>◈ 分析中...</span>}
         {done && <span className="ml-auto text-xs font-mono" style={{ color: "rgba(0,229,160,0.5)" }}>✓ 完成</span>}
       </div>
@@ -1503,15 +1512,15 @@ function DecisionOutputSection({ detail, sceneKey, running, hasIncident }: { det
               <span className="text-xs font-mono font-bold" style={{ color: "var(--accent-purple)" }}>本阶段使用模型</span>
             </div>
             <div className="flex items-center gap-2 p-2 rounded-lg mb-2" style={{ background: "rgba(180,122,255,0.08)", border: "1px solid rgba(180,122,255,0.15)" }}>
-              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>Gemma4:e2b</span>
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Google 多模态大语言模型 · 视觉理解 + 决策推理</span>
+              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>{decisionProvider}:{decisionModel}</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>{decisionProvider === "ollama" ? "本地多模态模型" : `${decisionProvider} 外部 LLM`} · 视觉理解 + 决策推理</span>
             </div>
             <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.15)" }}>
               <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(74,158,255,0.2)", color: "var(--accent-blue)" }}>ChromaDB</span>
               <span className="text-xs" style={{ color: "var(--text-secondary)" }}>向量数据库 · 提供 SOP 处置规范参考</span>
             </div>
             <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              决策流程：接收识别结果 + RAG 检索的 SOP → Gemma4 推理 → 输出风险等级 + 预警标题 + 处置建议
+              决策流程：接收识别结果 + RAG 检索的 SOP → {decisionProvider} 推理 → 输出风险等级 + 预警标题 + 处置建议
             </div>
           </div>
 

@@ -1,6 +1,17 @@
-// 从环境变量读取 API 地址
-const getApiBase = () => process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-const API_BASE = `${getApiBase()}/api/v1`
+import { API_BASE, llmStatusApi } from "@uav/api"
+import type { Alert } from "@uav/api/alert"
+import type { LLMStatus } from "@uav/api"
+
+export type { Alert, LLMStatus }
+
+export {
+  llmStatusApi,
+  llmProviderCatalogApi,
+  llmModelListApi,
+  llmPerStageApi,
+  buildAdminUrl,
+} from "@uav/api"
+export type { LLMProvider, LLMStageConfig, LLMModelListResult, LLMProviderStatus, LLMStageStatus } from "@uav/api"
 
 export interface StreamInfo {
   id: string
@@ -38,12 +49,6 @@ export interface ChromaStatus {
   status: string
   collections: string[]
   error: string | null
-}
-
-export interface Alert {
-  id: number; title: string; description: string | null
-  risk_level: string; status: string; confidence: number | null
-  recommendation: string | null; created_at: string
 }
 
 export async function login(username: string, password: string): Promise<string> {
@@ -202,4 +207,33 @@ export async function updateYoloParams(params: Record<string, unknown>): Promise
   })
   if (!res.ok) throw new Error()
   return res.json()
+}
+
+// LLM provider
+export const llmProviderApi = {
+  async get(token: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/admin/llm/provider`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error()
+    return res.json()
+  },
+  async update(token: string, body: { provider: string; base_url?: string; api_key?: string; model?: string }): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/admin/llm/provider`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
+  async test(token: string, body: { base_url: string; api_key: string; model: string }): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/admin/llm/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
 }
