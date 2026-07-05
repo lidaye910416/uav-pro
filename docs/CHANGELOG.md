@@ -4,6 +4,27 @@
 
 ## [Unreleased]
 
+### 演示容器适配与硬编码清理 (showcase 首页)
+
+**Why**: 完成 per-stage LLM provider 适配后发现首页 Demo 容器仍有同类问题：端口硬编码 + 与 start.sh 不一致；"Gemma"/"Ollama" 字面字符串散落在用户可见文案中（与 provider 切换不同步）；状态条显示 `API: 8000` 但实际后端是 8888。
+
+- `apps/showcase/app/page.tsx`:
+  - `DASHBOARD_URL` 回退端口从 `3001` 改为走 `getDashboardUrl()`（与 start.sh 一致为 4001）
+  - 状态条 `API: 8000` 改为从 `process.env.NEXT_PUBLIC_API_BASE` 解析实际端口（默认 8888）
+- `apps/showcase/components/DemoPipeline/index.tsx`:
+  - `API_BASE` 本地常量替换为 `@uav/api` 导出的 `getApiBase()` / `API_BASE`
+  - `点击「启动演示」— YOLO+SAM → Gemma识别 → RAG检索` 改为 `→ ${visionProvider}识别 → ... → ${decisionProvider}决策`
+  - `▶ YOLO+SAM 分割结果（喂给 Gemma 的图像）` 改为 `喂给 ${visionProvider} 的图像`
+  - `▶ 发送给 Gemma 的完整 Prompt` 改为 `发送给 ${visionProvider} 的提示词模板`
+  - `检测到 N 个目标...` 占位字面 N 改为 `尚未返回目标检测结果`
+- `apps/showcase/components/DemoPipeline/VideoPlayer.tsx`、`DemoThumbnail.tsx`: 同上替换 `API_BASE` 常量
+
+**未修复 (范围外，建议另开 PR)**:
+- `DemoPipeline/index.tsx` 1658 行过大, magic timing 数字未集中, dead `revealTimersRef`, StageCard.tsx 死组件等
+- `app/page.tsx:547/635/795` "LIVE · AI-POWERED / 感知层就绪 / SYSTEM ONLINE" 等静态"假直播"显示
+- `Dialog "释放约 7GB"` 固定数值
+- 置信度 slider 仅改 local state (未推后端)
+
 ### Per-stage LLM Provider 前端适配
 
 让前端页面感知后端 `VISION_PROVIDER` / `DECISION_PROVIDER` 独立配置。

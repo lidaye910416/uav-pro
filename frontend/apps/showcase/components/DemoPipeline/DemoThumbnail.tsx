@@ -1,11 +1,10 @@
 "use client"
 import { useState, useEffect } from "react"
+import { API_BASE } from "@uav/api"
 
 interface DemoThumbnailProps {
   src?: string
 }
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
 
 export default function DemoThumbnail({ src }: DemoThumbnailProps) {
   const [imgSrc, setImgSrc] = useState<string>("")
@@ -13,7 +12,7 @@ export default function DemoThumbnail({ src }: DemoThumbnailProps) {
   const [error, setError] = useState(false)
 
   useEffect(() => {
-    const url = src || `${API_BASE}/api/v1/demo/thumbnail`
+    const url = src || `${API_BASE}/demo/thumbnail`
     setLoading(true)
     setError(false)
     setImgSrc(url + "?t=" + Date.now())

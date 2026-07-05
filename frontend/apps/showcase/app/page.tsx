@@ -1,10 +1,11 @@
 "use client"
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useLLMStatus } from "@uav/hooks"
+import { getDashboardUrl } from "@uav/api"
 import PipelinePanel from "../components/DemoPipeline"
 
-// 统一使用环境变量配置
-const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || "http://localhost:3001"
+// 统一使用环境变量配置；端口由 start.sh 决定，禁止在这里写死与 start.sh 不一致的端口
+const DASHBOARD_URL = process.env.NEXT_PUBLIC_DASHBOARD_URL || getDashboardUrl()
 
 /* ── Interactive Particle Globe ────────────────────────────── */
 function Globe3D() {
@@ -631,7 +632,8 @@ export default function HomePage() {
                 {/* Status */}
                 <div className="flex items-center gap-3 flex-wrap" style={{ animation: "fadeIn 0.6s ease-out 0.6s both" }}>
                   {[
-                    { label: "API: 8000", color: "var(--accent-amber)" },
+                    // 端口从 API_BASE 推导(展示运行时的实际后端地址), 与 start.sh 默认 8888 / .env 注入一致
+                    { label: `API: ${(process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888").replace(/^https?:\/\//, "").split(":").pop()}`, color: "var(--accent-amber)" },
                     { label: "感知层就绪", color: "var(--accent-green)" },
                     { label: "识别层就绪", color: "var(--accent-blue)" },
                     { label: "预警层就绪", color: "var(--accent-red)" },

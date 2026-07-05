@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from "react"
 import VideoPlayer, { pauseVideo, playVideo } from "./VideoPlayer"
 import type { StageStatus } from "./StageCard"
 import { useLLMStatus } from "@uav/hooks"
+import { getApiBase, API_BASE as API_BASE_SHARED } from "@uav/api"
 
 interface StageCardData {
   stage: string
@@ -22,9 +23,11 @@ interface StageCardData {
   combinedImageUrl?: string  // URL to annotated image from Stage 1
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8888"
-const DEMO_STREAM_URL = `${API_BASE}/api/v1/demo/stream`
-const DEMO_SEED_URL = `${API_BASE}/api/v1/demo/seed`
+// 统一使用 @uav/api 导出的 getApiBase (无 /api/v1 后缀) 与 API_BASE (含 /api/v1 后缀);
+// 端口由 start.sh + .env 注入, 此处禁止硬编码与 start.sh 不一致的端口
+const API_BASE = getApiBase()
+const DEMO_STREAM_URL = `${API_BASE_SHARED}/demo/stream`
+const DEMO_SEED_URL = `${API_BASE_SHARED}/demo/seed`
 
 // ── ROI types ─────────────────────────────────────────────────────────────────
 
@@ -914,7 +917,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
           <div className="p-4 space-y-3">
             {!running && activeCount === 0 && (
               <div className="text-xs text-center py-8" style={{ color: "var(--text-muted)" }}>
-                点击「启动演示」体验完整 pipeline — YOLO+SAM → Gemma识别 → RAG检索 → 决策输出
+                点击「启动演示」体验完整 pipeline — YOLO+SAM → {visionProvider}识别 → RAG检索 → {decisionProvider}决策
               </div>
             )}
 
@@ -1121,7 +1124,7 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
         {effectiveUrl && !imgError && (
           <div>
             <div className="text-xs font-mono mb-2" style={{ color: "var(--accent-amber)" }}>
-              ▶ YOLO+SAM 分割结果（喂给 Gemma 的图像）
+              ▶ YOLO+SAM 分割结果（喂给 {visionProvider} 的图像）
               {imgLoading && <span className="animate-pulse ml-2">◈ 加载中...</span>}
             </div>
             <div className="rounded-lg overflow-hidden relative" style={{ border: "1px solid rgba(255,184,0,0.2)" }}>
@@ -1219,7 +1222,7 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
         {/* Gemma Prompt 预览（完整的提示词模板） */}
         <div>
           <div className="text-xs font-mono mb-1" style={{ color: "var(--accent-purple)" }}>
-            ▶ 发送给 Gemma 的完整 Prompt
+            ▶ 发送给 {visionProvider} 的提示词模板
           </div>
           <div
             className="rounded-lg p-3 text-xs leading-relaxed"
@@ -1248,7 +1251,7 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
             <div className="mb-2 px-2 py-1 rounded text-xs" style={{ background: "rgba(0,229,160,0.1)", color: "var(--accent-green)" }}>
               {detectionDetails.length > 0
                 ? detectionDetails.map((d, i) => `${d.label}（${d.color}掩膜，置信度 ${d.confidence}%）`).join('\n')
-                : "检测到 N 个目标..."
+                : "尚未返回目标检测结果"
               }
             </div>
             <div className="mt-2 pt-2" style={{ borderTop: "1px solid rgba(255,255,255,0.1)" }}>
