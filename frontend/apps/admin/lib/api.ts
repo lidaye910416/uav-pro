@@ -1,7 +1,17 @@
-import { API_BASE } from "@uav/api"
+import { API_BASE, llmStatusApi } from "@uav/api"
 import type { Alert } from "@uav/api/alert"
+import type { LLMStatus } from "@uav/api"
 
-export type { Alert }
+export type { Alert, LLMStatus }
+
+export {
+  llmStatusApi,
+  llmProviderCatalogApi,
+  llmModelListApi,
+  llmPerStageApi,
+  buildAdminUrl,
+} from "@uav/api"
+export type { LLMProvider, LLMStageConfig, LLMModelListResult, LLMProviderStatus, LLMStageStatus } from "@uav/api"
 
 export interface StreamInfo {
   id: string
@@ -197,4 +207,33 @@ export async function updateYoloParams(params: Record<string, unknown>): Promise
   })
   if (!res.ok) throw new Error()
   return res.json()
+}
+
+// LLM provider
+export const llmProviderApi = {
+  async get(token: string): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/admin/llm/provider`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error()
+    return res.json()
+  },
+  async update(token: string, body: { provider: string; base_url?: string; api_key?: string; model?: string }): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/admin/llm/provider`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
+  async test(token: string, body: { base_url: string; api_key: string; model: string }): Promise<Record<string, unknown>> {
+    const res = await fetch(`${API_BASE}/admin/llm/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(body),
+    })
+    if (!res.ok) throw new Error(await res.text())
+    return res.json()
+  },
 }

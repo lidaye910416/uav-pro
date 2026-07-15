@@ -1,7 +1,17 @@
 "use client"
-import { useState, useEffect } from "react"
+import { Suspense, useCallback, useState, useEffect } from "react"
+import { useSearchParams } from "next/navigation"
 import { useAuth } from "@/components/AuthContext"
 import { fetchPipeline, updatePipeline, fetchMotionParams, updateMotionParams, fetchYoloParams, updateYoloParams } from "@/lib/api"
+import { llmProviderApi, llmProviderCatalogApi, llmModelListApi, llmPerStageApi } from "@uav/api"
+import type { LLMProvider, LLMProviderStatus } from "@uav/api"
+
+type TabKey = "pipeline" | "provider" | "models" | "motion" | "yolo" | "guide"
+const TAB_KEYS: TabKey[] = ["pipeline", "provider", "models", "motion", "yolo", "guide"]
+
+function isTabKey(s: string | null): s is TabKey {
+  return !!s && (TAB_KEYS as string[]).includes(s)
+}
 
 interface PipelineModelInfo {
   name: string
@@ -121,12 +131,27 @@ function OllamaStatusBadge({ status }: { status: string }) {
 }
 
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={<div className="text-center py-16 text-sm font-mono" style={{ color: "var(--text-muted)" }}>加载中…</div>}>
+      <SettingsPageInner />
+    </Suspense>
+  )
+}
+
+function SettingsPageInner() {
   const { user } = useAuth()
+  const searchParams = useSearchParams()
+  const tabFromUrl = searchParams?.get("tab")
   const [pipeline, setPipeline] = useState<PipelineStatus | null>(null)
   const [loading, setLoading] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
-  const [tab, setTab] = useState<"pipeline" | "models" | "motion" | "yolo" | "guide">("pipeline")
+  const [tab, setTab] = useState<TabKey>(isTabKey(tabFromUrl) ? tabFromUrl : "pipeline")
+
+  // React to URL ?tab= changes (e.g. when user clicks the LLMStatusBadge link)
+  useEffect(() => {
+    if (isTabKey(tabFromUrl)) setTab(tabFromUrl)
+  }, [tabFromUrl])
 
   useEffect(() => {
     if (!user) return
@@ -172,6 +197,7 @@ export default function SettingsPage() {
       <div className="flex gap-1 mb-6 flex-wrap">
         {([
           { key: "pipeline", label: "Pipeline 模式", color: "var(--accent-amber)" },
+          { key: "provider", label: "LLM 提供商", color: "var(--accent-purple)" },
           { key: "models", label: "模型状态", color: "var(--accent-green)" },
           { key: "motion", label: "帧差法参数", color: "var(--accent-purple)" },
           { key: "yolo", label: "YOLO检测", color: "var(--accent-blue)" },
@@ -285,6 +311,11 @@ export default function SettingsPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* ── Provider Tab ── */}
+          {tab === "provider" && user && (
+            <ProviderTab token={user.token} />
           )}
 
           {/* ── Models Tab ── */}
@@ -730,5 +761,661 @@ function GuideContent() {
                 </div>
               </div>
             </div>
+  )
+}
+
+// ── Provider Tab ───────────────────────────────────────────────────────────────
+
+interface ProviderConfig {
+  provider: string
+  base_url?: string
+  api_key?: string
+  model?: string
+}
+
+type StageKey = "vision" | "decision"
+type ScopeMode = "unified" | "per-stage"
+
+const PROTOCOL_COLOR: Record<string, string> = {
+  ollama: "var(--accent-amber)",
+  anthropic: "var(--accent-purple)",
+  openai: "var(--accent-blue)",
+}
+
+const LEGACY_TO_CATALOG: Record<string, string> = {
+  local: "ollama",
+  external: "anthropic",
+}
+
+function normalizeProviderId(raw: string | undefined | null): string {
+  if (!raw) return "ollama"
+  const r = raw.toLowerCase().trim()
+  if (LEGACY_TO_CATALOG[r]) return LEGACY_TO_CATALOG[r]
+  return r
+}
+
+function inferScopeFromConfig(p: any): ScopeMode {
+  // If backend returns per_stage keys, default to per-stage when both filled in.
+  if (p && (p.vision || p.decision)) return "per-stage"
+  return "unified"
+}
+
+/**
+ * Card-shaped editor for one pipeline stage (or the unified provider).
+ * Reused by both the single-provider and per-stage configurations.
+ */
+function StageEditor({
+  token,
+  title,
+  subtitle,
+  color,
+  initial,
+  catalog,
+  onSaved,
+}: {
+  token: string
+  title: string
+  subtitle: string
+  color: string
+  initial: ProviderConfig
+  catalog: LLMProvider[]
+  onSaved?: (status: LLMProviderStatus) => void
+}) {
+  const [cfg, setCfg] = useState<ProviderConfig>(initial)
+  const [models, setModels] = useState<string[]>([])
+  const [modelMode, setModelMode] = useState<"select" | "custom">("select")
+  const [showKey, setShowKey] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [testing, setTesting] = useState(false)
+  const [fetchingModels, setFetchingModels] = useState(false)
+  const [msg, setMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
+  const [testMsg, setTestMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
+
+  // When provider or base_url change, refresh model list.
+  useEffect(() => {
+    if (!cfg.provider) return
+    let cancelled = false
+    setFetchingModels(true)
+    llmModelListApi
+      .list(token, {
+        provider: cfg.provider,
+        base_url: cfg.base_url || undefined,
+        api_key: cfg.api_key || undefined,
+      })
+      .then((r) => {
+        if (cancelled) return
+        const list = Array.isArray(r.models) ? r.models : []
+        setModels(list)
+        // If existing model isn't in the list, present the select but allow custom.
+        if (cfg.model && list.length > 0 && !list.includes(cfg.model)) {
+          // Keep current value, leave mode as custom to avoid overwriting text input.
+        }
+        setModelMode(
+          list.length === 0
+            ? "custom"
+            : cfg.model && !list.includes(cfg.model)
+            ? "custom"
+            : "select",
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setModels([])
+      })
+      .finally(() => {
+        if (!cancelled) setFetchingModels(false)
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, cfg.provider, cfg.base_url])
+
+  function handleProviderChange(providerId: string) {
+    const meta = catalog.find((p) => p.id === providerId)
+    setCfg((prev) => ({
+      ...prev,
+      provider: providerId,
+      base_url: prev.base_url && prev.base_url.length > 0 ? prev.base_url : meta?.default_base_url ?? "",
+      model: meta?.default_model ?? prev.model ?? "",
+    }))
+    setMsg(null)
+    setTestMsg(null)
+  }
+
+  async function handleTest() {
+    if (!cfg.base_url || !cfg.model) {
+      setTestMsg({ type: "err", text: "✗ 请填写 base_url 和 model" })
+      return
+    }
+    setTesting(true)
+    setTestMsg(null)
+    try {
+      const r: any = await llmProviderApi.test(token, {
+        base_url: cfg.base_url!,
+        api_key: cfg.api_key || "",
+        model: cfg.model!,
+      })
+      if (r.ok) {
+        setTestMsg({ type: "ok", text: `✓ 连接成功 · 延迟 ${r.latency_ms ?? "—"}ms` })
+      } else {
+        setTestMsg({ type: "err", text: `✗ ${r.error || "连接失败"}` })
+      }
+    } catch (e: unknown) {
+      setTestMsg({ type: "err", text: `✗ ${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  async function handleSave() {
+    setSaving(true)
+    setMsg(null)
+    try {
+      // The api wrapper already throws on non-2xx; if await returns, save succeeded.
+      await llmProviderApi.update(token, {
+        provider: cfg.provider,
+        base_url: cfg.base_url,
+        api_key: cfg.api_key,
+        model: cfg.model,
+      })
+      // Refetch status to get fresh provider_label, override_active, etc.
+      const fresh = await llmProviderApi.get(token)
+      onSaved?.(fresh)
+      const label = fresh.provider_label || fresh.provider || cfg.provider
+      const model = fresh.external_model || fresh.ollama_model || cfg.model || ""
+      setMsg({
+        type: "ok",
+        text: `✓ 已保存并立即生效 · 当前激活: ${label} · ${model}`,
+      })
+    } catch (e: unknown) {
+      setMsg({ type: "err", text: `✗ ${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const selectedProvider = catalog.find((p) => p.id === cfg.provider)
+
+  return (
+    <div className="rounded-2xl p-5 mb-6" style={{ background: "var(--bg-card)", border: `1px solid var(--border)` }}>
+      <div className="flex items-center gap-2 mb-4">
+        <span className="text-base font-bold" style={{ color }}>
+          {title}
+        </span>
+        <span className="text-xs px-2 py-0.5 rounded font-mono" style={{ background: "var(--bg-primary)", color: "var(--text-muted)" }}>
+          {subtitle}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Provider select */}
+        <div>
+          <label className="text-xs font-mono font-bold mb-1 block" style={{ color: "var(--text-secondary)" }}>
+            PROVIDER
+          </label>
+          <select
+            value={cfg.provider}
+            onChange={(e) => handleProviderChange(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg text-sm font-mono"
+            style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
+          >
+            {catalog.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}{p.multimodal ? " · 多模态" : ""}
+              </option>
+            ))}
+          </select>
+          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            protocol: {selectedProvider?.protocol ?? "—"}
+            {selectedProvider?.default_base_url ? ` · 默认 ${selectedProvider.default_base_url}` : ""}
+          </div>
+        </div>
+
+        {/* Base URL */}
+        <div>
+          <label className="text-xs font-mono font-bold mb-1 block" style={{ color: "var(--text-secondary)" }}>
+            BASE URL
+          </label>
+          <input
+            type="text"
+            value={cfg.base_url ?? ""}
+            onChange={(e) => setCfg((prev) => ({ ...prev, base_url: e.target.value }))}
+            placeholder={selectedProvider?.default_base_url || ""}
+            className="w-full px-3 py-2 rounded-lg text-sm font-mono"
+            style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
+          />
+          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>提供方 OpenAI/Anthropic/Ollama 兼容端点</div>
+        </div>
+
+        {/* API key with toggle */}
+        <div>
+          <label className="text-xs font-mono font-bold mb-1 block" style={{ color: "var(--text-secondary)" }}>
+            API KEY
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type={showKey ? "text" : "password"}
+              value={cfg.api_key ?? ""}
+              onChange={(e) => setCfg((prev) => ({ ...prev, api_key: e.target.value }))}
+              placeholder={selectedProvider?.protocol === "ollama" ? "(ollama 通常不需要)" : "sk-..."}
+              className="flex-1 px-3 py-2 rounded-lg text-sm font-mono"
+              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowKey((v) => !v)}
+              className="px-2 py-2 rounded-lg text-xs font-mono"
+              style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-muted)" }}
+              title={showKey ? "隐藏" : "显示"}
+            >
+              {showKey ? "🙈" : "👁"}
+            </button>
+          </div>
+          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>密钥仅写入后端配置，不在响应中回显</div>
+        </div>
+
+        {/* Model select + custom */}
+        <div>
+          <label className="text-xs font-mono font-bold mb-1 block" style={{ color: "var(--text-secondary)" }}>
+            MODEL
+          </label>
+          {modelMode === "select" && models.length > 0 ? (
+            <>
+              <select
+                value={cfg.model ?? ""}
+                onChange={(e) => {
+                  if (e.target.value === "__custom__") {
+                    setModelMode("custom")
+                  } else {
+                    setCfg((prev) => ({ ...prev, model: e.target.value }))
+                  }
+                  setMsg(null)
+                  setTestMsg(null)
+                }}
+                className="w-full px-3 py-2 rounded-lg text-sm font-mono"
+                style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
+              >
+                <option value="">— 请选择 —</option>
+                {models.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+                <option value="__custom__">+ 自定义模型…</option>
+              </select>
+              <button
+                type="button"
+                onClick={() => setModelMode("custom")}
+                className="text-xs mt-1 underline font-mono"
+                style={{ color: "var(--text-muted)" }}
+              >
+                直接输入自定义模型
+              </button>
+            </>
+          ) : (
+            <>
+              <input
+                type="text"
+                value={cfg.model ?? ""}
+                onChange={(e) => setCfg((prev) => ({ ...prev, model: e.target.value }))}
+                placeholder={selectedProvider?.default_model || "model-id"}
+                className="w-full px-3 py-2 rounded-lg text-sm font-mono"
+                style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
+              />
+              {models.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setModelMode("select")}
+                  className="text-xs mt-1 underline font-mono"
+                  style={{ color: "var(--text-muted)" }}
+                >
+                  从列表中选择
+                </button>
+              )}
+            </>
+          )}
+          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
+            {fetchingModels ? "⟳ 拉取模型中…" : `${models.length} 个可用模型`}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center gap-3 flex-wrap">
+        <button
+          onClick={handleTest}
+          disabled={testing || !cfg.base_url || !cfg.model}
+          className="px-4 py-2 rounded-xl text-sm font-mono font-bold transition-all"
+          style={{
+            background: testing ? "var(--bg-card)" : "var(--bg-primary)",
+            color: testing ? "var(--text-muted)" : color,
+            border: `1px solid ${testing ? "var(--border)" : color}`,
+            cursor: testing ? "not-allowed" : "pointer",
+            opacity: !cfg.base_url || !cfg.model ? 0.5 : 1,
+          }}
+        >
+          {testing ? "◈ 测试中..." : "🔌 Test connection"}
+        </button>
+        <button
+          onClick={handleSave}
+          disabled={saving || !cfg.provider || !cfg.model}
+          className="px-5 py-2 rounded-xl text-sm font-mono font-bold transition-all"
+          style={{
+            background: saving ? "var(--bg-card)" : color,
+            color: saving ? "var(--text-muted)" : ["var(--accent-amber)"].includes(color) ? "#000" : "#fff",
+            border: saving ? "1px solid var(--border)" : "none",
+            cursor: saving ? "not-allowed" : "pointer",
+            opacity: !cfg.provider || !cfg.model ? 0.5 : 1,
+          }}
+        >
+          {saving ? "◈ 保存中..." : "💾 Save"}
+        </button>
+        {testMsg && (
+          <span className="text-sm font-mono" style={{ color: testMsg.type === "ok" ? "var(--accent-green)" : "var(--accent-red)" }}>
+            {testMsg.text}
+          </span>
+        )}
+      </div>
+      {msg && (
+        <div
+          className="mt-3 px-4 py-2 rounded-lg text-sm animate-fade-in"
+          style={{
+            background: msg.type === "ok" ? "rgba(0,229,160,0.08)" : "rgba(255,59,59,0.08)",
+            border: `1px solid ${msg.type === "ok" ? "var(--accent-green)" : "var(--accent-red)"}`,
+            color: msg.type === "ok" ? "var(--accent-green)" : "var(--accent-red)",
+          }}
+        >
+          {msg.text}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ProviderTab({ token }: { token: string }) {
+  const [catalog, setCatalog] = useState<LLMProvider[]>([])
+  const [scope, setScope] = useState<ScopeMode>("unified")
+  const [unified, setUnified] = useState<ProviderConfig>({ provider: "ollama" })
+  const [vision, setVision] = useState<ProviderConfig>({ provider: "ollama" })
+  const [decision, setDecision] = useState<ProviderConfig>({ provider: "ollama" })
+  const [loading, setLoading] = useState(true)
+  const [savingPerStage, setSavingPerStage] = useState(false)
+  const [pageMsg, setPageMsg] = useState<{ type: "ok" | "err"; text: string } | null>(null)
+  const [lastStatus, setLastStatus] = useState<LLMProviderStatus | null>(null)
+
+  // Fetch provider catalog and current config.
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    Promise.allSettled([
+      llmProviderCatalogApi.get(token).catch(() => []),
+      llmProviderApi.get(token).catch(() => null),
+      llmPerStageApi.get(token).catch(() => null),
+    ])
+      .then(([cat, cur, per]) => {
+        if (cancelled) return
+        if (cat.status === "fulfilled") {
+          const list = (cat.value as LLMProvider[]) || []
+          setCatalog(list.length > 0 ? list : [])
+        } else {
+          setCatalog([])
+        }
+        if (per.status === "fulfilled" && per.value) {
+          setScope(inferScopeFromConfig(per.value))
+          const p: any = per.value
+          if (p.vision) {
+            setVision({
+              provider: normalizeProviderId(p.vision.provider),
+              base_url: p.vision.base_url ?? "",
+              api_key: "",
+              model: p.vision.model ?? "",
+            })
+          }
+          if (p.decision) {
+            setDecision({
+              provider: normalizeProviderId(p.decision.provider),
+              base_url: p.decision.base_url ?? "",
+              api_key: "",
+              model: p.decision.model ?? "",
+            })
+          }
+        }
+        if (cur.status === "fulfilled" && cur.value) {
+          const p: any = cur.value
+          setLastStatus(p as LLMProviderStatus)
+          setUnified({
+            provider: normalizeProviderId(p.provider),
+            base_url: p.base_url ?? "",
+            api_key: p.api_key ?? "",
+            model: p.model ?? "",
+          })
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPageMsg({ type: "err", text: "✗ 加载失败" })
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  // Re-fetch provider status (e.g. after external writes / background changes).
+  const refreshStatus = useCallback(async () => {
+    try {
+      const fresh = await llmProviderApi.get(token)
+      setLastStatus(fresh)
+    } catch {
+      // Silent: UI will fall back to local cfg.
+    }
+  }, [token])
+
+  // If catalog finishes loading after initial state with default "ollama"
+  // but no such provider exists, fall back to first catalog item.
+  useEffect(() => {
+    if (!catalog.length) return
+    setUnified((prev) =>
+      prev.provider && catalog.some((p) => p.id === prev.provider)
+        ? prev
+        : { ...prev, provider: catalog[0].id },
+    )
+    setVision((prev) =>
+      prev.provider && catalog.some((p) => p.id === prev.provider)
+        ? prev
+        : prev.provider
+        ? { ...prev, provider: catalog[0].id }
+        : prev,
+    )
+    setDecision((prev) =>
+      prev.provider && catalog.some((p) => p.id === prev.provider)
+        ? prev
+        : prev.provider
+        ? { ...prev, provider: catalog[0].id }
+        : prev,
+    )
+  }, [catalog])
+
+  async function handleSavePerStage() {
+    setSavingPerStage(true)
+    setPageMsg(null)
+    try {
+      await llmPerStageApi.update(token, {
+        vision: { provider: vision.provider, base_url: vision.base_url, api_key: vision.api_key, model: vision.model },
+        decision: { provider: decision.provider, base_url: decision.base_url, api_key: decision.api_key, model: decision.model },
+      })
+      await refreshStatus()
+      setPageMsg({ type: "ok", text: "✓ 识别层 / 决策层配置已保存并立即生效" })
+    } catch (e: unknown) {
+      setPageMsg({ type: "err", text: `✗ ${e instanceof Error ? e.message : String(e)}` })
+    } finally {
+      setSavingPerStage(false)
+    }
+  }
+
+  if (loading) return <div className="text-center py-16 text-sm font-mono" style={{ color: "var(--text-muted)" }}>加载中…</div>
+
+  return (
+    <div>
+      <div className="text-sm font-bold mb-3 tracking-widest" style={{ color: "var(--text-muted)" }}>
+        LLM 提供商选择
+      </div>
+
+      {/* Scope toggle */}
+      <div className="flex items-center gap-2 mb-5">
+        <span className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>配置方式</span>
+        {(["unified", "per-stage"] as const).map((s) => (
+          <button
+            key={s}
+            onClick={() => setScope(s)}
+            className="px-4 py-1.5 rounded-lg text-xs font-mono font-bold transition-all"
+            style={{
+              background: scope === s ? "var(--accent-purple)" : "var(--bg-card)",
+              color: scope === s ? "#000" : "var(--text-secondary)",
+              border: `1px solid ${scope === s ? "var(--accent-purple)" : "var(--border)"}`,
+            }}
+          >
+            {s === "unified" ? "◈ 统一提供方" : "◆ 识别层 / 决策层 分别配置"}
+          </button>
+        ))}
+      </div>
+
+      {scope === "unified" ? (
+        <StageEditor
+          token={token}
+          title="◈ 统一提供商"
+          subtitle={unified.provider || "未设置"}
+          color={PROTOCOL_COLOR[catalog.find((p) => p.id === unified.provider)?.protocol ?? "openai"] ?? "var(--accent-blue)"}
+          initial={unified}
+          catalog={catalog}
+          onSaved={(s) => setLastStatus(s)}
+        />
+      ) : (
+        <>
+          <StageEditor
+            token={token}
+            title="◇ 识别层 (Vision)"
+            subtitle={vision.provider || "未设置"}
+            color={PROTOCOL_COLOR[catalog.find((p) => p.id === vision.provider)?.protocol ?? "openai"] ?? "var(--accent-green)"}
+            initial={vision}
+            catalog={catalog}
+            onSaved={(s) => setLastStatus(s)}
+          />
+          <StageEditor
+            token={token}
+            title="◆ 决策层 (Decision)"
+            subtitle={decision.provider || "未设置"}
+            color={PROTOCOL_COLOR[catalog.find((p) => p.id === decision.provider)?.protocol ?? "openai"] ?? "var(--accent-purple)"}
+            initial={decision}
+            catalog={catalog}
+            onSaved={(s) => setLastStatus(s)}
+          />
+          <div className="flex items-center gap-3 mb-6">
+            <button
+              onClick={handleSavePerStage}
+              disabled={savingPerStage}
+              className="px-5 py-2 rounded-xl text-sm font-mono font-bold transition-all"
+              style={{
+                background: savingPerStage ? "var(--bg-card)" : "var(--accent-purple)",
+                color: savingPerStage ? "var(--text-muted)" : "#fff",
+                border: savingPerStage ? "1px solid var(--border)" : "none",
+                cursor: savingPerStage ? "not-allowed" : "pointer",
+              }}
+            >
+              {savingPerStage ? "◈ 保存中..." : "💾 Save (vision + decision)"}
+            </button>
+          </div>
+        </>
+      )}
+
+      {pageMsg && (
+        <div
+          className="mt-2 mb-6 px-4 py-2 rounded-lg text-sm animate-fade-in"
+          style={{
+            background: pageMsg.type === "ok" ? "rgba(0,229,160,0.08)" : "rgba(255,59,59,0.08)",
+            border: `1px solid ${pageMsg.type === "ok" ? "var(--accent-green)" : "var(--accent-red)"}`,
+            color: pageMsg.type === "ok" ? "var(--accent-green)" : "var(--accent-red)",
+          }}
+        >
+          {pageMsg.text}
+        </div>
+      )}
+
+      {/* Current status summary (pulled from GET /admin/llm/provider) */}
+      <div className="rounded-2xl p-5 mb-6" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
+        <div className="flex items-center justify-between mb-4">
+          <div className="text-sm font-bold tracking-widest" style={{ color: "var(--text-muted)" }}>
+            当前激活
+          </div>
+          {lastStatus?.override_active && (
+            <span
+              className="text-xs font-mono px-2 py-0.5 rounded"
+              style={{ background: "rgba(180,122,255,0.12)", color: "var(--accent-purple)", border: "1px solid var(--accent-purple)" }}
+              title="运行时覆盖已生效"
+            >
+              override active
+            </span>
+          )}
+        </div>
+        {!lastStatus ? (
+          <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+            等待加载…
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="p-3 rounded-lg" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Provider</div>
+                <div className="font-mono mt-1 truncate" style={{ color: "var(--text-primary)" }}>
+                  {lastStatus.provider_label || lastStatus.provider}
+                </div>
+                <div className="text-xs font-mono mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
+                  id: {lastStatus.provider}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>Model</div>
+                <div className="font-mono mt-1 truncate" style={{ color: "var(--text-primary)" }}>
+                  {lastStatus.external_model || lastStatus.ollama_model || "—"}
+                </div>
+                <div className="text-xs font-mono mt-0.5 truncate" style={{ color: "var(--text-muted)" }}>
+                  {(lastStatus.external_base_url || lastStatus.ollama_base_url || "").slice(0, 60)}
+                </div>
+              </div>
+              <div className="p-3 rounded-lg" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
+                <div className="text-xs font-mono" style={{ color: "var(--text-muted)" }}>API Key</div>
+                <div className="font-mono mt-1">
+                  {lastStatus.provider === "ollama" ? (
+                    <span style={{ color: "var(--text-muted)" }}>n/a (ollama)</span>
+                  ) : lastStatus.external_api_key_set ? (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ background: "rgba(0,229,160,0.12)", color: "var(--accent-green)" }}
+                    >
+                      API Key configured
+                    </span>
+                  ) : (
+                    <span
+                      className="text-xs px-2 py-0.5 rounded"
+                      style={{ background: "rgba(255,59,59,0.12)", color: "var(--accent-red)" }}
+                    >
+                      API Key not configured
+                    </span>
+                  )}
+                </div>
+                <div className="text-xs font-mono mt-1 truncate" style={{ color: "var(--text-muted)" }}>
+                  scope: {scope}
+                </div>
+              </div>
+            </div>
+            {lastStatus.stages && (
+              <div className="mt-3 text-xs font-mono" style={{ color: "var(--text-muted)" }}>
+                vision: {lastStatus.stages.vision.provider} / {lastStatus.stages.vision.model}
+                {"  ·  "}
+                decision: {lastStatus.stages.decision.provider} / {lastStatus.stages.decision.model}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
   )
 }

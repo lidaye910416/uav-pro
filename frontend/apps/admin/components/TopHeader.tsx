@@ -1,6 +1,8 @@
 "use client"
 import { usePathname } from "next/navigation"
+import Link from "next/link"
 import { useAuth } from "./AuthContext"
+import { useLLMStatus } from "@uav/hooks"
 
 const BREADCRUMBS: Record<string, { label: string; parent?: string }> = {
   "/": { label: "系统概览" },
@@ -9,6 +11,34 @@ const BREADCRUMBS: Record<string, { label: string; parent?: string }> = {
   "/alerts": { label: "预警历史", parent: "/" },
   "/settings": { label: "系统设置", parent: "/" },
   "/rag": { label: "RAG 知识库", parent: "/" },
+}
+
+function LLMPill() {
+  const { status } = useLLMStatus()
+  const isExternal =
+    !!status?.provider && status.provider !== "ollama" && status.provider !== "unknown"
+  const colorVar = isExternal ? "var(--accent-purple)" : "var(--accent-amber)"
+  const label = status?.display_name || "加载中"
+  return (
+    <Link
+      href="/settings?tab=provider"
+      title="点击前往 Settings → LLM 提供商"
+      className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-mono transition-all hover:brightness-110"
+      style={{
+        background: "var(--bg-card)",
+        border: `1px solid ${colorVar}55`,
+        color: colorVar,
+      }}
+    >
+      <span
+        className="w-2 h-2 rounded-full"
+        style={{ background: colorVar, boxShadow: `0 0 6px ${colorVar}` }}
+      />
+      <span>
+        LLM · <span style={{ color: "var(--text-secondary)" }}>{label}</span>
+      </span>
+    </Link>
+  )
 }
 
 function HealthDot({ status }: { status: string }) {
@@ -58,6 +88,8 @@ export default function TopHeader() {
 
       {/* Right actions */}
       <div className="flex items-center gap-3">
+        {/* LLM pill */}
+        <LLMPill />
         {/* System status */}
         <div className="flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-mono"
           style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>

@@ -4,6 +4,17 @@
 
 ## [Unreleased]
 
+### LLM Provider 抽象层 (后端)
+
+- `feat(llm)`: add external Anthropic-compatible LLM provider with runtime switching (local Ollama / external API); admin endpoints `GET/POST /api/v1/admin/llm/provider` and `POST /api/v1/admin/llm/test`
+- `backend/app/llm/external_client.py`: 新增 ExternalLLMClient (httpx 异步) — 支持 chat_text / chat_vision / test
+- `backend/app/llm/llm_router.py`: 新增统一路由器 `get_llm_client()`, 支持运行时 override
+- `backend/app/api/routes_llm.py`: 新增 admin 接口 (`/api/v1/admin/llm/provider`, `/test`)
+- `backend/app/core/config.py`: 新增 `LLM_PROVIDER` / `EXTERNAL_LLM_BASE_URL` / `EXTERNAL_LLM_API_KEY` / `EXTERNAL_LLM_MODEL`
+- `backend/main.py`: 注册 llm_router
+- `backend/requirements.txt`: 新增 `anthropic>=0.30.0`
+- `.env.example`: 新增 LLM Provider 段落
+
 ### 文档同步
 
 - `CLAUDE.md`: §4 Dashboard 路由表补全 `/` 与 `/knowledge`
@@ -18,6 +29,32 @@
 - `index.tsx`: `STAGE_DEFS` 标签改为清晰中文「感知 (YOLO+SAM) / 识别 (Gemma4) / 知识检索 (RAG) / 决策建议」；header subtitle + 空态提示同步更新
 - `index.tsx`: `handleDemo` 移除 10s SSE 超时回退逻辑 — 仅在 `es.onerror` 触发时才回退 `LOCAL_DEMOS`，消除"先显示假数据再切真数据"的体验
 - `index.tsx`: `ROIBox` 新增 `label/color` 字段；新增 `imageDims` state 把后端 `resolution` 透传给 VideoPlayer 用于 SVG viewBox
+
+### LLM Provider 选择 (识别层 / 决策层独立可切换)
+
+**Why**: 让管理员能在 UI 直观选择 LLM provider。MiniMax-M3 因具备多模态能力, 可同时承担识别和决策, 取代 Gemma4/DeepSeek-R1。
+
+- 后端 (backend/app/llm/):
+  - 新增 provider 目录 (ollama/anthropic/openai/minimax/deepseek/custom), 每个带默认 base_url + 默认模型 + 协议
+  - 新增 阶段独立覆盖 (识别层 VISION_PROVIDER/VISION_MODEL, 决策层 DECISION_PROVIDER/DECISION_MODEL)
+  - 管理员设置持久化到 backend/data/llm_provider.json (重启不丢失)
+  - 新增 endpoints: GET /admin/llm/providers, GET /admin/llm/models, POST /admin/llm/per-stage
+  - routes_demo.py 实际按阶段取 client; PIPELINE_MODE=dual 时识别/决策可独立用不同模型
+- 后端 (config / docker): docker-compose.yml backend 服务补全 LLM_PROVIDER / EXTERNAL_LLM_* / VISION_* / DECISION_* env 注入; .env.example 同步
+- 前端 (Admin): Settings → Provider Tab 重写为 provider dropdown + 模型 dropdown + 可选 per-stage 配置
+- 前端 (Badge): LLMStatusBadge 改为可点击链接 (→ Admin /settings?tab=provider); Admin 顶部新增 badge; 跨端 10s 轮询同步
+
+**新增测试**: tests/test_llm_router.py, tests/test_routes_llm.py, tests/conftest.py
+
+### Bug 修复: LLM Provider override 切换不可见
+
+- 后端: get_provider_status() 与 /llm/status 修正为 override-first (原始终读 settings.EXTERNAL_LLM_*)
+- 后端: ProviderStatus schema 增加 provider_label / ollama_model / ollama_base_url / stages 字段
+- 后端: 启动日志输出 [llm-startup] active=... 让路由切换可见
+- 后端: POST /admin/llm/provider 响应中 api_key 仅打码日志 (sk-***xxxx), 不入日志明文
+- 前端 (Admin): ProviderTab handleSave 不再误判 r.ok, 改为响应 schema 判断 + Save 后 refetch + 显示'已保存并立即生效'
+- 前端: 当前激活卡片显示真实 override 状态 (provider_label / base_url / api_key_set / stages)
+- 新增回归测试覆盖上述行为
 
 ## 2026-06-28 — refactor/cleanup
 

@@ -3,8 +3,11 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: uav-ollama
+    # 主机重启 / Docker daemon 重启后自动拉起 (init 服务除外)
+    restart: unless-stopped
     ports:
       - "${OLLAMA_PORT:-11434}:11434"
+    # 命名卷持久化已下载模型，避免容器重建后重复拉取
     volumes:
       - ollama_data:/root/.ollama
     environment:
@@ -14,6 +17,7 @@ services:
         # Gemma4:e2b 需要 ~7GB+ 显存; 16g 会把主机内存吃光导致构建 OOM
         limits:
           memory: 8g
+    # 等待 API 就绪，ollama-pull 依赖此状态再启动
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
       interval: 30s
@@ -21,10 +25,26 @@ services:
       retries: 5
       start_period: 60s
 
+  # ── Ollama 首次启动预拉模型 (init profile) ──────────────────────────────
+  # 用法: docker compose --profile init up ollama-pull
+  # 仅在 models 尚未下载时执行一次；profiles: [init] 确保不会随 start 自动运行
+  ollama-pull:
+    image: ollama/ollama:latest
+    container_name: uav-ollama-pull
+    profiles: ["init"]
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    # 模型名取自 settings (MODEL_GEMMA4=gemma4:e2b, MODEL_VISION=llava:7b)
+    command: -c "ollama pull ${MODEL_GEMMA4:-gemma4:e2b} && ollama pull ${MODEL_VISION:-llava:7b}"
+
   # ── ChromaDB — SOP 知识库向量存储 ─────────────────────────────────────────
   chromadb:
     image: chromadb/chroma:latest
     container_name: uav-chroma
+    restart: unless-stopped
     ports:
       - "${CHROMA_PORT:-9001}:8000"
     volumes:
@@ -43,6 +63,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     container_name: uav-backend
+    restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-8888}:8888"
     environment:
@@ -53,12 +74,23 @@ services:
       BACKEND_CORS_ORIGINS: "${BACKEND_CORS_ORIGINS:-http://localhost:4000,http://localhost:4001,http://localhost:4002}"
       PIPELINE_MODE: "${PIPELINE_MODE:-single}"
       MODEL_GEMMA4: "${MODEL_GEMMA4:-gemma4:e2b}"
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      EXTERNAL_LLM_BASE_URL: ${EXTERNAL_LLM_BASE_URL:-https://api.minimaxi.com/anthropic}
+      EXTERNAL_LLM_API_KEY: ${EXTERNAL_LLM_API_KEY:-}
+      EXTERNAL_LLM_MODEL: ${EXTERNAL_LLM_MODEL:-MiniMax-M3}
+      VISION_PROVIDER: ${VISION_PROVIDER:-}
+      VISION_MODEL: ${VISION_MODEL:-}
+      DECISION_PROVIDER: ${DECISION_PROVIDER:-}
+      DECISION_MODEL: ${DECISION_MODEL:-}
     depends_on:
       ollama:
         condition: service_healthy
       chromadb:
         condition: service_healthy
+    # 命名卷存放 SQLite (uav.db) + 业务数据；chromadb 子目录走 bind 挂载
+    # 顺序: 先挂载命名卷再 bind 覆盖子目录，Docker 会按声明顺序解析
     volumes:
+      - backend_db:/app/data
       - ./backend/data/chromadb:/app/data/chromadb
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT:-8888}/health"]
@@ -66,6 +98,29 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+
+  # ── 首次启动播种默认管理员 (init profile) ───────────────────────────────
+  # 用法: docker compose --profile init up seed-admin
+  # 等待 backend healthy 后运行 seed_admin.py，仅首次执行
+  seed-admin:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: uav-seed-admin
+    profiles: ["init"]
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: "sqlite+aiosqlite:////app/data/uav.db"
+      SECRET_KEY: "${SECRET_KEY:-change-me-in-production}"
+    # 共享 backend_db 以访问 uav.db；同时 bind ./backend/data 以兼容本地种子脚本
+    volumes:
+      - backend_db:/app/data
+      - ./backend/data:/app/data
+    command: python -m scripts.seed_admin
 
   # ── Frontend Showcase (端口 4000) ────────────────────────────────────────
   showcase:
@@ -76,6 +131,7 @@ services:
         APP_NAME: showcase
         APP_PORT: 3000
     container_name: uav-showcase
+    restart: unless-stopped
     ports:
       - "${SHOWCASE_PORT:-4000}:3000"
     environment:
@@ -101,6 +157,7 @@ services:
         APP_NAME: dashboard
         APP_PORT: 3001
     container_name: uav-dashboard
+    restart: unless-stopped
     ports:
       - "${DASHBOARD_PORT:-4001}:3001"
     environment:
@@ -126,6 +183,7 @@ services:
         APP_NAME: admin
         APP_PORT: 3002
     container_name: uav-admin
+    restart: unless-stopped
     ports:
       - "${ADMIN_PORT:-4002}:3002"
     environment:
@@ -145,3 +203,5 @@ services:
 volumes:
   ollama_data:
   chroma_data:
+  # 后端 SQLite (uav.db) 与业务数据持久化卷
+  backend_db:

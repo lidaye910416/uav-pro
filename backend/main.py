@@ -12,6 +12,8 @@ from app.api.routes_admin import router as admin_router
 from app.api.routes_alerts import router as alerts_router
 from app.api.routes_auth import router as auth_router
 from app.api.routes_demo import router as demo_router
+from app.api.routes_llm import router as llm_router
+from app.api.routes_llm import public_router as llm_public_router
 from app.api.routes_ollama import router as ollama_router
 from app.api.routes_uav import router as uav_router
 from app.core.config import settings
@@ -67,6 +69,8 @@ app.include_router(demo_router, prefix=settings.API_V1_STR)
 app.include_router(admin_router, prefix=settings.API_V1_STR)
 app.include_router(ollama_router, prefix=settings.API_V1_STR)
 app.include_router(uav_router, prefix=settings.API_V1_STR)
+app.include_router(llm_router, prefix=settings.API_V1_STR)
+app.include_router(llm_public_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")

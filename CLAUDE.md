@@ -46,6 +46,8 @@ AI 助手指南 - UAV 低空检测智能安全预警系统
 感知层 (YOLO+SAM) → 识别层 (Gemma4) → RAG检索 (ChromaDB) → 决策层 (Gemma4)
 ```
 
+**LLM provider 按阶段可选**: 识别层与决策层可以各自配置 provider (默认沿用 LLM_PROVIDER)。多模态 provider（如 MiniMax-M3、claude-sonnet-4-5、gpt-4o）可同时承担识别与决策；在 Admin → Settings → Provider 配置。
+
 ### 置信度
 - 使用 0-1 范围（不是 0-100）
 - SOP 知识库：`backend/data/chromadb/`
@@ -58,7 +60,7 @@ AI 助手指南 - UAV 低空检测智能安全预警系统
 
 ### 修改端口
 ```bash
-# 1. 编辑 start.sh 第 19-25 行的默认值
+# 1. 编辑 start.sh 第 18-23 行的默认值
 # 2. 重启服务
 ./start.sh restart
 ```
@@ -93,6 +95,19 @@ url = settings.OLLAMA_BASE_URL
 # ❌ 错误 - 硬编码端口
 url = "http://localhost:11434"
 ```
+
+### LLM Provider 配置
+
+| Provider | 协议 | 多模态 | 推荐用途 |
+|----------|------|--------|----------|
+| ollama (本地) | Ollama /api/generate | 是 | 离线 / 隐私优先 |
+| anthropic | Anthropic /v1/messages | 是 | 生产推理最强 |
+| minimax (默认外部) | Anthropic 兼容 | 是 | 多模态 + 中文友好 |
+| openai | (规划) | 是 | GPT-4o 等 |
+| deepseek | (规划) | 否 | 推理强, 单文本 |
+| custom | Anthropic 兼容 | 是 | 自部署 one-api 等中转 |
+
+详细见 [docs/PROVIDER.md](docs/PROVIDER.md)；识别/决策可独立配置（VISION_PROVIDER / DECISION_PROVIDER 环境变量，UI 在 Admin → Settings → Provider Tab per-stage 切换）。
 
 ---
 

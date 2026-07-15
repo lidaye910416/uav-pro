@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from app.api.routes_auth import get_current_user
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.llm.llm_router import get_llm_client
 from app.models.alert import Alert
 from app.models.data_record import DataRecord
 from app.models.user import User
@@ -311,24 +312,11 @@ async def generate_standard_sop(
 
 标准 SOP 输出："""
 
-        async with httpx.AsyncClient(timeout=120) as client:
-            r = await client.post(
-                f"{settings.OLLAMA_BASE_URL}/api/generate",
-                json={
-                    "model": "gemma4:e2b",
-                    "prompt": prompt,
-                    "stream": False,
-                    "options": {"temperature": 0.3, "num_ctx": 4096},
-                },
-            )
-        if r.status_code == 200:
-            result = r.json()
-            standard_sop = result.get("response", "").strip()
-            if not standard_sop:
-                return SOPGenerateResponse(ok=False, error="模型返回为空")
-            return SOPGenerateResponse(ok=True, standard_sop=standard_sop)
-        else:
-            return SOPGenerateResponse(ok=False, error=f"Ollama 错误: {r.status_code}")
+        client = get_llm_client()
+        standard_sop = await client.chat_text(prompt=prompt, system="")
+        if not standard_sop:
+            return SOPGenerateResponse(ok=False, error="模型返回为空")
+        return SOPGenerateResponse(ok=True, standard_sop=standard_sop.strip())
     except Exception as e:
         return SOPGenerateResponse(ok=False, error=str(e))
 

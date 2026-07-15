@@ -1,6 +1,6 @@
 #!/bin/bash
 # UAV-PRO 服务管理脚本 (基于 docker-compose)
-# 端口配置：仅修改本文件第 28-34 行的默认值即可（勿改 .env）
+# 端口配置：仅修改本文件第 18-23 行的默认值即可（勿改 .env）
 
 set -e
 
@@ -63,7 +63,7 @@ usage() {
   logs     查看所有容器日志 (用法: $0 logs [service])
   clean    删除所有容器、网络与卷（数据将丢失）
 
-端口修改: 编辑本文件第 28-34 行
+端口修改: 编辑本文件第 18-23 行
 配置文件: .env 存放非端口配置 (SECRET_KEY / MODEL_GEMMA4 / PIPELINE_MODE ...)
 EOF
 }

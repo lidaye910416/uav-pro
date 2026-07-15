@@ -24,6 +24,11 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal
+from app.llm.llm_router import (
+    get_decision_client,
+    get_llm_client,
+    get_vision_client,
+)
 from app.models.alert import Alert, RiskLevel, AlertStatus
 from app.services.chroma_service import get_rag_context as chroma_get_rag_context, search_sops
 
@@ -809,22 +814,17 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
 
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-    payload = {
-        "model": model,
-        "prompt": full_prompt,
-        "images": [img_b64],
-        "stream": False,
-        "think": False,
-        "options": {"num_predict": 200},
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            logger.info("_gemma4_vision_analyze 调用 Ollama, timeout=%ss", timeout)
-            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
-            r.raise_for_status()
-            raw = r.json().get("response", "").strip()
-            logger.info("_gemma4_vision_analyze 原始响应: %s...", raw[:150])
+        try:
+            client = get_vision_client()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("_gemma4_vision_analyze 视觉客户端初始化失败, 回退默认: %s", exc)
+            client = get_llm_client()
+        provider_used = type(client).__name__
+        model_used = getattr(client, "model", "")
+        logger.info("_gemma4_vision_analyze 调用 LLM [%s/%s], timeout=%ss", provider_used, model_used, timeout)
+        raw = await client.chat_vision(image_b64=img_b64, prompt=full_prompt)
+        logger.info("_gemma4_vision_analyze 原始响应: %s...", raw[:150])
 
         # 解析 JSON
         clean_raw = raw.replace('```json', '').replace('```', '').strip()
@@ -841,6 +841,8 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
                 "confidence": round(max(0.0, min(1.0, float(result.get("confidence", 0.5)))), 2),
                 "scene_description": result.get("scene_description", ""),
                 "description": result.get("description", ""),
+                "provider_used": provider_used,
+                "model_used": model_used,
             }
 
         # 回退：无法解析 JSON
@@ -953,20 +955,16 @@ async def _rag_decide(incident_type: str, scene_description: str, model: str, ti
 
     full_prompt = f"{system_prompt}\n\n{user_prompt}"
 
-    payload = {
-        "model": model,
-        "prompt": full_prompt,
-        "stream": False,
-        "think": False,
-        "options": {"num_predict": 80},
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            r = await client.post(f"{settings.OLLAMA_BASE_URL}/api/generate", json=payload)
-            r.raise_for_status()
-            raw = r.json().get("response", "").strip()
-            logger.info("_rag_decide 原始响应: %s...", raw[:150])
+        try:
+            client = get_decision_client()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("_rag_decide 决策客户端初始化失败, 回退默认: %s", exc)
+            client = get_llm_client()
+        provider_used = type(client).__name__
+        model_used = getattr(client, "model", "")
+        raw = await client.chat_text(prompt=full_prompt, system="")
+        logger.info("_rag_decide 原始响应 (provider=%s, model=%s): %s...", provider_used, model_used, raw[:150])
 
         # 解析 JSON
         clean_raw = raw.replace('```json', '').replace('```', '').strip()
@@ -980,6 +978,8 @@ async def _rag_decide(incident_type: str, scene_description: str, model: str, ti
                 "risk_level": result.get("risk_level", "low"),
                 "title": result.get("title", "道路通行正常"),
                 "recommended_response": result.get("recommended_response", "持续监控"),
+                "provider_used": provider_used,
+                "model_used": model_used,
             }
 
         # 回退：无法解析 JSON
@@ -1204,6 +1204,19 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
     Args:
         loop: 是否循环运行（默认 False，运行一次）
     """
+    # 启动时打印当前生效的视觉/决策阶段 provider 配置，便于排障
+    try:
+        from app.llm.llm_router import _resolve_stage_provider
+        v_pid, v_fields = _resolve_stage_provider("vision")
+        d_pid, d_fields = _resolve_stage_provider("decision")
+        logger.info(
+            "[startup] vision=%s:%s, decision=%s:%s",
+            v_pid, v_fields.get("model") or "",
+            d_pid, d_fields.get("model") or "",
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[startup] 解析 LLM 阶段配置失败: %s", exc)
+
     # Scene descriptions for fallback
     DJI_FRAME_SCENES = [
         (
@@ -1342,6 +1355,8 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 incident_type = vision_result.get("incident_type", "none")
                 severity = vision_result.get("severity", "none")
                 vision_confidence = vision_result.get("confidence", 0.85)
+                vision_provider = vision_result.get("provider_used", "")
+                vision_model_used = vision_result.get("model_used", gemma_model)
 
                 # Vision done - 发送识别层完成事件
                 identify_done = json.dumps({
@@ -1354,6 +1369,8 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                     'severity': severity,
                     'confidence': vision_confidence,
                     'ai_model': gemma_model,
+                    'provider_used': vision_provider,
+                    'model_used': vision_model_used,
                 })
                 yield f"event: stage\ndata: {identify_done}\n\n".encode()
                 await asyncio.sleep(0.3)  # 等待前端渲染 identify 完成
@@ -1480,11 +1497,15 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                     title = decision_result.get("title")
                 if decision_result.get("recommended_response"):
                     recommendation = decision_result.get("recommended_response")
+                decision_provider = decision_result.get("provider_used", "")
+                decision_model_used = decision_result.get("model_used", gemma_model)
 
             except Exception as e:
                 logger.error("demo_sse_stream 决策层异常: %s: %s", type(e).__name__, e)
                 # 决策层失败时使用 severity 映射
                 risk_level = severity_to_risk.get(severity, "low")
+                decision_provider = ""
+                decision_model_used = gemma_model
 
             # Decision done
             decision_done = json.dumps({
@@ -1501,6 +1522,8 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                     'recommendation': recommendation,
                     'confidence': vision_confidence,
                     'ai_model': gemma_model,
+                    'provider_used': decision_provider,
+                    'model_used': decision_model_used,
                 },
             })
             yield f"event: stage\ndata: {decision_done}\n\n".encode()

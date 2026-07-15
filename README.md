@@ -49,7 +49,7 @@ UAV-PRO 是一个基于无人机航拍图像的智能安全预警系统，融合
 | 前端 | Next.js 14 + TypeScript + TailwindCSS | 3 个独立应用 (showcase/dashboard/admin) |
 | 后端 | FastAPI + Python 3.10+ | REST + SSE 流式 |
 | 视觉 | YOLOv8 + MobileSAM | 目标检测与分割 |
-| LLM | Gemma-4 E2B (Ollama) | 多模态视觉理解 |
+| LLM | Ollama (gemma4:e2b) 或外部 Anthropic 兼容 API (默认 MiniMax-M3)；识别/决策可独立选 provider | 多模态视觉理解 |
 | 向量库 | ChromaDB | RAG 知识检索 |
 | 数据库 | SQLite | 预警数据存储 |
 | 部署 | Docker Compose | 一键启动 |
