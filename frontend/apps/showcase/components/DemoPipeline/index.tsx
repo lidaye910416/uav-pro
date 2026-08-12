@@ -1,7 +1,8 @@
 "use client";
-import { API_BASE } from "@uav/api"
+import { API_BASE, toAbsoluteApiUrl } from "@uav/api"
 import React, { useState, useEffect, useRef } from "react"
 import VideoPlayer, { pauseVideo, playVideo } from "./VideoPlayer"
+import LLMStatusBadge from "../LLMStatusBadge"
 
 type StageStatus = "idle" | "running" | "done" | "skipped" | "error"
 
@@ -36,11 +37,11 @@ export interface ROIBox {
   color?: string  // 中文色名, e.g. "绿色" "蓝色"
 }
 
-// ── Stage definitions (YOLO + SAM + Gemma4:e2b 多模态 Pipeline) ─────────────
+// ── Stage definitions (YOLO + SAM + VLM Pipeline) ─────────────────────────────
 
 const STAGE_DEFS = [
   { key: "perception",   label: "感知 (YOLO+SAM)", icon: "◉", color: "var(--accent-amber)" },
-  { key: "identify",     label: "识别 (Gemma4)",   icon: "◆", color: "var(--accent-green)" },
+  { key: "identify",     label: "识别 (VLM)",      icon: "◆", color: "var(--accent-green)" },
   { key: "rag",          label: "知识检索 (RAG)",  icon: "◫", color: "var(--accent-blue)" },
   { key: "decision",     label: "决策建议",        icon: "◈", color: "var(--accent-purple)" },
 ]
@@ -52,7 +53,7 @@ const RISK_COLORS: Record<string, string> = {
   low:      "var(--accent-green)",
 }
 
-// ── YOLO + SAM + Gemma4:e2b Pipeline ───────────────────────────────────────
+// ── YOLO + SAM + VLM Pipeline ───────────────────────────────────────────────
 
 // ── Detection Params (检测参数) ───────────────────────────────────────────────
 
@@ -86,7 +87,7 @@ function getHasIncident(detail?: string | Record<string, unknown>): boolean {
   return false
 }
 
-// ── Local demo scenes (YOLO + SAM + Gemma4:e2b Pipeline) ────────────────────────────
+// ── Local demo scenes (YOLO + SAM + VLM Pipeline) ───────────────────────────
 
 interface LocalDemoScene {
   perception: { detail: Record<string, unknown> }
@@ -496,12 +497,8 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
       sseConnected = true
       const data = JSON.parse(e.data) as Record<string, unknown>
 
-      // Convert to absolute URL for image loading
-      const rawUrl = data.combined_image_url as string | undefined
-      let imageUrl: string | undefined = undefined
-      if (rawUrl) {
-        imageUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`
-      }
+      // Convert to absolute URL for image loading (后端 url 已含 /api/v1, 用 toAbsoluteApiUrl 避免双前缀 404)
+      const imageUrl = toAbsoluteApiUrl(data.combined_image_url as string | undefined)
 
       // Update ref first (immediately)
       const currentPerception = stageStatusRef.current.perception
@@ -570,11 +567,9 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
       const newProgress = isDone ? 100 : data.progress
       const shouldReveal = isDone && current.status !== "done"
 
-      // Get current URL from frame_data if available
+      // Get current URL from frame_data if available (toAbsoluteApiUrl 已处理 /api/v1 前缀去重)
       const existingUrl = stageStatusRef.current.perception?.combinedImageUrl
-      const newUrlFromStage = data.combined_image_url
-        ? (data.combined_image_url.startsWith('http') ? data.combined_image_url : `${API_BASE}${data.combined_image_url}`)
-        : null
+      const newUrlFromStage = toAbsoluteApiUrl(data.combined_image_url)
       const finalUrl = newUrlFromStage || existingUrl
 
       // 构建新状态
@@ -656,9 +651,9 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
             AI
           </div>
           <div className="flex-1">
-            <div className="font-bold text-sm" style={{ color: "var(--accent-amber)" }}>◈ YOLO + SAM + Gemma4:e2b Pipeline</div>
+            <div className="font-bold text-sm" style={{ color: "var(--accent-amber)" }}>◈ YOLO + SAM + LLM Pipeline</div>
             <div className="text-xs" style={{ color: "var(--text-muted)" }}>
-              感知 (YOLO+SAM) → 识别 (Gemma4) → 知识检索 (RAG) → 决策建议 &nbsp;·&nbsp;
+              感知 (YOLO+SAM) → 识别 (VLM) → 知识检索 (RAG) → 决策建议 &nbsp;·&nbsp;
               {running ? (
                 <span style={{ color: "var(--accent-amber)" }}>运行中</span>
               ) : done ? (
@@ -726,10 +721,10 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
               >
                 <div className="text-2xl mb-3 text-center">⚠️</div>
                 <h3 className="text-base font-bold mb-2 text-center" style={{ color: "var(--accent-red)" }}>
-                  确认释放 Ollama 内存？
+                  确认停止 Pipeline？
                 </h3>
                 <p className="text-sm mb-4 text-center" style={{ color: "var(--text-secondary)" }}>
-                  将从内存中卸载 Gemma4 模型，<br/>释放约 7GB 内存空间。
+                  将停止当前演示并清理资源。
                 </p>
                 <div className="flex gap-3">
                   <button
@@ -750,8 +745,8 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
               </div>
             </div>
           )}
-          <div className="text-xs font-mono px-2 py-1 rounded flex-shrink-0" style={{ background: "rgba(0,229,160,0.08)", border: "1px solid rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>
-            Gemma4:e2b
+          <div className="flex-shrink-0">
+            <LLMStatusBadge />
           </div>
         </div>
 
@@ -926,7 +921,7 @@ export default function PipelinePanel({ onRunningChange, onStopConfirmChange }: 
           <div className="p-4 space-y-3">
             {!running && activeCount === 0 && (
               <div className="text-xs text-center py-8" style={{ color: "var(--text-muted)" }}>
-                点击「启动演示」体验完整 pipeline — 感知 (YOLO+SAM) → 识别 (Gemma4) → 知识检索 (RAG) → 决策建议
+                点击「启动演示」体验完整 pipeline — 感知 (YOLO+SAM) → 识别 (VLM) → 知识检索 (RAG) → 决策建议
               </div>
             )}
 
@@ -1057,12 +1052,12 @@ function DetectionOutputSection({ detail, running, sceneKey, combinedImageUrl }:
   // Fallback: try to get URL from detail if not provided via prop
   const detailImageUrl = (d.combined_image_url as string | undefined)
 
-  // Build effective URL - check multiple sources
+  // Build effective URL - check multiple sources (toAbsoluteApiUrl 已处理 /api/v1 前缀去重)
   let effectiveUrl: string | undefined = undefined
   if (combinedImageUrl) {
-    effectiveUrl = combinedImageUrl.startsWith('http') ? combinedImageUrl : `${API_BASE}${combinedImageUrl}`
+    effectiveUrl = toAbsoluteApiUrl(combinedImageUrl) ?? combinedImageUrl
   } else if (detailImageUrl) {
-    effectiveUrl = detailImageUrl.startsWith('http') ? detailImageUrl : `${API_BASE}${detailImageUrl}`
+    effectiveUrl = toAbsoluteApiUrl(detailImageUrl) ?? detailImageUrl
   }
 
   // 使用 frameIdx 作为 key，确保每帧都正确更新
@@ -1300,7 +1295,7 @@ function AnomalyOutputSection({ detail, sceneKey, running }: { detail?: string |
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2" style={{ borderBottom: "1px solid rgba(0,229,160,0.1)", background: "rgba(0,229,160,0.06)" }}>
         <span style={{ color: "var(--accent-green)" }}>◆</span>
-        <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-green)" }}>Gemma4:e2b 异常识别</span>
+        <span className="text-xs font-bold font-mono" style={{ color: "var(--accent-green)" }}>异常识别 (VLM)</span>
         {running && !done && <span className="animate-pulse text-xs font-mono" style={{ color: "var(--accent-green)" }}>◈ 分析中...</span>}
         {done && <span className="ml-auto text-xs font-mono" style={{ color: "rgba(0,229,160,0.5)" }}>✓ 完成</span>}
       </div>
@@ -1488,15 +1483,15 @@ function DecisionOutputSection({ detail, sceneKey, running, hasIncident }: { det
               <span className="text-xs font-mono font-bold" style={{ color: "var(--accent-purple)" }}>本阶段使用模型</span>
             </div>
             <div className="flex items-center gap-2 p-2 rounded-lg mb-2" style={{ background: "rgba(180,122,255,0.08)", border: "1px solid rgba(180,122,255,0.15)" }}>
-              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>Gemma4:e2b</span>
-              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>Google 多模态大语言模型 · 视觉理解 + 决策推理</span>
+              <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(0,229,160,0.2)", color: "var(--accent-green)" }}>VLM</span>
+              <span className="text-xs" style={{ color: "var(--text-secondary)" }}>多模态视觉理解 + 决策推理（provider 可在 Admin → Settings 切换）</span>
             </div>
             <div className="flex items-center gap-2 p-2 rounded-lg" style={{ background: "rgba(74,158,255,0.08)", border: "1px solid rgba(74,158,255,0.15)" }}>
               <span className="px-2 py-0.5 rounded text-xs font-mono font-bold" style={{ background: "rgba(74,158,255,0.2)", color: "var(--accent-blue)" }}>ChromaDB</span>
               <span className="text-xs" style={{ color: "var(--text-secondary)" }}>向量数据库 · 提供 SOP 处置规范参考</span>
             </div>
             <div className="mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
-              决策流程：接收识别结果 + RAG 检索的 SOP → Gemma4 推理 → 输出风险等级 + 预警标题 + 处置建议
+              决策流程：接收识别结果 + RAG 检索的 SOP → VLM 推理 → 输出风险等级 + 预警标题 + 处置建议
             </div>
           </div>
 

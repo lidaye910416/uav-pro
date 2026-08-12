@@ -14,6 +14,27 @@ export const getApiBase = (): string =>
 /** 后端 API v1 根地址 (如 http://localhost:8888/api/v1) */
 export const API_BASE = `${getApiBase()}/api/v1`;
 
+/**
+ * Resolve a backend-relative URL to an absolute URL usable by the browser.
+ *
+ * The backend returns paths like "/api/v1/demo/frames/abc.jpg" with the
+ * full /api/v1 prefix already included. Concatenating them onto API_BASE
+ * (which itself ends in "/api/v1") would produce a double prefix and 404.
+ * So this helper attaches the URL to the **host** (getApiBase()) instead,
+ * keeping the /api/v1 segment exactly once.
+ *
+ *   - returns absolute URLs unchanged
+ *   - prefixes the host when missing
+ *   - handles both "/api/v1/..." and "/..." inputs
+ */
+export function toAbsoluteApiUrl(url: string | undefined | null): string | undefined {
+  if (!url) return undefined
+  if (/^https?:\/\//i.test(url)) return url
+  const origin = getApiBase().replace(/\/+$/, "")
+  const path = url.startsWith("/") ? url : "/" + url
+  return `${origin}${path}`
+}
+
 /** Showcase 应用 URL */
 export const getShowcaseUrl = (): string =>
   process.env.NEXT_PUBLIC_SHOWCASE_URL || "http://localhost:4000";
