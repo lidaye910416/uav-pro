@@ -194,7 +194,7 @@ def _save_annotated_frame(frame_bgr, frame_idx: int, prefix: str = "demo") -> tu
                 "label": d["label"],
                 "bbox": d["bbox"],
                 "color": _get_color_display_name(d["label"]),
-                "confidence": int(d["conf"] * 100)
+                "confidence": round(float(d["conf"]), 3)
             }
             for d in detections
         ]
@@ -794,7 +794,7 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
   "has_event": true或false,
   "incident_type": "collision/pothole/obstacle/pedestrian/congestion/none",
   "severity": "high/mid/low/none",
-  "confidence": 0-100,
+  "confidence": 0-1,
   "scene_description": "场景描述（40字内）",
   "description": "具体观察到的视觉特征（60字内）"
 }}
@@ -861,7 +861,7 @@ async def _gemma4_vision_analyze(frame_bgr, model: str, timeout: float, yolo_det
             n = len(yolo_detections)
             top = yolo_detections[:5]
             parts = [
-                f"{d.get('label', 'unknown')}({d.get('color', '黄绿色')}, 置信度 {d.get('confidence', 0)}%)"
+                f"{d.get('label', 'unknown')}({d.get('color', '黄绿色')}, 置信度 {round(float(d.get('confidence', 0)) * 100)}%)"
                 for d in top
             ]
             scene_desc = f"{n} 个目标: " + ", ".join(parts)
@@ -893,7 +893,7 @@ async def _rag_decide(incident_type: str, scene_description: str, model: str, ti
     Args:
         incident_type: 识别层输出的事件类型
         scene_description: 识别层输出的场景描述
-        model: Gemma4 模型名
+        model: 决策阶段模型名（实际由 get_decision_client() / provider 路由解析，默认外部为 minimax-MiniMax-M3，本地为 Gemma4，由运行时配置决定而非本参数）
         timeout: 超时时间
 
     Returns:
@@ -1403,7 +1403,7 @@ async def demo_sse_stream(loop: bool = False) -> StreamingResponse:
                 await asyncio.sleep(0.3)
 
             # ── Stage 3: RAG 检索 + 决策层（强制触发）────────────────────
-            # 强制根据 detection_details 推断 incident_type，避免 Gemma4 不可靠的判断导致 RAG/决策被跳过
+            # 强制根据 detection_details 推断 incident_type，避免上游 vision 模型不可靠的判断导致 RAG/决策被跳过
             inferred = _infer_incident_from_detections(detection_details)
             # 仅当 Gemma4 给出明确事件类型且不在我们的强制规则内时，才信任 Gemma4
             if incident_type and incident_type != "none" and incident_type in ("collision", "pothole", "obstacle", "pedestrian", "congestion"):

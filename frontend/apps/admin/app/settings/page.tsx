@@ -230,8 +230,8 @@ function SettingsPageInner() {
                   mode="single"
                   active={pipeline.mode === "single"}
                   title="◈ 单模型模式"
-                  description="Gemma 4 E2B（本地 GGUF，多模态）一站式完成视觉识别 + 决策推理，配合 ChromaDB RAG 检索 SOP 规范。适合 6GB+ 显存或统一推理场景。"
-                  stages={["Gemma 4 E2B（视觉识别 + 决策生成）", "ChromaDB RAG（规范检索）", "端到端延迟更低，资源占用更少"]}
+                  description="同一个 VLM 一站式完成视觉识别 + 决策推理，配合 ChromaDB RAG 检索 SOP 规范。适合资源紧张或统一推理的场景（provider 在下方 Provider Tab 选择）。"
+                  stages={["VLM（视觉识别 + 决策生成）", "ChromaDB RAG（规范检索）", "端到端延迟更低，资源占用更少"]}
                   color="var(--accent-amber)"
                   onClick={() => handleModeSwitch("single")}
                   disabled={updating}
@@ -240,8 +240,8 @@ function SettingsPageInner() {
                   mode="dual"
                   active={pipeline.mode === "dual"}
                   title="◆ 双模型模式"
-                  description="llava:7b 负责视觉理解 + deepseek-r1 负责决策推理，分工明确。适合需要精细分工或不同硬件加速的部署场景。"
-                  stages={["llava:7b（视觉识别）", "ChromaDB RAG（规范检索）", "deepseek-r1:1.5b（决策生成）"]}
+                  description="Vision 与 Decision 阶段各用一个 LLM provider，分工明确。适合需要精细分工或不同硬件加速的部署场景（在 Provider Tab 设置 VISION_PROVIDER / DECISION_PROVIDER）。"
+                  stages={["Vision VLM（视觉识别）", "ChromaDB RAG（规范检索）", "Decision LLM（决策生成）"]}
                   color="var(--accent-purple)"
                   onClick={() => handleModeSwitch("dual")}
                   disabled={updating}
@@ -368,7 +368,7 @@ function SettingsPageInner() {
 
           {/* ── Guide Tab ── */}
           {tab === "guide" && (
-            <GuideContent />
+            <GuideContent mode={pipeline?.mode} />
           )}
         </>
       )}
@@ -730,13 +730,16 @@ function YoloParamsTab() {
 
 // ── Guide Tab ──────────────────────────────────────────────────────────────────
 
-function GuideContent() {
+function GuideContent({ mode }: { mode?: string }) {
+  const isSingle = mode === "single"
+  const isDual = mode === "dual"
+  const sectionOpacity = (active: boolean) => active ? 1 : 0.5
   return (
     <div className="rounded-2xl p-5" style={{ background: "var(--bg-card)", border: "1px solid var(--border)" }}>
       <div className="text-base font-bold mb-4" style={{ color: "var(--accent-amber)" }}>⚡ 模型加载指南</div>
               <div className="space-y-6 text-sm" style={{ color: "var(--text-secondary)" }}>
-                <div>
-                  <div className="font-bold mb-2" style={{ color: "var(--accent-amber)" }}>1. Gemma 4 E2B（单模型模式）</div>
+                <div style={{ opacity: sectionOpacity(isSingle || !isDual) }}>
+                  <div className="font-bold mb-2" style={{ color: "var(--accent-amber)" }}>1. Gemma 4 E2B（单模型模式）{isSingle ? " · 当前" : ""}</div>
                   <div className="font-mono p-3 rounded-lg" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
                     <div># 创建模型</div>
                     <div className="mt-1">ollama create gemma4-e2b -f /Users/jasonlee/UAV_PRO/models/Modelfile.gemma-4-E2B</div>
@@ -744,20 +747,20 @@ function GuideContent() {
                     <div>ollama pull gemma4-e2b</div>
                   </div>
                 </div>
-                <div>
-                  <div className="font-bold mb-2" style={{ color: "var(--accent-green)" }}>2. llava:7b（双模型模式 · 视觉识别）</div>
+                <div style={{ opacity: sectionOpacity(isDual || !isSingle) }}>
+                  <div className="font-bold mb-2" style={{ color: "var(--accent-green)" }}>2. llava:7b（双模型模式 · 视觉识别）{isDual ? " · 当前" : ""}</div>
                   <div className="font-mono p-3 rounded-lg" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
                     ollama pull llava:7b
                   </div>
                 </div>
-                <div>
-                  <div className="font-bold mb-2" style={{ color: "var(--accent-purple)" }}>3. deepseek-r1:1.5b（双模型模式 · 决策推理）</div>
+                <div style={{ opacity: sectionOpacity(isDual || !isSingle) }}>
+                  <div className="font-bold mb-2" style={{ color: "var(--accent-purple)" }}>3. deepseek-r1:1.5b（双模型模式 · 决策推理）{isDual ? " · 当前" : ""}</div>
                   <div className="font-mono p-3 rounded-lg" style={{ background: "var(--bg-primary)", border: "1px solid var(--border)" }}>
                     ollama pull deepseek-r1:1.5b
                   </div>
                 </div>
                 <div className="p-3 rounded-lg" style={{ background: "rgba(255,184,0,0.06)", border: "1px solid rgba(255,184,0,0.2)" }}>
-                  <span style={{ color: "var(--accent-amber)" }}>💡</span> 切换 Pipeline 模式后需要重启后端服务（<code className="font-mono px-1" style={{ color: "var(--accent-amber)" }}>python -m app</code>）才能生效。
+                  <span style={{ color: "var(--accent-amber)" }}>💡</span> 当前默认 Provider 为 minimax（Anthropic 兼容），无需本地 Ollama 拉取模型。如切换到 ollama provider，请按上方对应模式加载模型后重启后端服务（<code className="font-mono px-1" style={{ color: "var(--accent-amber)" }}>python -m app</code>）。
                 </div>
               </div>
             </div>
@@ -984,7 +987,7 @@ function StageEditor({
             className="w-full px-3 py-2 rounded-lg text-sm font-mono"
             style={{ background: "var(--bg-primary)", border: "1px solid var(--border)", color: "var(--text-primary)", outline: "none" }}
           />
-          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>提供方 OpenAI/Anthropic/Ollama 兼容端点</div>
+          <div className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>提供方 minimax / Anthropic / OpenAI / DeepSeek / Ollama 兼容端点</div>
         </div>
 
         {/* API key with toggle */}
