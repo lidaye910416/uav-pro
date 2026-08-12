@@ -46,9 +46,9 @@ const RISK_COLORS: Record<string, string> = {
 // Pipeline 4 个 Stage 定义
 const PIPELINE_STAGES = [
   { key: "detection",  label: "目标检测", icon: "◉", color: "var(--accent-amber)", desc: "YOLOv8 + SAM 分割" },
-  { key: "identify",   label: "异常识别", icon: "◆", color: "var(--accent-green)", desc: "Gemma4:e2b 多模态" },
+  { key: "identify",   label: "异常识别", icon: "◆", color: "var(--accent-green)", desc: "多模态视觉模型 (VLM)" },
   { key: "rag",       label: "RAG检索",   icon: "◫", color: "var(--accent-blue)",   desc: "ChromaDB 向量检索" },
-  { key: "decision",  label: "决策输出", icon: "◈", color: "var(--accent-purple)",desc: "Ollama 风险判定" },
+  { key: "decision",  label: "决策输出", icon: "◈", color: "var(--accent-purple)",desc: "决策 LLM (V/D provider 可切换)" },
 ]
 
 // ── YOLO+SAM Params ───────────────────────────────────────────────────────────
@@ -828,7 +828,7 @@ export default function MonitorPage() {
         }
         setPipelineState(prev => ({
           ...prev,
-          detection: { status: "running", progress, summary: "YOLOv8 检测中..." }
+          detection: { status: "running", progress, summary: `${yoloParams.model_name.replace('.pt', '')} 检测中...` }
         }))
       }, 150)
     }
@@ -839,7 +839,7 @@ export default function MonitorPage() {
     return () => {
       if (currentTimer) clearInterval(currentTimer!)
     }
-  }, [connected, pipelineRunning])
+  }, [connected, pipelineRunning, yoloParams.model_name])
 
   // Load YOLO params from backend
   useEffect(() => {

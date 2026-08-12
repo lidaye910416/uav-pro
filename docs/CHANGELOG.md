@@ -26,10 +26,45 @@
 ### 首页 DemoPipeline 修复 (showcase)
 
 - `VideoPlayer.tsx`: `aspectRatio` 由 `16/7` 改为 `16/9`；标注帧 `<img>` 改 `objectFit: contain` 避免压扁；新增 `AnnotatedFrame` 组件，在标注帧上叠加 `<svg viewBox>` 层，按 `detection_details.bbox` 与 `imageWidth/imageHeight` 像素坐标绘制类别矩形 + 置信度标签（颜色按后端 SAM 中文色名映射）
-- `index.tsx`: `STAGE_DEFS` 标签改为清晰中文「感知 (YOLO+SAM) / 识别 (Gemma4) / 知识检索 (RAG) / 决策建议」；header subtitle + 空态提示同步更新
+- `index.tsx`: `STAGE_DEFS` 标签改为清晰中文「感知 (YOLO+SAM) / 识别 (VLM) / 知识检索 (RAG) / 决策建议」；识别阶段不再硬编码 `Gemma4`（默认已切换为 minimax 多模态，识别/决策统一由其承担，见下文 Provider 选择段）；header subtitle + 空态提示同步更新
 - `index.tsx`: `handleDemo` 移除 10s SSE 超时回退逻辑 — 仅在 `es.onerror` 触发时才回退 `LOCAL_DEMOS`，消除"先显示假数据再切真数据"的体验
 - `index.tsx`: `ROIBox` 新增 `label/color` 字段；新增 `imageDims` state 把后端 `resolution` 透传给 VideoPlayer 用于 SVG viewBox
 
+
+### 首页 Demo 演示帧黑屏修复 (showcase)
+
+**问题**: 首页点击"启动"后，"YOLO + SAM + LLM Pipeline" 演示容器的"检测帧"区域显示为黑底，仅 bbox 矩形可见，没有真实标注帧图像。
+
+**根因**: `AnnotatedFrame` / `frame_data` / `stage` 处理器用 `` `${API_BASE}${rawUrl}` `` 拼接 URL。
+- `API_BASE` = `http://localhost:8888/api/v1`（已含 `/api/v1`）
+- 后端 `_save_raw_frame` 返回 `rawUrl` = `/api/v1/demo/frames/demo_0_xxx.jpg`（已含 `/api/v1`）
+- 拼接结果 = `http://localhost:8888/api/v1/api/v1/demo/frames/...` → 404
+- `<img>` 加载失败 → 浏览器只显示 bbox SVG 叠加层覆盖在容器背景（黑底）上，正是用户截图所示的现象。
+
+**修复**:
+- `frontend/packages/api/index.ts`: 新增 `toAbsoluteApiUrl(url)` 工具：将后端返回的相对路径拼到 `getApiBase()`（主机根）而非 `API_BASE`，避免 `/api/v1` 双前缀；保留对已含协议头的绝对 URL 的透传
+- `frontend/apps/showcase/components/DemoPipeline/VideoPlayer.tsx`: `AnnotatedFrame.fullUrl` 改用 `toAbsoluteApiUrl`
+- `frontend/apps/showcase/components/DemoPipeline/index.tsx`: `frame_data` / `stage` 事件 / `DetectionOutputSection` 三处 URL 拼接全部改用 `toAbsoluteApiUrl`
+
+### 置信度 0-1 范围一致性修复 (后端 + 评审清理)
+
+**问题**: `routes_demo.py` 把 `detection_details[i].confidence` 从 `int (0-100)` 改为 `round(float, 3) (0-1)` 后，仍有两处残留不一致：
+- 视觉 LLM prompt (line 797) 要求 `confidence: 0-100`，但 parser (line 841) 用 `max(0.0, min(1.0, ...))` clamp 到 0-1 — LLM 返回 85 被截断为 1.0，置信度失真
+- scene_desc fallback (line 864) 用 f-string `f"置信度 {d.get('confidence', 0)}%"` 渲染，但 confidence 已是 0-1 → 输出"置信度 0.85%"误导下游 LLM
+
+**修复**:
+- `routes_demo.py:797`: vision prompt schema `"confidence": 0-100` → `0-1`，与 parser 一致
+- `routes_demo.py:864`: f-string 改为 `round(float(d.get('confidence', 0)) * 100)`, 渲染时还原成 0-100 百分数, 显示与下游语义都正确
+
+### Code review 清理 (showcase)
+
+- `VideoPlayer.tsx:176`: 移除 `?? url` 兜底 (`toAbsoluteApiUrl` 在空串时返回 undefined, fallback 到同值 url 无意义); 折叠 4 行注释为 1 行
+- `DemoPipeline/index.tsx`: 三处 `// 注意: API_BASE 已含 /api/v1...` 重复注释各折叠为 1 行 (`toAbsoluteApiUrl` 契约已在 packages/api JSDoc 说明)
+
+### 文档同步
+
+- `AGENTS.md`: 新增 (与 CLAUDE.md 同源, 面向 Codex/Cursor/Aider 等其他 AI 工具的 fallback 指引文件); 修正第 49 行误植的 `Codex-sonnet-4-5` → `claude-sonnet-4-5`
+- `CLAUDE.md`: Pipeline 架构图 "Gemma4" → "LLM" (识别/决策层统一抽象为 provider-switchable LLM)
 ### LLM Provider 选择 (识别层 / 决策层独立可切换)
 
 **Why**: 让管理员能在 UI 直观选择 LLM provider。MiniMax-M3 因具备多模态能力, 可同时承担识别和决策, 取代 Gemma4/DeepSeek-R1。

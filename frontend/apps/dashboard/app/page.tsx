@@ -32,7 +32,7 @@ const PIPELINE_STAGES = [
   { name: "视频输入", icon: "🎥", desc: "无人机航拍", color: "#888888" },
   { name: "YOLO检测", icon: "◉", desc: "目标检测", color: "#FFB800" },
   { name: "SAM分割", icon: "◈", desc: "语义分割", color: "#00D9A5" },
-  { name: "Gemma分析", icon: "◆", desc: "视觉理解", color: "#7C3AED" },
+  { name: "minimax分析", icon: "◆", desc: "视觉理解", color: "#7C3AED" },
   { name: "RAG检索", icon: "◫", desc: "知识检索", color: "#3B82F6" },
   { name: "风险决策", icon: "◈", desc: "智能决策", color: "#EC4899" },
   { name: "预警输出", icon: "⚠", desc: "结果展示", color: "#EF4444" },
@@ -168,7 +168,7 @@ function PipelineFlowchart() {
             <span style={{ color: "#00D9A5" }}>◈</span> SAM 语义分割
           </span>
           <span className="flex items-center gap-1">
-            <span style={{ color: "#7C3AED" }}>◆</span> Gemma4 多模态理解
+            <span style={{ color: "#7C3AED" }}>◆</span> 多模态理解 (VLM)
           </span>
           <span className="flex items-center gap-1">
             <span style={{ color: "#3B82F6" }}>◫</span> ChromaDB RAG

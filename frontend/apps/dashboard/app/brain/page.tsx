@@ -626,7 +626,7 @@ export default function BrainPage() {
               感知中心 · 智能推理演示
             </h1>
             <p className="text-xs mt-1" style={{ color: "var(--text-secondary)" }}>
-              ◈ 单模型 Pipeline · Gemma 4B E2B 多模态推理 · 实时视频流理解
+              ◈ 单模型 Pipeline · MiniMax M3 多模态推理 · 实时视频流理解
             </p>
           </div>
           <div className="flex items-center gap-4">
@@ -634,7 +634,7 @@ export default function BrainPage() {
               className="px-4 py-2 rounded-xl text-xs font-mono font-bold"
               style={{ background: "rgba(255,184,0,0.1)", border: "1px solid rgba(255,184,0,0.3)", color: "var(--accent-amber)" }}
             >
-              ◈ 单模型 · Gemma 4B E2B
+              ◈ 单模型 · MiniMax M3
             </div>
             <div
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs"
@@ -689,7 +689,7 @@ export default function BrainPage() {
                 active={isPerception}
                 completed={isVision || isRag || isDecision || isDone}
                 description="接收视频帧流，通过多模态模型理解画面整体场景与上下文"
-                subText={isPerception ? "Gemma 4B E2B 多模态推理中..." : isVision || isRag || isDecision || isDone ? `场景: ${result?.perception?.slice(0, 28)}...` : undefined}
+                subText={isPerception ? "多模态视觉推理中..." : isVision || isRag || isDecision || isDone ? `场景: ${result?.perception?.slice(0, 28)}...` : undefined}
               />
               <PipelineStageRow
                 label="视觉识别"
@@ -735,8 +735,8 @@ export default function BrainPage() {
               <div className="space-y-2 text-xs">
                 <div className="flex items-center gap-2">
                   <span style={{ color: "var(--accent-green)" }}>◉</span>
-                  <span style={{ color: "var(--text-secondary)" }}>Gemma 4B E2B</span>
-                  <span className="ml-auto" style={{ color: "var(--text-muted)" }}>多模态感知</span>
+                  <span style={{ color: "var(--text-secondary)" }}>多模态 VLM</span>
+                  <span className="ml-auto" style={{ color: "var(--text-muted)" }}>视觉感知</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span style={{ color: "var(--accent-purple)" }}>◆</span>

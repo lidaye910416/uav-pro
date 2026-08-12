@@ -710,7 +710,7 @@ export default function HomePage() {
                   },
                   {
                     title: "智能识别",
-                    desc: "Gemma4:e2b 多模态视觉理解，自动识别6类道路异常事件",
+                    desc: "多模态视觉模型，自动识别 6 类道路异常事件（识别层 provider 在 Admin → Settings 可切换）",
                     color: "var(--accent-green)",
                     icon: (
                       <svg width="22" height="22" viewBox="0 0 28 28" fill="none">
@@ -721,7 +721,7 @@ export default function HomePage() {
                   },
                   {
                     title: "实时预警",
-                    desc: "ChromaDB RAG + Ollama决策，WebSocket推送，多风险等级判定",
+                    desc: "ChromaDB RAG + minimax / Ollama 决策，WebSocket推送，多风险等级判定",
                     color: "var(--accent-blue)",
                     icon: (
                       <svg width="22" height="22" viewBox="0 0 28 28" fill="none">

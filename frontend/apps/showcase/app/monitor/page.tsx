@@ -7,9 +7,9 @@ import ReactECharts from "echarts-for-react"
 // ── Pipeline Stage Config ─────────────────────────────────────────────────────
 const PIPELINE_STAGES = [
   { key: "perception", label: "感知层", icon: "◉", color: "var(--accent-amber)", desc: "无人机 + 高挂摄像头", metric: "帧率 25fps", detail: "视频流采集" },
-  { key: "vision",     label: "视觉识别", icon: "◆", color: "var(--accent-green)", desc: "Gemma 4 E2B 边缘推理", metric: "模型已加载", detail: "多模态视觉理解" },
+  { key: "vision",     label: "视觉识别", icon: "◆", color: "var(--accent-green)", desc: "MiniMax M3 云端推理", metric: "模型已加载", detail: "多模态视觉理解" },
   { key: "rag",        label: "RAG检索", icon: "◫", color: "var(--accent-blue)", desc: "ChromaDB SOP 知识库", metric: "向量库 1423 条", detail: "相似案例检索" },
-  { key: "decision",   label: "决策生成", icon: "◈", color: "var(--accent-purple)", desc: "Ollama 本地 LLM", metric: "响应 230ms", detail: "风险等级判定" },
+  { key: "decision", label: "决策生成", icon: "◈", color: "var(--accent-purple)", desc: "MiniMax 默认 LLM", metric: "响应 230ms", detail: "风险等级判定" },
 ]
 
 // ── Chart Data Generators ────────────────────────────────────────────────────

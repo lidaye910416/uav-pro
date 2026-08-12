@@ -37,8 +37,8 @@ export default function AchievementsPage() {
     {
       label: "视觉识别",
       color: "var(--accent-green)",
-      title: "Gemma 4 E2B 多模态识别",
-      desc: "边缘端部署 Gemma 4 E2B 多模态视觉大模型，无需传统目标检测器，直接输出场景语义理解结果，毫秒级推理。",
+      title: "多模态视觉识别 (VLM)",
+      desc: "边缘端部署多模态视觉大模型，无需传统目标检测器，直接输出场景语义理解结果，毫秒级推理。",
       svg: (
         <svg viewBox="0 0 280 120" className="w-full rounded-lg">
           <rect width="280" height="120" fill="var(--bg-tertiary)" rx="6"/>
@@ -58,7 +58,7 @@ export default function AchievementsPage() {
             fill="var(--accent-amber)" fontSize="7" fontFamily="JetBrains Mono, monospace">置信度 82%</text>
           <text x="140" y="115" textAnchor="middle"
             fill="var(--text-muted)" fontSize="9" fontFamily="JetBrains Mono, monospace">
-            Gemma 4 E2B 推理结果
+            VLM 推理结果
           </text>
         </svg>
       ),
@@ -98,8 +98,8 @@ export default function AchievementsPage() {
     {
       label: "决策生成",
       color: "var(--accent-purple)",
-      title: "Ollama LLM 风险评估",
-      desc: "基于视觉识别结果与 RAG 检索案例，Ollama 本地 LLM 生成结构化风险评估报告与处置建议，SSE 实时推送至前端。",
+      title: "minimax LLM 风险评估",
+      desc: "基于视觉识别结果与 RAG 检索案例，MiniMax LLM 生成结构化风险评估报告与处置建议，SSE 实时推送至前端。",
       svg: (
         <svg viewBox="0 0 280 120" className="w-full rounded-lg">
           <rect width="280" height="120" fill="var(--bg-tertiary)" rx="6"/>

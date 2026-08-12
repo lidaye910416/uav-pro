@@ -38,9 +38,9 @@ export default function ArchitecturePage() {
               {/* Gemma box */}
               <rect x="50" y="145" width="220" height="110" rx="8"
                 fill="var(--bg-card)" stroke="var(--accent-green)" strokeWidth="1.5"/>
-              <text x="160" y="172" textAnchor="middle" fill="var(--accent-green)" fontSize="13" fontFamily="JetBrains Mono, monospace" fontWeight="bold">Gemma 4 E2B</text>
+              <text x="160" y="172" textAnchor="middle" fill="var(--accent-green)" fontSize="13" fontFamily="JetBrains Mono, monospace" fontWeight="bold">VLM</text>
               <text x="160" y="190" textAnchor="middle" fill="var(--text-secondary)" fontSize="10" fontFamily="JetBrains Mono, monospace">视觉推理</text>
-              <text x="160" y="206" textAnchor="middle" fill="var(--text-muted)" fontSize="10" fontFamily="JetBrains Mono, monospace">边缘端部署 · 基站内推理</text>
+              <text x="160" y="206" textAnchor="middle" fill="var(--text-muted)" fontSize="10" fontFamily="JetBrains Mono, monospace">provider 可切换 · 外部 / Ollama</text>
               <text x="160" y="222" textAnchor="middle" fill="var(--text-muted)" fontSize="10" fontFamily="JetBrains Mono, monospace">毫秒级响应</text>
 
               {/* ChromaDB box */}
@@ -98,7 +98,7 @@ export default function ArchitecturePage() {
                 color: "var(--accent-green)",
                 items: [
                   "感知层 — 无人机 + 高挂摄像头",
-                  "视觉识别 — Gemma 4 E2B 边缘推理",
+                  "视觉识别 — VLM（外部 / Ollama 可切换）",
                   "项目网站 — Next.js 前后端分离",
                   "预警基础 — 风险等级判定",
                 ],
@@ -108,7 +108,7 @@ export default function ArchitecturePage() {
                 color: "var(--accent-blue)",
                 items: [
                   "ChromaDB RAG — SOP 知识库检索",
-                  "Ollama 本地 LLM — 决策生成",
+                  "minimax 决策生成 — 默认外部模型",
                   "多源数据融合 — 时空同步处理",
                   "SSE 实时推送 — 前端 Live Feed",
                 ],

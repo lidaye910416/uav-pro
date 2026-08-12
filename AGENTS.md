@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 AI 助手指南 - UAV 低空检测智能安全预警系统
 

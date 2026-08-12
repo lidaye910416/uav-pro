@@ -34,7 +34,7 @@ const PIPELINE_STAGES = [
     bgColor: "rgba(168, 85, 247, 0.1)",
     borderColor: "rgba(168, 85, 247, 0.3)",
     steps: [
-      { label: "Gemma4 E2B", desc: "多模态视觉理解" },
+      { label: "VLM", desc: "多模态视觉理解（provider 可切换）" },
       { label: "场景分析", desc: "异常类型判断" },
       { label: "置信评估", desc: "风险等级计算" },
     ],
