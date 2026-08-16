@@ -4,6 +4,24 @@
 
 ## [Unreleased]
 
+### Backend 镜像构建加速 (Dockerfile)
+
+**Why**: 之前 backend 镜像冷构建需要 ~90 分钟（apt 阶段走 deb.debian.org 国际源 ~50 min，pip 拉 torch + CUDA deps ~20 min）。Mac 开发无 GPU 还会下到 ~3 GB 无用的 NVIDIA CUDA wheels。
+
+- `backend/Dockerfile`:
+  - **方案 1 (Torch 变体)**: 新增 `ARG TORCH_VARIANT=cpu` (默认 cpu, 适合 Mac/无 GPU 开发)；用 `--extra-index-url https://download.pytorch.org/whl/${TORCH_VARIANT}` 装 torch/torchvision。Mac dev 默认 cpu 跳过 ~3 GB CUDA wheels；Windows amd64 生产用 `--build-arg TORCH_VARIANT=cu130` 拿到 CUDA 13
+  - **方案 2 (BuildKit pip cache)**: 加 `# syntax=docker/dockerfile:1.6` 启用 BuildKit；`RUN --mount=type=cache,target=/root/.cache/pip` 缓存 pip wheels 到 build host。后续 incremental build 只要 cache hit 就 0 下载。Cache mount 仅 build 时存在，**不会进入最终镜像**
+  - 沿用之前改动：阿里云 APT + PyPI 镜像（国内访问 deb.debian.org 极慢）
+
+**用法**:
+```bash
+# Mac 开发 (默认 cpu, ~20 min cold, 秒级 incremental)
+docker compose build backend
+
+# Windows 部署 (CUDA 13)
+docker compose build backend --build-arg TORCH_VARIANT=cu130
+```
+
 ### LLM Provider 抽象层 (后端)
 
 - `feat(llm)`: add external Anthropic-compatible LLM provider with runtime switching (local Ollama / external API); admin endpoints `GET/POST /api/v1/admin/llm/provider` and `POST /api/v1/admin/llm/test`
