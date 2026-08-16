@@ -9,13 +9,22 @@
 **Why**: 之前 backend 镜像冷构建需要 ~90 分钟（apt 阶段走 deb.debian.org 国际源 ~50 min，pip 拉 torch + CUDA deps ~20 min）。Mac 开发无 GPU 还会下到 ~3 GB 无用的 NVIDIA CUDA wheels。
 
 - `backend/Dockerfile`:
-  - **方案 1 (Torch 变体)**: 新增 `ARG TORCH_VARIANT=cpu` (默认 cpu, 适合 Mac/无 GPU 开发)；用 `--extra-index-url https://download.pytorch.org/whl/${TORCH_VARIANT}` 装 torch/torchvision。Mac dev 默认 cpu 跳过 ~3 GB CUDA wheels；Windows amd64 生产用 `--build-arg TORCH_VARIANT=cu130` 拿到 CUDA 13
-  - **方案 2 (BuildKit pip cache)**: 加 `# syntax=docker/dockerfile:1.6` 启用 BuildKit；`RUN --mount=type=cache,target=/root/.cache/pip` 缓存 pip wheels 到 build host。后续 incremental build 只要 cache hit 就 0 下载。Cache mount 仅 build 时存在，**不会进入最终镜像**
+  - **方案 1 (Torch 变体)**: 新增 `ARG TORCH_VARIANT=cpu` (默认 cpu, 适合 Mac/无 GPU 开发)。torch/torchvision 从 `pytorch.org/whl/{cpu|cu130}` 装；Mac 用 `--no-deps` 跳过 PyTorch 2.5+ 的无 arch 限制 CUDA meta-deps（arm64 Mac 上不再被拉 ~3 GB nvidia-cublas/cudnn/cuda-toolkit 等无用 wheels）；Windows amd64 生产用 `--build-arg TORCH_VARIANT=cu130` 拿到 CUDA 13 runtime libs
+  - **方案 2 (BuildKit pip cache)**: 加 `# syntax=docker/dockerfile:1.6` 启用 BuildKit；`RUN --mount=type=cache,target=/root/.cache/pip` 缓存 pip wheels 到 build host。Cache mount 仅 build 时存在，**不会进入最终镜像**
+  - **关键修正**：用 `--index-url pytorch.org` 而非 `--extra-index-url`（aliyun 已有 torch CUDA wheels，会 shadow pytorch.org 的 `+cpu`/`+cu130` wheels，导致 Mac dev 误装 CUDA torch）
   - 沿用之前改动：阿里云 APT + PyPI 镜像（国内访问 deb.debian.org 极慢）
+
+**实测结果**:
+| 构建 | 旧方案 | 新方案 |
+|------|--------|--------|
+| 冷构建 | ~90 min | **4:33** (20x 提速) |
+| 增量构建 (改一个文件) | 5-10 min | **2:06** (其中实际工作 ~5 秒) |
+| 最终镜像体积 | 7.73 GB | **3.72 GB** (-52%) |
+| Mac dev 装的 NVIDIA 包数 | 14 | 1 (仅 nvidia-ml-py 元数据) |
 
 **用法**:
 ```bash
-# Mac 开发 (默认 cpu, ~20 min cold, 秒级 incremental)
+# Mac 开发 (默认 cpu, ~5 min cold, 秒级 incremental)
 docker compose build backend
 
 # Windows 部署 (CUDA 13)
