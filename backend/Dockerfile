@@ -25,23 +25,56 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt .
 
 # Install torch/torchvision from pytorch.org FIRST (variant-aware).
-# Use --index-url (not --extra-index-url) so pip only searches pytorch.org;
-# aliyun mirror has torch but without +cpu/+cu130 suffix, which would otherwise
-# shadow the pytorch.org wheels and pull CUDA torch on Mac dev.
+# We download wheels with curl directly into a local /tmp dir, then pip install
+# from local files. This sidesteps pip's index-resolution quirks on PyTorch's
+# non-standard /whl/<variant>/ HTML layout (it kept pulling wrong-variant
+# wheels like torchvision+cu132 on Mac dev via --index-url / --find-links).
+#
+# Wheel URL pattern: https://download.pytorch.org/whl/<variant>/<wheel-filename>
+# Note: NO /<pkg>/ subdir in the wheel URL — adding /torch/ or /torchvision/
+# returns 403. Only the HTML index page has the /<pkg>/ subdir.
+#
 #   cpu  -> --no-deps: PyTorch 2.5+ removed the `platform_machine == x86_64`
 #           marker from its CUDA meta-deps, so on arm64 Mac pip would pull
 #           ~3GB of nvidia-cublas/cudnn/cuda-toolkit wheels even for torch+cpu.
 #           The cpu wheel is self-contained for CPU compute.
 #   cu130 -> keep deps: CUDA runtime libs (cublas/cudnn) are required at
 #           runtime for GPU on Windows prod.
+ARG TORCH_VARIANT=cpu
+ARG TARGETARCH=aarch64  # set by buildx automatically; aarch64=Mac arm64, x86_64=Windows/Linux
+
 RUN --mount=type=cache,target=/root/.cache/pip \
     --mount=type=cache,target=/root/.cache/pip-http \
-    pip install --upgrade pip \
-    && if [ "$TORCH_VARIANT" = "cpu" ]; then \
-         pip install --no-deps --index-url https://download.pytorch.org/whl/cpu torch torchvision; \
-       else \
-         pip install --index-url https://download.pytorch.org/whl/${TORCH_VARIANT} torch torchvision; \
-       fi
+    set -eux; \
+    mkdir -p /tmp/torch-wheels; \
+    cd /tmp/torch-wheels; \
+    if [ "$TORCH_VARIANT" = "cpu" ]; then \
+      TORCH_WHL=$(curl -fsSL https://download.pytorch.org/whl/cpu/torch/ \
+        | grep -oE 'torch-2\.13\.0\+cpu-cp312-cp312-manylinux_2_28_'"${TARGETARCH}"'\.whl' \
+        | head -1); \
+      TV_WHL=$(curl -fsSL https://download.pytorch.org/whl/cpu/torchvision/ \
+        | grep -oE 'torchvision-0\.28\.0\+cpu-cp312-cp312-manylinux_2_28_'"${TARGETARCH}"'\.whl' \
+        | head -1); \
+      # Note: '+' in wheel filename must be percent-encoded as %2B, otherwise
+      # the CDN returns 403. Use python -c for reliable percent-encoding.
+      TORCH_URL=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$TORCH_WHL"); \
+      TV_URL=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$TV_WHL"); \
+      curl -fsSLO "https://download.pytorch.org/whl/cpu/${TORCH_URL}"; \
+      curl -fsSLO "https://download.pytorch.org/whl/cpu/${TV_URL}"; \
+      pip install --no-deps --no-cache-dir --no-index ./*.whl; \
+    else \
+      TORCH_WHL=$(curl -fsSL "https://download.pytorch.org/whl/${TORCH_VARIANT}/torch/" \
+        | grep -oE 'torch-2\.13\.0\+'"${TORCH_VARIANT}"'-cp312-cp312-manylinux_2_28_x86_64\.whl' \
+        | head -1); \
+      TV_WHL=$(curl -fsSL "https://download.pytorch.org/whl/${TORCH_VARIANT}/torchvision/" \
+        | grep -oE 'torchvision-0\.28\.0\+'"${TORCH_VARIANT}"'-cp312-cp312-manylinux_2_28_x86_64\.whl' \
+        | head -1); \
+      TORCH_URL=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$TORCH_WHL"); \
+      TV_URL=$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1], safe='/'))" "$TV_WHL"); \
+      curl -fsSLO "https://download.pytorch.org/whl/${TORCH_VARIANT}/${TORCH_URL}"; \
+      curl -fsSLO "https://download.pytorch.org/whl/${TORCH_VARIANT}/${TV_URL}"; \
+      pip install --no-cache-dir --no-index ./*.whl; \
+    fi
 
 # Install remaining deps from aliyun PyPI (torch/torchvision already installed).
 # Filter out torch/torchvision lines so pip doesn't re-resolve them.

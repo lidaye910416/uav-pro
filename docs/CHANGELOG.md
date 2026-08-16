@@ -11,8 +11,13 @@
 - `backend/Dockerfile`:
   - **方案 1 (Torch 变体)**: 新增 `ARG TORCH_VARIANT=cpu` (默认 cpu, 适合 Mac/无 GPU 开发)。torch/torchvision 从 `pytorch.org/whl/{cpu|cu130}` 装；Mac 用 `--no-deps` 跳过 PyTorch 2.5+ 的无 arch 限制 CUDA meta-deps（arm64 Mac 上不再被拉 ~3 GB nvidia-cublas/cudnn/cuda-toolkit 等无用 wheels）；Windows amd64 生产用 `--build-arg TORCH_VARIANT=cu130` 拿到 CUDA 13 runtime libs
   - **方案 2 (BuildKit pip cache)**: 加 `# syntax=docker/dockerfile:1.6` 启用 BuildKit；`RUN --mount=type=cache,target=/root/.cache/pip` 缓存 pip wheels 到 build host。Cache mount 仅 build 时存在，**不会进入最终镜像**
-  - **关键修正**：用 `--index-url pytorch.org` 而非 `--extra-index-url`（aliyun 已有 torch CUDA wheels，会 shadow pytorch.org 的 `+cpu`/`+cu130` wheels，导致 Mac dev 误装 CUDA torch）
+  - **关键修正 (v2)**: 改为 curl + grep 从 `/whl/<variant>/torch/` 和 `/torchvision/` 索引页抓 wheel 文件名，python3 percent-encode `+` 为 `%2B`（CDN 要求），再 curl 下载到本地 `/tmp/torch-wheels/`，最后 `pip install --no-index ./*.whl`。**绕开 pip 在 PyTorch 非标准 /whl/<variant>/ HTML 索引上的 navigation 怪癖**（`--index-url` / `--find-links` 都会因缓存污染或 URL 解析错误拉到 `torchvision+cu132`；URL 中字面 `+` 也会被 CDN 拒为 403）
   - 沿用之前改动：阿里云 APT + PyPI 镜像（国内访问 deb.debian.org 极慢）
+
+**附带修复 (demo pipeline)**:
+- 之前 `/demo/stream` SSE 流返回 `detections: "0"`、`combined_image_url: null`，前端无 bbox 显示
+- 根因: torchvision+cu132 与 torch+cpu 的 CUDA meta 接口不兼容，ultralytics warmup 时 `RuntimeError: operator torchvision::nms does not exist` → YOLO 静默失败
+- 修复后 (torch 2.13.0+cpu + torchvision 0.28.0+cpu): demo 流返回 `detections: "3"`（person/car bbox）+ `combined_image_url` 有值，前端正常渲染
 
 **实测结果**:
 | 构建 | 旧方案 | 新方案 |
